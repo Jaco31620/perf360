@@ -12,6 +12,31 @@ const TABS = ["Participants", "Exclusions", "Message", "Tirage", "Historique"];
 const ICONS = ["👥", "🚫", "✉️", "🎲", "📋"];
 const ADMIN_PASSWORD = "admin1234"; // À changer
 
+// EmailJS configuration
+const EMAILJS_SERVICE_ID = "service_zacxdm8";
+const EMAILJS_TEMPLATE_ID = "template_335bmpq";
+const EMAILJS_PUBLIC_KEY = "j0XmvwfwjguQDd2S2";
+const EMAILJS_REPLY_TO = "jaco31620@gmail.com";
+
+async function sendEmail(toEmail, message) {
+  const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      service_id: EMAILJS_SERVICE_ID,
+      template_id: EMAILJS_TEMPLATE_ID,
+      user_id: EMAILJS_PUBLIC_KEY,
+      template_params: {
+        to_email: toEmail,
+        message: message,
+        reply_to: EMAILJS_REPLY_TO,
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return true;
+}
+
 const defaultTemplate = `Bonjour {prenom_offreur} 🎁
 
 Le tirage au sort Ami Invisible vient d'avoir lieu !
@@ -304,9 +329,14 @@ function TirageTab({ participants, exclusions, template, onTirageSaved }) {
 
   const sendOne = async (idx) => {
     setResendTarget(idx);
-    await new Promise(r => setTimeout(r, 500));
+    try {
+      const [g, r] = pairs[idx];
+      await sendEmail(g.email, fill(template, g, r));
+      setSentLog(l => [...l, idx]);
+    } catch (e) {
+      alert("Erreur d'envoi pour " + pairs[idx][0].prenom + " : " + e.message);
+    }
     setResendTarget(null);
-    setSentLog(l => [...l, idx]);
   };
 
   const sendAll = async () => {
@@ -422,9 +452,14 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
 
   const simulateResend = async (idx) => {
     setResendTarget(idx);
-    await new Promise(r => setTimeout(r, 600));
+    try {
+      const p = selected.pairs[idx];
+      await sendEmail(p.offreur.email, p.message);
+      setResendDone(d => [...d, idx]);
+    } catch (e) {
+      alert("Erreur d'envoi : " + e.message);
+    }
     setResendTarget(null);
-    setResendDone(d => [...d, idx]);
   };
 
   const deleteTirage = async (id) => {
