@@ -16,6 +16,7 @@ const ADMIN_PASSWORD = "admin1234"; // À changer
 const EMAILJS_SERVICE_ID = "service_zacxdm8";
 const EMAILJS_TEMPLATE_ID = "template_335bmpq";
 const EMAILJS_PUBLIC_KEY = "j0XmvwfwjguQDd2S2";
+const EMAILJS_PRIVATE_KEY = "1Xy-ZLdNzkEr_tROBaOOm";
 const EMAILJS_REPLY_TO = "jaco31620@gmail.com";
 
 async function sendEmail(toEmail, message) {
@@ -26,6 +27,7 @@ async function sendEmail(toEmail, message) {
       service_id: EMAILJS_SERVICE_ID,
       template_id: EMAILJS_TEMPLATE_ID,
       user_id: EMAILJS_PUBLIC_KEY,
+      accessToken: EMAILJS_PRIVATE_KEY,
       template_params: {
         to_email: toEmail,
         message: message,
