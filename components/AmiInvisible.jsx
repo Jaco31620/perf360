@@ -1,12 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 const TABS = ["Participants", "Exclusions", "Message", "Tirage", "Historique"];
 const ICONS = ["👥", "🚫", "✉️", "🎲", "📋"];
@@ -64,24 +60,15 @@ const shuffle = arr => {
 const fmtDate = iso => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
 
 // ── Supabase helpers ─────────────────────────────────────────────
-// Utilise localStorage par utilisateur (clé unique par navigateur)
-// Pour une vraie auth Supabase, remplacer userId par supabase.auth.getUser()
-function getUserId() {
-  if (typeof window === "undefined") return "anon";
-  let id = localStorage.getItem("perf360_uid");
-  if (!id) { id = crypto.randomUUID(); localStorage.setItem("perf360_uid", id); }
-  return id;
-}
-
-async function loadFromSupabase(table) {
-  const uid = getUserId();
-  const { data } = await supabase.from(table).select("data").eq("user_id", uid).single();
+async function loadFromSupabase(table, userId) {
+  if (!userId) return null;
+  const { data } = await supabase.from(table).select("data").eq("user_id", userId).single();
   return data?.data || null;
 }
 
-async function saveToSupabase(table, value) {
-  const uid = getUserId();
-  await supabase.from(table).upsert({ user_id: uid, data: value }, { onConflict: "user_id" });
+async function saveToSupabase(table, value, userId) {
+  if (!userId) return;
+  await supabase.from(table).upsert({ user_id: userId, data: value }, { onConflict: "user_id" });
 }
 
 // ── UI atoms ─────────────────────────────────────────────────────
@@ -143,7 +130,7 @@ function CarnetModal({ carnet, current, onSelect, onClose }) {
 }
 
 // ── Participants ─────────────────────────────────────────────────
-function ParticipantsTab({ participants, setParticipants, carnet, setCarnet }) {
+function ParticipantsTab({ participants, setParticipants, carnet, setCarnet, userId }) {
   const [form, setForm] = useState({ prenom: "", nom: "", email: "", tel: "" });
   const [editId, setEditId] = useState(null);
   const [err, setErr] = useState("");
@@ -163,7 +150,7 @@ function ParticipantsTab({ participants, setParticipants, carnet, setCarnet }) {
       if (!already) {
         const newCarnet = [...carnet, { ...form, id: newP.id }];
         setCarnet(newCarnet);
-        await saveToSupabase("carnet", newCarnet);
+        await saveToSupabase("carnet", newCarnet, userId);
       }
     }
     reset();
@@ -292,7 +279,7 @@ function MessageTab({ template, setTemplate }) {
 }
 
 // ── Tirage ───────────────────────────────────────────────────────
-function TirageTab({ participants, exclusions, template, onTirageSaved }) {
+function TirageTab({ participants, exclusions, template, onTirageSaved, userId }) {
   const [eventName, setEventName] = useState("");
   const [status, setStatus] = useState("idle");
   const [pairs, setPairs] = useState(null);
@@ -323,8 +310,8 @@ function TirageTab({ participants, exclusions, template, onTirageSaved }) {
       id: Date.now(), eventName: eventName.trim(), date: new Date().toISOString(),
       pairs: result.map(([g, r]) => ({ offreur: g, receveur: r, message: fill(template, g, r) })), template,
     };
-    const existing = await loadFromSupabase("tirages") || [];
-    await saveToSupabase("tirages", [tirage, ...existing]);
+    const existing = await loadFromSupabase("tirages", userId) || [];
+    await saveToSupabase("tirages", [tirage, ...existing], userId);
     onTirageSaved();
     setPairs(result); setStatus("done"); setSentLog([]);
   };
@@ -433,7 +420,7 @@ function TirageTab({ participants, exclusions, template, onTirageSaved }) {
 }
 
 // ── Historique ───────────────────────────────────────────────────
-function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
+function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab, userId }) {
   const [tirages, setTirages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -445,7 +432,10 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
   const [resendDone, setResendDone] = useState([]);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  useEffect(() => { loadFromSupabase("tirages").then(t => { setTirages(t || []); setLoading(false); }); }, []);
+  useEffect(() => {
+    if (userId) loadFromSupabase("tirages", userId).then(t => { setTirages(t || []); setLoading(false); });
+    else setLoading(false);
+  }, [userId]);
 
   const tryUnlock = () => {
     if (pw === ADMIN_PASSWORD) { setUnlocked(true); setPwModal(false); setPw(""); setPwErr(""); }
@@ -466,7 +456,7 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
 
   const deleteTirage = async (id) => {
     const updated = tirages.filter(t => t.id !== id);
-    await saveToSupabase("tirages", updated);
+    await saveToSupabase("tirages", updated, userId);
     setTirages(updated);
     setDeleteConfirm(null);
     if (selected?.id === id) setSelected(null);
@@ -480,7 +470,7 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
       if (!already) newCarnet.push({ ...p, id: Date.now() + Math.random() });
     });
     setCarnet(newCarnet);
-    await saveToSupabase("carnet", newCarnet);
+    await saveToSupabase("carnet", newCarnet, userId);
     setParticipants(toImport.map(p => ({ ...p, id: Date.now() + Math.random() })));
     setTab(0);
   };
@@ -566,6 +556,7 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab }) {
 
 // ── App ──────────────────────────────────────────────────────────
 export default function AmiInvisible() {
+  const { user, userId, signOut, loading: authLoading } = useAuth();
   const [tab, setTab] = useState(0);
   const [participants, setParticipants] = useState([]);
   const [exclusions, setExclusions] = useState([]);
@@ -573,15 +564,34 @@ export default function AmiInvisible() {
   const [carnet, setCarnet] = useState([]);
   const [histKey, setHistKey] = useState(0);
 
-  useEffect(() => { loadFromSupabase("carnet").then(c => { if (c) setCarnet(c); }); }, []);
+  useEffect(() => {
+    if (userId) loadFromSupabase("carnet", userId).then(c => { if (c) setCarnet(c); });
+  }, [userId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 p-4">
       <div className="max-w-2xl mx-auto">
+        {/* Auth banner */}
+        <div className="flex justify-between items-center mb-4 text-xs">
+          <Link href="/" className="text-gray-400 hover:underline">← perf360.fr</Link>
+          {!authLoading && (user ? (
+            <div className="flex items-center gap-3">
+              <span className="text-gray-500">{user.email}</span>
+              <button onClick={signOut} className="text-red-500 hover:underline">Déconnexion</button>
+            </div>
+          ) : (
+            <Link href="/connexion" className="text-red-500 hover:underline font-medium">Se connecter</Link>
+          ))}
+        </div>
+
         <div className="text-center mb-6">
-          <Link href="/" className="text-xs text-gray-400 hover:underline block mb-2">← perf360.fr</Link>
           <h1 className="text-3xl font-bold text-red-600">🎁 Ami Invisible</h1>
           <p className="text-gray-500 text-sm mt-1">Organisez votre tirage en toute confidentialité</p>
+          {!user && (
+            <p className="text-xs text-orange-600 mt-2">
+              💡 <Link href="/connexion" className="underline">Connecte-toi</Link> pour retrouver tes tirages depuis n'importe quel appareil
+            </p>
+          )}
           <button onClick={() => { setParticipants([]); setExclusions([]); setTab(0); }}
             className="mt-3 text-xs border border-red-300 text-red-500 px-4 py-1.5 rounded-full hover:bg-red-50">
             ＋ Nouveau tirage
@@ -595,11 +605,11 @@ export default function AmiInvisible() {
             </button>
           ))}
         </div>
-        {tab === 0 && <ParticipantsTab participants={participants} setParticipants={setParticipants} carnet={carnet} setCarnet={setCarnet} />}
+        {tab === 0 && <ParticipantsTab participants={participants} setParticipants={setParticipants} carnet={carnet} setCarnet={setCarnet} userId={userId} />}
         {tab === 1 && <ExclusionsTab participants={participants} exclusions={exclusions} setExclusions={setExclusions} />}
         {tab === 2 && <MessageTab template={template} setTemplate={setTemplate} />}
-        {tab === 3 && <TirageTab participants={participants} exclusions={exclusions} template={template} onTirageSaved={() => setHistKey(k => k + 1)} />}
-        {tab === 4 && <HistoriqueTab key={histKey} carnet={carnet} setCarnet={setCarnet} setParticipants={setParticipants} setTab={setTab} />}
+        {tab === 3 && <TirageTab participants={participants} exclusions={exclusions} template={template} onTirageSaved={() => setHistKey(k => k + 1)} userId={userId} />}
+        {tab === 4 && <HistoriqueTab key={histKey} carnet={carnet} setCarnet={setCarnet} setParticipants={setParticipants} setTab={setTab} userId={userId} />}
       </div>
     </div>
   );
