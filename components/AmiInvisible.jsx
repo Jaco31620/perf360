@@ -62,13 +62,15 @@ const fmtDate = iso => new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit
 // ── Supabase helpers ─────────────────────────────────────────────
 async function loadFromSupabase(table, userId) {
   if (!userId) return null;
-  const { data } = await supabase.from(table).select("data").eq("user_id", userId).single();
+  const { data, error } = await supabase.from(table).select("data").eq("user_id", userId).maybeSingle();
+  if (error) console.error("Supabase load error:", error);
   return data?.data || null;
 }
 
 async function saveToSupabase(table, value, userId) {
   if (!userId) return;
-  await supabase.from(table).upsert({ user_id: userId, data: value }, { onConflict: "user_id" });
+  const { error } = await supabase.from(table).upsert({ user_id: userId, data: value }, { onConflict: "user_id" });
+  if (error) console.error("Supabase save error:", error);
 }
 
 // ── UI atoms ─────────────────────────────────────────────────────
