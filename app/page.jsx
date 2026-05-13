@@ -29,13 +29,15 @@ export default function Home() {
       <nav className="absolute top-0 left-0 right-0 z-10 px-4 py-4 sm:px-8">
         <div className="max-w-5xl mx-auto flex justify-between items-center text-sm">
           <span className="font-bold text-white">perf360</span>
-          {loading ? null : user ? (
-            <div className="flex items-center gap-4 text-white">
+          {user ? (
+            <div className="flex items-center gap-3 text-white">
               <span className="opacity-90 text-xs hidden sm:inline">{user.email}</span>
-              <button onClick={signOut} className="hover:underline text-xs font-medium">Déconnexion</button>
+              <button onClick={signOut} className="bg-white bg-opacity-20 hover:bg-opacity-30 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-medium transition-all">
+                Déconnexion
+              </button>
             </div>
           ) : (
-            <Link href="/connexion" className="text-white hover:underline font-medium text-xs">
+            <Link href="/connexion" className="bg-white text-red-500 hover:scale-105 px-4 py-1.5 rounded-full text-xs font-semibold transition-transform shadow-sm">
               Se connecter
             </Link>
           )}
