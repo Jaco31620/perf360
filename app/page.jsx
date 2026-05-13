@@ -1,4 +1,6 @@
+"use client";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 
 const apps = [
   {
@@ -15,14 +17,29 @@ const apps = [
 ];
 
 export default function Home() {
+  const { user, signOut, loading } = useAuth();
+
   return (
     <main className="max-w-3xl mx-auto px-4 py-12 space-y-12">
+      {/* Auth banner */}
+      <div className="flex justify-end text-xs">
+        {loading ? null : user ? (
+          <div className="flex items-center gap-3">
+            <span className="text-gray-500">{user.email}</span>
+            <button onClick={signOut} className="text-red-500 hover:underline">Déconnexion</button>
+          </div>
+        ) : (
+          <Link href="/connexion" className="text-red-500 hover:underline font-medium">
+            Se connecter
+          </Link>
+        )}
+      </div>
+
       {/* Header */}
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-extrabold text-gray-800">perf360</h1>
         <p className="text-gray-500 text-lg">Des outils simples pour vous simplifier la vie.</p>
-        <Link href="/soutenir"
-          className="inline-block mt-2 text-sm text-blue-500 hover:underline">
+        <Link href="/soutenir" className="inline-block mt-2 text-sm text-blue-500 hover:underline">
           ☕ Soutenir le projet
         </Link>
       </div>
