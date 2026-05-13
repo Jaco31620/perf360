@@ -16,17 +16,17 @@ async function migrateAnonData(anonId, authId) {
   if (!anonId || !authId || anonId === authId) return;
   try {
     // Tirages
-    const { data: anonTirages } = await supabase.from("tirages").select("data").eq("user_id", anonId).single();
+    const { data: anonTirages } = await supabase.from("tirages").select("data").eq("user_id", anonId).maybeSingle();
     if (anonTirages?.data) {
-      const { data: authTirages } = await supabase.from("tirages").select("data").eq("user_id", authId).single();
+      const { data: authTirages } = await supabase.from("tirages").select("data").eq("user_id", authId).maybeSingle();
       const merged = [...(anonTirages.data || []), ...(authTirages?.data || [])];
       await supabase.from("tirages").upsert({ user_id: authId, data: merged }, { onConflict: "user_id" });
       await supabase.from("tirages").delete().eq("user_id", anonId);
     }
     // Carnet
-    const { data: anonCarnet } = await supabase.from("carnet").select("data").eq("user_id", anonId).single();
+    const { data: anonCarnet } = await supabase.from("carnet").select("data").eq("user_id", anonId).maybeSingle();
     if (anonCarnet?.data) {
-      const { data: authCarnet } = await supabase.from("carnet").select("data").eq("user_id", authId).single();
+      const { data: authCarnet } = await supabase.from("carnet").select("data").eq("user_id", authId).maybeSingle();
       const existingEmails = new Set((authCarnet?.data || []).map(p => p.email?.toLowerCase()));
       const newContacts = (anonCarnet.data || []).filter(p => !existingEmails.has(p.email?.toLowerCase()));
       const merged = [...(authCarnet?.data || []), ...newContacts];
