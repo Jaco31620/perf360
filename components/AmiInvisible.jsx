@@ -567,8 +567,42 @@ export default function AmiInvisible() {
   const [histKey, setHistKey] = useState(0);
 
   useEffect(() => {
-    if (userId) loadFromSupabase("carnet", userId).then(c => { if (c) setCarnet(c); });
-  }, [userId]);
+    if (user && userId) loadFromSupabase("carnet", userId).then(c => { if (c) setCarnet(c); });
+  }, [user, userId]);
+
+  // Écran de chargement pendant la vérification d'auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center">
+        <div className="text-gray-400 animate-pulse">Chargement…</div>
+      </div>
+    );
+  }
+
+  // Écran de connexion obligatoire
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 p-4 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 text-center space-y-6">
+          <Link href="/" className="text-xs text-gray-400 hover:underline block">← perf360.fr</Link>
+          <div className="text-6xl">🎁</div>
+          <h1 className="text-3xl font-extrabold text-gray-900">Ami Invisible</h1>
+          <p className="text-gray-500 leading-relaxed">
+            Pour conserver tes tirages, ton carnet de participants et y accéder depuis n'importe quel appareil,
+            tu dois te connecter.
+          </p>
+          <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-left text-sm text-gray-600">
+            <p className="font-semibold text-gray-800 mb-1">💡 Connexion ultra-simple</p>
+            <p>Tu reçois un lien par email, tu cliques, c'est fait. Aucun mot de passe à retenir.</p>
+          </div>
+          <Link href="/connexion"
+            className="block w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3.5 rounded-xl transition-colors">
+            Se connecter
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 p-4">
@@ -576,24 +610,15 @@ export default function AmiInvisible() {
         {/* Auth banner */}
         <div className="flex justify-between items-center mb-4 text-xs">
           <Link href="/" className="text-gray-400 hover:underline">← perf360.fr</Link>
-          {!authLoading && (user ? (
-            <div className="flex items-center gap-3">
-              <span className="text-gray-500">{user.email}</span>
-              <button onClick={signOut} className="text-red-500 hover:underline">Déconnexion</button>
-            </div>
-          ) : (
-            <Link href="/connexion" className="text-red-500 hover:underline font-medium">Se connecter</Link>
-          ))}
+          <div className="flex items-center gap-3">
+            <span className="text-gray-500">{user.email}</span>
+            <button onClick={signOut} className="text-red-500 hover:underline">Déconnexion</button>
+          </div>
         </div>
 
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold text-red-600">🎁 Ami Invisible</h1>
           <p className="text-gray-500 text-sm mt-1">Organisez votre tirage en toute confidentialité</p>
-          {!user && (
-            <p className="text-xs text-orange-600 mt-2">
-              💡 <Link href="/connexion" className="underline">Connecte-toi</Link> pour retrouver tes tirages depuis n'importe quel appareil
-            </p>
-          )}
           <button onClick={() => { setParticipants([]); setExclusions([]); setTab(0); }}
             className="mt-3 text-xs border border-red-300 text-red-500 px-4 py-1.5 rounded-full hover:bg-red-50">
             ＋ Nouveau tirage
