@@ -41,10 +41,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
-    });
+    // getSession est plus rapide et plus robuste que getUser
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setUser(data.session?.user || null);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Auth init error:", err);
+        setUser(null);
+        setLoading(false);
+      });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const newUser = session?.user || null;
       if (event === "SIGNED_IN" && newUser) {
@@ -52,6 +60,7 @@ export function AuthProvider({ children }) {
         if (anonId && anonId !== newUser.id) await migrateAnonData(anonId, newUser.id);
       }
       setUser(newUser);
+      setLoading(false);
     });
     return () => subscription.unsubscribe();
   }, []);
