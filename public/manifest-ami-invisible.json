@@ -1,0 +1,15 @@
+{
+  "id": "/ami-invisible",
+  "name": "Ami Invisible",
+  "short_name": "Ami Invisible",
+  "description": "Organisez votre tirage au sort en toute confidentialité.",
+  "start_url": "/ami-invisible",
+  "scope": "/ami-invisible",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff7ed",
+  "theme_color": "#ef4444",
+  "icons": [
+    { "src": "/icon-ami-invisible.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
