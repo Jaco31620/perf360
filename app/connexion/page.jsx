@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 
-export default function ConnexionPage() {
+function ConnexionInner() {
   const { signIn, user, signOut } = useAuth();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/";
@@ -72,5 +72,17 @@ export default function ConnexionPage() {
         <Link href={next} className="hover:underline">← Retour</Link>
       </p>
     </main>
+  );
+}
+
+export default function ConnexionPage() {
+  return (
+    <Suspense fallback={
+      <main className="max-w-md mx-auto px-4 py-16 text-center">
+        <p className="text-gray-400 animate-pulse">Chargement…</p>
+      </main>
+    }>
+      <ConnexionInner />
+    </Suspense>
   );
 }
