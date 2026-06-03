@@ -27,8 +27,20 @@ export default function AdminApp({ campaign }) {
   const [registrations, setRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
+  const [campaignName, setCampaignName] = useState(campaign.name);
   const router = useRouter();
   const saveTimer = useRef(null);
+  const nameTimer = useRef(null);
+
+  /* Renommage de l'instance (colonne ffbb_campaigns.name), débouncé. */
+  function renameInstance(n) {
+    setCampaignName(n);
+    if (nameTimer.current) clearTimeout(nameTimer.current);
+    nameTimer.current = setTimeout(() => {
+      supabase.from("ffbb_campaigns").update({ name: n }).eq("id", cid)
+        .then(({ error }) => { if (error) console.error(error); });
+    }, 500);
+  }
 
   useEffect(() => {
     (async () => {
@@ -45,7 +57,10 @@ export default function AdminApp({ campaign }) {
         setLoading(false);
       }
     })();
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (nameTimer.current) clearTimeout(nameTimer.current);
+    };
   }, [cid]);
 
   /* Sauvegarde débouncée de la config dans ffbb_campaigns. */
@@ -100,13 +115,13 @@ export default function AdminApp({ campaign }) {
     <PageShell>
       {authed ? (
         <Admin
-          config={config} codes={codes} registrations={registrations} slug={slug} campaignName={campaign.name}
+          config={config} codes={codes} registrations={registrations} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
           mutateCfg={mutateCfg} addCodes={addCodes} removeCode={removeCode} resetAll={resetAll}
           onExit={() => router.push(`/c/${slug}`)}
         />
       ) : (
         <AdminLogin
-          config={config} campaignName={campaign.name}
+          config={config} campaignName={campaignName}
           onOk={() => setAuthed(true)}
           onBack={() => router.push(`/c/${slug}`)}
         />
@@ -142,7 +157,7 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
 }
 
 /* ----------------------------- ADMIN ----------------------------- */
-function Admin({ config, codes, registrations, slug, campaignName, mutateCfg, addCodes, removeCode, resetAll, onExit }) {
+function Admin({ config, codes, registrations, slug, campaignName, renameInstance, mutateCfg, addCodes, removeCode, resetAll, onExit }) {
   const [tab, setTab] = useState("codes");
   const available = codes.filter(c => c.status === "available").length;
   const assigned = codes.filter(c => c.status === "assigned").length;
@@ -195,7 +210,7 @@ function Admin({ config, codes, registrations, slug, campaignName, mutateCfg, ad
       {tab === "regs" && <RegsTab registrations={registrations} />}
       {tab === "email" && <EmailTab config={config} codes={codes} mutateCfg={mutateCfg} />}
       {tab === "license" && <LicenseTab config={config} mutateCfg={mutateCfg} />}
-      {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} />}
+      {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
     </div>
   );
 }
@@ -426,7 +441,7 @@ function LicenseTab({ config, mutateCfg }) {
   );
 }
 
-function SettingsTab({ config, mutateCfg, resetAll, slug }) {
+function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameInstance }) {
   const c = config;
   const set = (patch) => mutateCfg(cfg => Object.assign(cfg, patch));
   const [reset, setReset] = useState(false);
@@ -475,6 +490,12 @@ function SettingsTab({ config, mutateCfg, resetAll, slug }) {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <DarkCard>
+        <h3 style={h3}>Instance</h3>
+        <label style={lbl}>Nom de l'instance</label>
+        <input value={campaignName || ""} onChange={e => renameInstance(e.target.value)} placeholder="Nom de l'instance" style={darkInput} />
+        <p style={{ ...pSub, marginTop: 6 }}>Identifiant d'URL (slug) : <code style={{ color: C.green }}>/c/{slug}</code> — non modifiable.</p>
+      </DarkCard>
       <DarkCard>
         <h3 style={h3}>En-tête (logo)</h3>
         <p style={pSub}>Téléversez une image (PNG/JPG/SVG, max 5 Mo) ou collez une URL. Affichée sur le formulaire et en en-tête de l'e-mail. Sans image, c'est le texte alternatif ci-dessous qui s'affiche.</p>

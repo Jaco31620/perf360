@@ -196,6 +196,12 @@ export async function createCampaign({ slug, name, config }) {
   return data;
 }
 
+/* Renomme une instance (colonne name). */
+export async function renameCampaign(id, name) {
+  const { error } = await supabase.from("ffbb_campaigns").update({ name }).eq("id", id);
+  if (error) throw error;
+}
+
 /* Supprime une instance (cascade : ses codes + inscriptions via FK on delete cascade). */
 export async function deleteCampaign(id) {
   const { error } = await supabase.from("ffbb_campaigns").delete().eq("id", id);
