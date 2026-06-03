@@ -11,6 +11,8 @@ export const metadata = {
     title: "perf360",
   },
   icons: {
+    icon: "/icon-perf360.svg",
+    shortcut: "/icon-perf360.svg",
     apple: "/icon-perf360.svg",
   },
 };
