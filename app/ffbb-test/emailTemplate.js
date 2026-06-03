@@ -45,8 +45,19 @@ function ctaButtonHtml(ctaUrl, ctaLabel) {
   );
 }
 
+/* En-tête : logo image si une URL http(s) est fournie, sinon lockup texte. */
+function headerHtml(headerImageUrl) {
+  if (isHttpUrl(headerImageUrl)) {
+    return (
+      `<img src="${escapeHtml(String(headerImageUrl).trim())}" alt="FFBB &#215; BLACKROLL" ` +
+      `style="max-height:48px;max-width:80%;width:auto;object-fit:contain;border:0" />`
+    );
+  }
+  return `FFBB <span style="color:#1BE299">&#215;</span> BLACKROLL<sup style="font-size:9px">&#174;</sup>`;
+}
+
 /* E-mail complet : en-tête co-brandé sombre + carte crème (corps) + bouton + footer. */
-export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel) {
+export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl) {
   const cta = ctaButtonHtml(ctaUrl, ctaLabel);
   return (
     `<!DOCTYPE html><html lang="fr"><head>` +
@@ -57,7 +68,7 @@ export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel) {
     `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px">` +
     `<tr><td align="center" style="padding:4px 0 22px;font-family:Helvetica,Arial,sans-serif;` +
     `font-size:21px;font-weight:800;letter-spacing:-0.5px;color:#FEFFF0">` +
-    `FFBB <span style="color:#1BE299">&#215;</span> BLACKROLL<sup style="font-size:9px">&#174;</sup>` +
+    `${headerHtml(headerImageUrl)}` +
     `</td></tr>` +
     `<tr><td style="background:#FEFFF0;border-radius:22px;padding:30px 28px;` +
     `font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#161614">` +

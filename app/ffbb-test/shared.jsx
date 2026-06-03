@@ -166,6 +166,7 @@ export async function sendWelcomeEmail(reg, config) {
     body: JSON.stringify({
       to: reg.email,
       replyTo: config.welcomeEmail.replyTo,
+      headerImageUrl: config.headerImageUrl,
       ctaUrl: fillTemplate(config.welcomeEmail.ctaUrl, vars),
       ctaLabel: fillTemplate(config.welcomeEmail.ctaLabel, vars),
       subject: fillTemplate(config.welcomeEmail.subject, vars),
