@@ -37,6 +37,10 @@ export const DEFAULT_CONFIG = {
   headerImageUrl: "",
   formTitle: "Inscription licencié",
   formIntro: NEW_INTRO,
+  /* Distribution : "unique" = un code différent par inscrit (liste ffbb_codes) ;
+     "generic" = le même code (genericCode) pour tout le monde. */
+  codeMode: "unique",
+  genericCode: "",
   newsletterLabel:
     "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
   welcomeEmail: {
@@ -154,6 +158,54 @@ export async function loadConfig() {
     .maybeSingle();
   if (error) throw error;
   return data && data.data ? normalizeConfig(data.data) : structuredClone(DEFAULT_CONFIG);
+}
+
+/* --------------------------- CAMPAGNES (INSTANCES) --------------------------- */
+/* Chaque instance du dispositif = une ligne ffbb_campaigns (slug + config jsonb).
+   Les codes/inscriptions sont rattachés par campaign_id. */
+
+export async function loadCampaignBySlug(slug) {
+  const { data, error } = await supabase
+    .from("ffbb_campaigns")
+    .select("id,slug,name,config")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: data.id, slug: data.slug, name: data.name, config: normalizeConfig(data.config) };
+}
+
+export async function listCampaigns() {
+  const { data, error } = await supabase
+    .from("ffbb_campaigns")
+    .select("id,slug,name,created_at")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+/* Crée une instance. config optionnelle (sinon valeurs par défaut). */
+export async function createCampaign({ slug, name, config }) {
+  const { data, error } = await supabase
+    .from("ffbb_campaigns")
+    .insert({ slug, name: name || slug, config: config || structuredClone(DEFAULT_CONFIG) })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/* Supprime une instance (cascade : ses codes + inscriptions via FK on delete cascade). */
+export async function deleteCampaign(id) {
+  const { error } = await supabase.from("ffbb_campaigns").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/* Réglages globaux (ffbb_config id=1) : mot de passe du super-admin. */
+export async function loadMasterConfig() {
+  const { data, error } = await supabase.from("ffbb_config").select("data").eq("id", 1).maybeSingle();
+  if (error) throw error;
+  return data?.data || { masterPassword: "admin" };
 }
 
 /* Construit et envoie l'e-mail de bienvenue réel via la route serveur /api/ffbb/send. */
