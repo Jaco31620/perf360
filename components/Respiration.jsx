@@ -65,6 +65,36 @@ function useBreathingAudio(enabled) {
   }, [enabled]);
 }
 
+// Empêche la mise en veille de l'écran pendant la séance
+function useWakeLock() {
+  useEffect(() => {
+    let wakeLock = null;
+    let released = false;
+
+    const request = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch (e) {}
+    };
+
+    // Réactive le wake lock si l'onglet redevient visible (Android relâche au changement d'onglet)
+    const handleVisibility = () => {
+      if (!released && document.visibilityState === "visible") request();
+    };
+
+    request();
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      released = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (wakeLock) { try { wakeLock.release(); } catch (e) {} }
+    };
+  }, []);
+}
+
 function formatTime(s) {
   const m = Math.floor(s / 60);
   const sec = s % 60;
@@ -85,6 +115,7 @@ function ActiveSession({ durations, totalSeconds, maxCycles, withSound, visualMo
   const phaseStartRef = useRef(Date.now());
 
   useBreathingAudio(withSound);
+  useWakeLock();
 
   useEffect(() => {
     const interval = setInterval(() => {
