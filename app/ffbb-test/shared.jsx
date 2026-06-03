@@ -38,6 +38,7 @@ export const DEFAULT_CONFIG = {
   newsletterLabel:
     "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
   welcomeEmail: {
+    replyTo: "jaco.barral@blackroll.com",
     subject: "Bienvenue {prenom}, voici votre code de réduction",
     body:
       "Bonjour {prenom},\n\nBienvenue et merci pour votre inscription. Dans le cadre du partenariat FFBB × BLACKROLL, vous bénéficiez de 15" +
@@ -150,6 +151,7 @@ export async function sendWelcomeEmail(reg, config) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       to: reg.email,
+      replyTo: config.welcomeEmail.replyTo,
       subject: fillTemplate(config.welcomeEmail.subject, vars),
       body: fillTemplate(config.welcomeEmail.body, vars),
     }),

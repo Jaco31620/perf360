@@ -8,6 +8,10 @@ import { Resend } from "resend";
 export const runtime = "nodejs";
 
 const FROM = "FFBB × BLACKROLL <noreply@perf360.fr>";
+/* Adresse de réponse par défaut, si l'admin n'en a pas défini une dans la config. */
+const DEFAULT_REPLY_TO = "jaco.barral@blackroll.com";
+
+const isEmail = (s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s || "").trim());
 
 function escapeHtml(s) {
   return String(s)
@@ -29,13 +33,16 @@ export async function POST(req) {
     return Response.json({ error: "Requête invalide." }, { status: 400 });
   }
 
-  const { to, subject, body } = payload || {};
+  const { to, subject, body, replyTo } = payload || {};
   if (!to || !subject || !body) {
     return Response.json({ error: "Champs requis manquants (to, subject, body)." }, { status: 400 });
   }
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(to).trim())) {
+  if (!isEmail(to)) {
     return Response.json({ error: "Adresse destinataire invalide." }, { status: 400 });
   }
+
+  /* reply_to administrable côté admin ; on retombe sur le défaut si invalide/absent. */
+  const replyAddr = isEmail(replyTo) ? String(replyTo).trim() : DEFAULT_REPLY_TO;
 
   const apiKey = process.env.RESEND_FFBB_KEY;
   if (!apiKey) {
@@ -47,9 +54,13 @@ export async function POST(req) {
     const { data, error } = await resend.emails.send({
       from: FROM,
       to: String(to).trim(),
+      replyTo: replyAddr,
       subject: String(subject),
       text: String(body),
       html: toHtml(body),
+      headers: {
+        "List-Unsubscribe": `<mailto:${replyAddr}?subject=Desabonnement>`,
+      },
     });
     if (error) {
       console.error("Resend error:", error);
