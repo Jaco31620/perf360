@@ -45,19 +45,22 @@ function ctaButtonHtml(ctaUrl, ctaLabel) {
   );
 }
 
-/* En-tête : logo image si une URL http(s) est fournie, sinon lockup texte. */
-function headerHtml(headerImageUrl) {
+/* En-tête : image si URL http(s), sinon texte alternatif, sinon lockup par défaut. */
+function headerHtml(headerImageUrl, altText) {
   if (isHttpUrl(headerImageUrl)) {
     return (
-      `<img src="${escapeHtml(String(headerImageUrl).trim())}" alt="FFBB &#215; BLACKROLL" ` +
+      `<img src="${escapeHtml(String(headerImageUrl).trim())}" alt="${escapeHtml(String(altText || "FFBB × BLACKROLL"))}" ` +
       `style="max-height:48px;max-width:80%;width:auto;object-fit:contain;border:0" />`
     );
+  }
+  if (altText && String(altText).trim()) {
+    return escapeHtml(String(altText).trim());
   }
   return `FFBB <span style="color:#1BE299">&#215;</span> BLACKROLL<sup style="font-size:9px">&#174;</sup>`;
 }
 
 /* E-mail complet : en-tête co-brandé sombre + carte crème (corps) + bouton + footer. */
-export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl) {
+export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altText) {
   const cta = ctaButtonHtml(ctaUrl, ctaLabel);
   return (
     `<!DOCTYPE html><html lang="fr"><head>` +
@@ -68,7 +71,7 @@ export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl) {
     `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px">` +
     `<tr><td align="center" style="padding:4px 0 22px;font-family:Helvetica,Arial,sans-serif;` +
     `font-size:21px;font-weight:800;letter-spacing:-0.5px;color:#FEFFF0">` +
-    `${headerHtml(headerImageUrl)}` +
+    `${headerHtml(headerImageUrl, altText)}` +
     `</td></tr>` +
     `<tr><td style="background:#FEFFF0;border-radius:22px;padding:30px 28px;` +
     `font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#161614">` +

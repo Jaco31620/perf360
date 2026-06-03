@@ -172,6 +172,7 @@ export async function sendWelcomeEmail(reg, config) {
       to: reg.email,
       replyTo: config.welcomeEmail.replyTo,
       headerImageUrl: config.headerImageUrl,
+      altText: config.federationName,
       ctaUrl: fillTemplate(config.welcomeEmail.ctaUrl, vars),
       ctaLabel: fillTemplate(config.welcomeEmail.ctaLabel, vars),
       subject: fillTemplate(config.welcomeEmail.subject, vars),
@@ -202,7 +203,15 @@ export function CoBrandHeader({ config }) {
   if (config.headerImageUrl) {
     return (
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
-        <img src={config.headerImageUrl} alt="FFBB × BLACKROLL" style={{ display: "block", margin: "0 auto", maxHeight: 56, maxWidth: "100%", objectFit: "contain" }} />
+        <img src={config.headerImageUrl} alt={config.federationName || "FFBB × BLACKROLL"} style={{ display: "block", margin: "0 auto", maxHeight: 56, maxWidth: "100%", objectFit: "contain" }} />
+      </div>
+    );
+  }
+  // Pas d'image : texte alternatif s'il est renseigné, sinon lockup FFBB × BLACKROLL.
+  if (config.federationName && config.federationName.trim()) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
+        <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.5px", color: C.cream, textAlign: "center" }}>{config.federationName}</span>
       </div>
     );
   }

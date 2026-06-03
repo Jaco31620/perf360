@@ -24,7 +24,7 @@ export async function POST(req) {
     return Response.json({ error: "Requête invalide." }, { status: 400 });
   }
 
-  const { to, subject, body, replyTo, ctaUrl, ctaLabel, headerImageUrl } = payload || {};
+  const { to, subject, body, replyTo, ctaUrl, ctaLabel, headerImageUrl, altText } = payload || {};
   if (!to || !subject || !body) {
     return Response.json({ error: "Champs requis manquants (to, subject, body)." }, { status: 400 });
   }
@@ -36,7 +36,7 @@ export async function POST(req) {
   const replyAddr = isEmail(replyTo) ? String(replyTo).trim() : DEFAULT_REPLY_TO;
 
   /* HTML complet (en-tête + carte + bouton CTA + footer) + version texte de secours. */
-  const html = buildEmailHtml(String(body), ctaUrl, ctaLabel, headerImageUrl);
+  const html = buildEmailHtml(String(body), ctaUrl, ctaLabel, headerImageUrl, altText);
   let text = htmlToText(body);
   if (isHttpUrl(ctaUrl)) {
     text += `\n\n${String(ctaLabel || "Profiter de mon code")} : ${String(ctaUrl).trim()}`;
