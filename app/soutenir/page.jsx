@@ -17,20 +17,12 @@ export default function SoutenirPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow p-8 space-y-4">
-        <p className="text-gray-600 text-sm">Choisissez le montant qui vous convient :</p>
-        <div className="flex justify-center gap-3 flex-wrap">
-          {["2", "5", "10"].map(amt => (
-            <a key={amt}
-              href={`https://www.paypal.com/donate/?business=jaco31%40gmail.com&amount=${amt}&currency_code=EUR`}
-              target="_blank" rel="noopener noreferrer"
-              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
-              {amt} €
-            </a>
-          ))}
-          <a href="https://www.paypal.com/donate/?business=jaco31%40gmail.com&currency_code=EUR"
+        <p className="text-gray-600 text-sm">Choisissez le montant qui vous convient sur la page PayPal :</p>
+        <div className="flex justify-center">
+          <a href="https://www.paypal.com/donate/?hosted_button_id=N57TTF76Z9GLG"
             target="_blank" rel="noopener noreferrer"
-            className="border border-blue-300 text-blue-500 hover:bg-blue-50 font-semibold px-6 py-3 rounded-xl transition-colors">
-            Autre montant
+            className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-6 py-3 rounded-xl transition-colors">
+            Faire un don
           </a>
         </div>
         <p className="text-xs text-gray-400">Paiement sécurisé via PayPal</p>
