@@ -47,6 +47,7 @@ export const DEFAULT_CONFIG = {
     replyTo: "jaco.barral@blackroll.com",
     ctaUrl: "",
     ctaLabel: "Profiter de mon code",
+    footer: "Dispositif licenciés FFBB × BLACKROLL.",
     subject: "Bienvenue {prenom}, voici votre code de réduction",
     /* Corps en HTML (éditeur WYSIWYG). Le {code} est mis en avant dans un encadré. */
     body:
@@ -227,6 +228,7 @@ export async function sendWelcomeEmail(reg, config) {
       altText: config.federationName,
       ctaUrl: fillTemplate(config.welcomeEmail.ctaUrl, vars),
       ctaLabel: fillTemplate(config.welcomeEmail.ctaLabel, vars),
+      footer: config.welcomeEmail.footer,
       subject: fillTemplate(config.welcomeEmail.subject, vars),
       body: fillTemplate(config.welcomeEmail.body, vars),
     }),

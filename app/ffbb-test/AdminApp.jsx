@@ -342,6 +342,10 @@ function EmailTab({ config, codes, mutateCfg }) {
           </div>
         </div>
         <p style={{ ...pSub, marginTop: 6 }}>Le bouton n'apparaît que si l'URL est renseignée (http/https). Les variables ({"{code}"}, etc.) sont acceptées dans l'URL.</p>
+        <label style={{ ...lbl, marginTop: 14 }}>Bas de page (footer)</label>
+        <input value={e.footer ?? ""} placeholder="Laisser vide pour masquer le bas de page"
+          onChange={ev => mutateCfg(c => { c.welcomeEmail.footer = ev.target.value; })} style={darkInput} />
+        <p style={{ ...pSub, marginTop: 6 }}>Petit texte gris sous la carte de l'e-mail. Vide = pas de bas de page.</p>
       </DarkCard>
       <DarkCard>
         <h3 style={h3}>Aperçu en direct</h3>
@@ -356,6 +360,7 @@ function EmailTab({ config, codes, mutateCfg }) {
             fillTemplate(e.ctaLabel, sample),
             config.headerImageUrl,
             config.federationName,
+            e.footer,
           ) }} />
         </div>
       </DarkCard>

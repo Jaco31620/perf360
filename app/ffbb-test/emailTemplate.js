@@ -59,9 +59,16 @@ function headerHtml(headerImageUrl, altText) {
   return `FFBB <span style="color:#1BE299">&#215;</span> BLACKROLL<sup style="font-size:9px">&#174;</sup>`;
 }
 
-/* E-mail complet : en-tête co-brandé sombre + carte crème (corps) + bouton + footer. */
-export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altText) {
+/* E-mail complet : en-tête co-brandé sombre + carte crème (corps) + bouton + footer.
+   footer : undefined → texte par défaut ; "" → pas de footer ; sinon le texte fourni. */
+export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altText, footer) {
   const cta = ctaButtonHtml(ctaUrl, ctaLabel);
+  const footerText = footer === undefined
+    ? "Dispositif licenci&#233;s FFBB &#215; BLACKROLL."
+    : (String(footer).trim() ? escapeHtml(String(footer)) : "");
+  const footerRow = footerText
+    ? `<tr><td align="center" style="padding:18px 8px 0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#8c8c84">${footerText}</td></tr>`
+    : "";
   return (
     `<!DOCTYPE html><html lang="fr"><head>` +
     `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
@@ -78,10 +85,7 @@ export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altTe
     `${bodyHtml}` +
     (cta ? `<div style="text-align:center">${cta}</div>` : "") +
     `</td></tr>` +
-    `<tr><td align="center" style="padding:18px 8px 0;font-family:Helvetica,Arial,sans-serif;` +
-    `font-size:12px;line-height:1.5;color:#8c8c84">` +
-    `Dispositif licenci&#233;s FFBB &#215; BLACKROLL.` +
-    `</td></tr>` +
+    footerRow +
     `</table></td></tr></table></body></html>`
   );
 }
