@@ -388,7 +388,7 @@ export default function Respiration() {
                 <button onClick={signOut} className="text-indigo-500 hover:underline">Déconnexion</button>
               </>
             ) : (
-              <Link href="/connexion" className="text-indigo-500 hover:underline font-medium">Se connecter</Link>
+              <Link href="/connexion?next=/respiration" className="text-indigo-500 hover:underline font-medium">Se connecter</Link>
             )}
           </div>
         </div>
@@ -432,7 +432,7 @@ export default function Respiration() {
                 <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-slate-600 space-y-2">
                   <p className="font-semibold text-slate-800">💡 Connectez-vous pour enregistrer vos programmes</p>
                   <p>Vous pourrez sauvegarder vos cycles personnalisés et les retrouver depuis n'importe quel appareil. Connexion par lien email, sans mot de passe.</p>
-                  <Link href="/connexion" className="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors mt-1">
+                  <Link href="/connexion?next=/respiration" className="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors mt-1">
                     Se connecter
                   </Link>
                 </div>
