@@ -8,6 +8,7 @@
  */
 import { Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { escapeHtml, looksLikeHtml } from "./emailTemplate";
 
 export const C = {
   black: "#0A0A0A",
@@ -39,17 +40,25 @@ export const DEFAULT_CONFIG = {
     "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
   welcomeEmail: {
     replyTo: "jaco.barral@blackroll.com",
+    ctaUrl: "",
+    ctaLabel: "Profiter de mon code",
     subject: "Bienvenue {prenom}, voici votre code de réduction",
+    /* Corps en HTML (éditeur WYSIWYG). Le {code} est mis en avant dans un encadré. */
     body:
-      "Bonjour {prenom},\n\nBienvenue et merci pour votre inscription. Dans le cadre du partenariat FFBB × BLACKROLL, vous bénéficiez de 15" +
+      "Bonjour {prenom},<br><br>" +
+      "Bienvenue et merci pour votre inscription. Dans le cadre du partenariat <b>FFBB × BLACKROLL</b>, vous bénéficiez de <b>15" +
       nb +
-      "% de réduction sur vos achats.\n\nVoici votre code personnel unique" +
+      "% de réduction</b> sur vos achats.<br><br>" +
+      "Voici votre code personnel unique" +
       nb +
-      ":\n{code}\n\nConservez-le précieusement" +
+      ":" +
+      "<div style=\"margin:16px 0;padding:14px 18px;background:#0A0A0A;border-radius:12px;text-align:center;font-size:22px;font-weight:800;letter-spacing:2px;color:#1BE299\">{code}</div>" +
+      "Conservez-le précieusement" +
       nb +
-      ": il est valable pour vous seul·e.\n\nÀ très bientôt,\nL'équipe",
+      ": il est valable pour vous seul·e.<br><br>" +
+      "À très bientôt,<br>L'équipe",
   },
-  license: { mode: "none", exact: 8, charType: "alnum", mask: "FED-####-AA" },
+  license: { enabled: true, mode: "none", exact: 8, charType: "alnum", mask: "FED-####-AA" },
 };
 
 /* --------------------------- HELPERS PURS --------------------------- */
@@ -80,6 +89,7 @@ export function maskEmail(email) {
 }
 
 export function validateLicense(value, cfg) {
+  if (cfg.enabled === false) return { ok: true }; // demande de licence désactivée
   const val = (value || "").trim();
   if (!val) return { ok: false, msg: "Le numéro de licence est requis." };
   if (cfg.mode === "none") return { ok: true };
@@ -124,6 +134,10 @@ export function normalizeConfig(stored) {
   };
   if (cfg.formIntro === OLD_INTRO) cfg.formIntro = NEW_INTRO;
   if (cfg.headerImageUrl === undefined) cfg.headerImageUrl = "";
+  // Migration : ancien corps d'e-mail en texte brut → HTML (une seule fois).
+  if (cfg.welcomeEmail.body && !looksLikeHtml(cfg.welcomeEmail.body)) {
+    cfg.welcomeEmail.body = escapeHtml(cfg.welcomeEmail.body).replace(/\n/g, "<br>");
+  }
   return cfg;
 }
 
@@ -152,6 +166,8 @@ export async function sendWelcomeEmail(reg, config) {
     body: JSON.stringify({
       to: reg.email,
       replyTo: config.welcomeEmail.replyTo,
+      ctaUrl: fillTemplate(config.welcomeEmail.ctaUrl, vars),
+      ctaLabel: fillTemplate(config.welcomeEmail.ctaLabel, vars),
       subject: fillTemplate(config.welcomeEmail.subject, vars),
       body: fillTemplate(config.welcomeEmail.body, vars),
     }),

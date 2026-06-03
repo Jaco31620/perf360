@@ -1,9 +1,12 @@
 /*
  * Route serveur — envoi de l'e-mail de bienvenue FFBB × BLACKROLL via Resend.
  * Clé API lue dans process.env.RESEND_FFBB_KEY. Expéditeur : noreply@perf360.fr.
- * Reçoit { to, subject, body } ; le corps (texte) est aussi décliné en HTML simple.
+ * Reçoit { to, subject, body, replyTo, ctaUrl, ctaLabel } ; `body` est du HTML
+ * (éditeur WYSIWYG de l'admin). Le gabarit/habillage est partagé avec l'aperçu
+ * admin via ../../../ffbb-test/emailTemplate.
  */
 import { Resend } from "resend";
+import { buildEmailHtml, htmlToText, isHttpUrl } from "../../../ffbb-test/emailTemplate";
 
 export const runtime = "nodejs";
 
@@ -13,18 +16,6 @@ const DEFAULT_REPLY_TO = "jaco.barral@blackroll.com";
 
 const isEmail = (s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s || "").trim());
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function toHtml(body) {
-  const inner = escapeHtml(body).replace(/\n/g, "<br>");
-  return `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#161614;white-space:normal">${inner}</div>`;
-}
-
 export async function POST(req) {
   let payload;
   try {
@@ -33,7 +24,7 @@ export async function POST(req) {
     return Response.json({ error: "Requête invalide." }, { status: 400 });
   }
 
-  const { to, subject, body, replyTo } = payload || {};
+  const { to, subject, body, replyTo, ctaUrl, ctaLabel } = payload || {};
   if (!to || !subject || !body) {
     return Response.json({ error: "Champs requis manquants (to, subject, body)." }, { status: 400 });
   }
@@ -43,6 +34,13 @@ export async function POST(req) {
 
   /* reply_to administrable côté admin ; on retombe sur le défaut si invalide/absent. */
   const replyAddr = isEmail(replyTo) ? String(replyTo).trim() : DEFAULT_REPLY_TO;
+
+  /* HTML complet (en-tête + carte + bouton CTA + footer) + version texte de secours. */
+  const html = buildEmailHtml(String(body), ctaUrl, ctaLabel);
+  let text = htmlToText(body);
+  if (isHttpUrl(ctaUrl)) {
+    text += `\n\n${String(ctaLabel || "Profiter de mon code")} : ${String(ctaUrl).trim()}`;
+  }
 
   const apiKey = process.env.RESEND_FFBB_KEY;
   if (!apiKey) {
@@ -56,8 +54,8 @@ export async function POST(req) {
       to: String(to).trim(),
       replyTo: replyAddr,
       subject: String(subject),
-      text: String(body),
-      html: toHtml(body),
+      text,
+      html,
       headers: {
         "List-Unsubscribe": `<mailto:${replyAddr}?subject=Desabonnement>`,
       },

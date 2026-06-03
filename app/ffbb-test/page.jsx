@@ -98,9 +98,12 @@ function PublicForm({ config }) {
       }
 
       // Doublon licence → écran de conflit (renvoi possible vers l'adresse connue).
-      const { data: byLicence } = await supabase
-        .from("ffbb_registrations").select("*").ilike("licence", licNorm).limit(1).maybeSingle();
-      if (byLicence) { setConflict(byLicence); return; }
+      // Ignoré si la demande de licence est désactivée (champ absent).
+      if (config.license.enabled !== false && licNorm) {
+        const { data: byLicence } = await supabase
+          .from("ffbb_registrations").select("*").ilike("licence", licNorm).limit(1).maybeSingle();
+        if (byLicence) { setConflict(byLicence); return; }
+      }
 
       // Réservation d'un code.
       const code = await claimCode();
@@ -209,11 +212,13 @@ function PublicForm({ config }) {
             <Field label="Prénom"><input style={inputStyle} value={f.prenom} onChange={e => setF({ ...f, prenom: e.target.value })} /></Field>
             <Field label="Nom"><input style={inputStyle} value={f.nom} onChange={e => setF({ ...f, nom: e.target.value })} /></Field>
           </div>
-          <div style={{ marginBottom: 14 }}>
-            <Field label="Numéro de licence">
-              <input style={inputStyle} value={f.licence} onChange={e => setF({ ...f, licence: e.target.value })} placeholder={config.license.mode === "mask" ? maskDescription(config.license.mask) : ""} />
-            </Field>
-          </div>
+          {config.license.enabled !== false && (
+            <div style={{ marginBottom: 14 }}>
+              <Field label="Numéro de licence">
+                <input style={inputStyle} value={f.licence} onChange={e => setF({ ...f, licence: e.target.value })} placeholder={config.license.mode === "mask" ? maskDescription(config.license.mask) : ""} />
+              </Field>
+            </div>
+          )}
           <div style={{ marginBottom: 18 }}>
             <Field label="Adresse e-mail"><input style={inputStyle} type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
           </div>
