@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "perf360",
+  "short_name": "perf360",
+  "description": "Des mini-apps utiles, gratuites et sans publicité.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ef4444",
+  "icons": [
+    { "src": "/icon-perf360.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
