@@ -1,16 +1,13 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-
 const AuthContext = createContext({});
-
 function getAnonId() {
   if (typeof window === "undefined") return null;
   let id = localStorage.getItem("perf360_uid");
   if (!id) { id = crypto.randomUUID(); localStorage.setItem("perf360_uid", id); }
   return id;
 }
-
 // Migration : recopie les données anonymes vers le compte authentifié
 async function migrateAnonData(anonId, authId) {
   if (!anonId || !authId || anonId === authId) return;
@@ -35,11 +32,9 @@ async function migrateAnonData(anonId, authId) {
     }
   } catch (e) { console.error("Migration error:", e); }
 }
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     // getSession est plus rapide et plus robuste que getUser
     supabase.auth.getSession()
@@ -52,7 +47,6 @@ export function AuthProvider({ children }) {
         setUser(null);
         setLoading(false);
       });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const newUser = session?.user || null;
       if (event === "SIGNED_IN" && newUser) {
@@ -64,27 +58,23 @@ export function AuthProvider({ children }) {
     });
     return () => subscription.unsubscribe();
   }, []);
-
   // userId = id authentifié si connecté, sinon id local
   const userId = user?.id || getAnonId();
-
-  const signIn = async (email) => {
+  const signIn = async (email, next = "/") => {
+    const callback = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: callback },
     });
     if (error) throw error;
   };
-
   const signOut = async () => {
     await supabase.auth.signOut();
   };
-
   return (
     <AuthContext.Provider value={{ user, userId, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 }
-
 export const useAuth = () => useContext(AuthContext);
