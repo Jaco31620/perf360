@@ -1,10 +1,13 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function ConnexionPage() {
   const { signIn, user, signOut } = useAuth();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
@@ -13,7 +16,7 @@ export default function ConnexionPage() {
     if (!email.trim()) return setErr("Entre ton adresse email.");
     setStatus("sending"); setErr("");
     try {
-      await signIn(email.trim());
+      await signIn(email.trim(), next);
       setStatus("sent");
     } catch (e) {
       setErr(e.message || "Une erreur est survenue.");
@@ -28,8 +31,8 @@ export default function ConnexionPage() {
         <h1 className="text-2xl font-bold text-gray-800">Tu es connecté</h1>
         <p className="text-gray-500 text-sm">{user.email}</p>
         <div className="flex flex-col gap-2">
-          <Link href="/" className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-medium">
-            Retour aux apps
+          <Link href={next} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-medium">
+            {next === "/" ? "Retour aux apps" : "Continuer"}
           </Link>
           <button onClick={signOut} className="text-xs text-gray-400 hover:underline">Se déconnecter</button>
         </div>
@@ -43,7 +46,6 @@ export default function ConnexionPage() {
         <h1 className="text-3xl font-extrabold text-gray-800">Connexion</h1>
         <p className="text-gray-500 text-sm">Reçois un lien de connexion par email — pas de mot de passe à retenir.</p>
       </div>
-
       {status === "sent" ? (
         <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center space-y-2">
           <div className="text-3xl">📧</div>
@@ -66,9 +68,8 @@ export default function ConnexionPage() {
           </button>
         </div>
       )}
-
       <p className="text-center text-xs text-gray-400">
-        <Link href="/" className="hover:underline">← Retour</Link>
+        <Link href={next} className="hover:underline">← Retour</Link>
       </p>
     </main>
   );
