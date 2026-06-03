@@ -205,8 +205,8 @@ function PublicForm({ config }) {
       <div style={{ width: "100%", maxWidth: 480 }}>
         <CoBrandHeader config={config} />
         <Card>
-          <h1 style={{ fontSize: 27, fontWeight: 800, color: C.ink, margin: "0 0 6px", letterSpacing: "-0.6px" }}>Inscription licencié</h1>
-          <p style={{ color: "#666", margin: "0 0 22px", fontSize: 14.5, lineHeight: 1.5 }}>{config.formIntro}</p>
+          <h1 style={{ fontSize: 27, fontWeight: 800, color: C.ink, margin: "0 0 6px", letterSpacing: "-0.6px" }}>{config.formTitle}</h1>
+          <div style={{ color: "#666", margin: "0 0 22px", fontSize: 14.5, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: config.formIntro }} />
 
           <div style={{ display: "flex", gap: 12, marginBottom: 14 }}>
             <Field label="Prénom"><input style={inputStyle} value={f.prenom} onChange={e => setF({ ...f, prenom: e.target.value })} /></Field>

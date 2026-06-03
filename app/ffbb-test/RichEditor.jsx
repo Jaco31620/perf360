@@ -11,7 +11,7 @@ import { C } from "./shared";
 
 const VARS = ["{prenom}", "{nom}", "{licence}", "{code}", "{email}"];
 
-export default function RichEditor({ value, onChange }) {
+export default function RichEditor({ value, onChange, variables = VARS }) {
   const ref = useRef(null);
 
   /* Synchronise depuis l'extérieur sans casser le curseur : on n'écrit dans le
@@ -63,8 +63,8 @@ export default function RichEditor({ value, onChange }) {
           <input type="color" defaultValue="#161614" onChange={(e) => exec("foreColor", e.target.value)}
             style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
         </label>
-        <span style={{ width: 1, height: 22, background: C.line, margin: "0 2px" }} />
-        {VARS.map((v) => (
+        {variables.length > 0 && <span style={{ width: 1, height: 22, background: C.line, margin: "0 2px" }} />}
+        {variables.map((v) => (
           <button key={v} type="button" onMouseDown={keep} onClick={() => insertVar(v)} style={chip} title={`Insérer ${v}`}>{v}</button>
         ))}
       </div>

@@ -35,6 +35,7 @@ export const DEFAULT_CONFIG = {
   adminPassword: "admin",
   federationName: "VOTRE FÉDÉRATION",
   headerImageUrl: "",
+  formTitle: "Inscription licencié",
   formIntro: NEW_INTRO,
   newsletterLabel:
     "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
@@ -134,6 +135,10 @@ export function normalizeConfig(stored) {
   };
   if (cfg.formIntro === OLD_INTRO) cfg.formIntro = NEW_INTRO;
   if (cfg.headerImageUrl === undefined) cfg.headerImageUrl = "";
+  // Migration : ancien texte d'intro du formulaire en texte brut → HTML (une seule fois).
+  if (cfg.formIntro && !looksLikeHtml(cfg.formIntro)) {
+    cfg.formIntro = escapeHtml(cfg.formIntro).replace(/\n/g, "<br>");
+  }
   // Migration : ancien corps d'e-mail en texte brut → HTML (une seule fois).
   if (cfg.welcomeEmail.body && !looksLikeHtml(cfg.welcomeEmail.body)) {
     cfg.welcomeEmail.body = escapeHtml(cfg.welcomeEmail.body).replace(/\n/g, "<br>");
