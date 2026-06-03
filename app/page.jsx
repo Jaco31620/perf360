@@ -11,6 +11,14 @@ const apps = [
     gradient: "from-red-500 to-orange-500",
     badge: "Gratuit",
   },
+  {
+    href: "/respiration",
+    emoji: "🫁",
+    title: "Respiration",
+    desc: "Guidez votre souffle avec un timer visuel et sonore. Cohérence cardiaque, 4-7-8, programmes perso.",
+    gradient: "from-indigo-500 to-purple-500",
+    badge: "Gratuit",
+  },
   // Ajoutez vos prochaines apps ici
 ];
 
