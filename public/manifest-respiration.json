@@ -1,0 +1,15 @@
+{
+  "id": "/respiration",
+  "name": "Respiration",
+  "short_name": "Respiration",
+  "description": "Guidez votre souffle avec un timer visuel et sonore.",
+  "start_url": "/respiration",
+  "scope": "/respiration",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1e1b4b",
+  "theme_color": "#6366f1",
+  "icons": [
+    { "src": "/icon-respiration.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
