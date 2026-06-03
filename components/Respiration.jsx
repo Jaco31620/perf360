@@ -312,6 +312,7 @@ export default function Respiration() {
 
   useEffect(() => {
     if (user && userId) loadPrograms(userId).then(setSavedPrograms);
+    else setSavedPrograms([]);
   }, [user, userId]);
 
   const cycleDuration = durations.reduce((a, b) => a + b, 0);
@@ -359,28 +360,6 @@ export default function Respiration() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 p-4 flex items-center justify-center">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 text-center space-y-6">
-          <Link href="/" className="text-xs text-slate-400 hover:underline block">← perf360.fr</Link>
-          <div className="text-6xl">🫁</div>
-          <h1 className="text-3xl font-extrabold text-slate-900">Respiration</h1>
-          <p className="text-slate-500 leading-relaxed">
-            Pour enregistrer vos programmes de respiration et les retrouver depuis n'importe quel appareil, connectez-vous.
-          </p>
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-left text-sm text-slate-600">
-            <p className="font-semibold text-slate-800 mb-1">💡 Connexion ultra-simple</p>
-            <p>Vous recevez un lien par email, vous cliquez, c'est fait. Aucun mot de passe.</p>
-          </div>
-          <Link href="/connexion" className="block w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-3.5 rounded-xl transition-colors">
-            Se connecter
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   if (running) {
     const sessionTotalSeconds = endMode === "time" ? endValue * 60 : endValue * cycleDuration;
     const sessionTargetCycles = endMode === "cycles" ? endValue : Math.max(1, Math.round((endValue * 60) / cycleDuration));
@@ -403,8 +382,14 @@ export default function Respiration() {
         <div className="flex justify-between items-center text-xs">
           <Link href="/" className="text-slate-400 hover:underline">← perf360.fr</Link>
           <div className="flex items-center gap-3">
-            <span className="text-slate-500">{user.email}</span>
-            <button onClick={signOut} className="text-indigo-500 hover:underline">Déconnexion</button>
+            {user ? (
+              <>
+                <span className="text-slate-500">{user.email}</span>
+                <button onClick={signOut} className="text-indigo-500 hover:underline">Déconnexion</button>
+              </>
+            ) : (
+              <Link href="/connexion" className="text-indigo-500 hover:underline font-medium">Se connecter</Link>
+            )}
           </div>
         </div>
 
@@ -438,12 +423,20 @@ export default function Respiration() {
 
         <div className="bg-white rounded-2xl shadow p-5 space-y-3">
           <button onClick={() => setShowPrograms(!showPrograms)} className="w-full flex justify-between items-center">
-            <h2 className="font-semibold text-slate-700">Mes programmes {savedPrograms.length > 0 && <span className="text-indigo-500">({savedPrograms.length})</span>}</h2>
+            <h2 className="font-semibold text-slate-700">Mes programmes {user && savedPrograms.length > 0 && <span className="text-indigo-500">({savedPrograms.length})</span>}</h2>
             <span className="text-slate-400 text-sm">{showPrograms ? "▲" : "▼"}</span>
           </button>
           {showPrograms && (
             <div className="space-y-4 pt-2">
-              {savedPrograms.length === 0 ? (
+              {!user ? (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-slate-600 space-y-2">
+                  <p className="font-semibold text-slate-800">💡 Connectez-vous pour enregistrer vos programmes</p>
+                  <p>Vous pourrez sauvegarder vos cycles personnalisés et les retrouver depuis n'importe quel appareil. Connexion par lien email, sans mot de passe.</p>
+                  <Link href="/connexion" className="inline-block bg-indigo-500 hover:bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors mt-1">
+                    Se connecter
+                  </Link>
+                </div>
+              ) : savedPrograms.length === 0 ? (
                 <p className="text-sm text-slate-400">Aucun programme enregistré pour l'instant.</p>
               ) : (
                 <div className="space-y-2">
@@ -469,19 +462,21 @@ export default function Respiration() {
                   ))}
                 </div>
               )}
-              <div className="border-t border-slate-100 pt-3 space-y-2">
-                <p className="text-xs text-slate-500">Enregistrer le cycle courant ({durations.join(" — ")}) :</p>
-                <div className="flex gap-2">
-                  <input value={newName} onChange={e => setNewName(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && saveCurrentProgram()}
-                    placeholder="Nom du programme"
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                  <button onClick={saveCurrentProgram} className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                    Enregistrer
-                  </button>
+              {user && (
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <p className="text-xs text-slate-500">Enregistrer le cycle courant ({durations.join(" — ")}) :</p>
+                  <div className="flex gap-2">
+                    <input value={newName} onChange={e => setNewName(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && saveCurrentProgram()}
+                      placeholder="Nom du programme"
+                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                    <button onClick={saveCurrentProgram} className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                      Enregistrer
+                    </button>
+                  </div>
+                  {saveErr && <p className="text-red-500 text-xs">{saveErr}</p>}
                 </div>
-                {saveErr && <p className="text-red-500 text-xs">{saveErr}</p>}
-              </div>
+              )}
             </div>
           )}
         </div>
