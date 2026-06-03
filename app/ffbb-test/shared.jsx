@@ -196,8 +196,8 @@ export function BasketballIcon() {
 export function CoBrandHeader({ config }) {
   if (config.headerImageUrl) {
     return (
-      <div style={{ textAlign: "center", marginBottom: 26 }}>
-        <img src={config.headerImageUrl} alt="FFBB × BLACKROLL" style={{ maxHeight: 56, maxWidth: "100%", objectFit: "contain" }} />
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
+        <img src={config.headerImageUrl} alt="FFBB × BLACKROLL" style={{ display: "block", margin: "0 auto", maxHeight: 56, maxWidth: "100%", objectFit: "contain" }} />
       </div>
     );
   }
