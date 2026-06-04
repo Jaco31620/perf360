@@ -49,8 +49,8 @@ function ctaButtonHtml(ctaUrl, ctaLabel) {
 function headerHtml(headerImageUrl, altText) {
   if (isHttpUrl(headerImageUrl)) {
     return (
-      `<img src="${escapeHtml(String(headerImageUrl).trim())}" alt="${escapeHtml(String(altText || "FFBB × BLACKROLL"))}" ` +
-      `style="max-height:48px;max-width:80%;width:auto;object-fit:contain;border:0" />`
+      `<img src="${escapeHtml(String(headerImageUrl).trim())}" alt="${escapeHtml(String(altText || "FFBB × BLACKROLL"))}" height="48" ` +
+      `style="height:48px;width:auto;max-width:100%;border:0;outline:none;text-decoration:none" />`
     );
   }
   if (altText && String(altText).trim()) {
@@ -72,6 +72,7 @@ export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altTe
   return (
     `<!DOCTYPE html><html lang="fr"><head>` +
     `<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+    `<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">` +
     `</head><body style="margin:0;padding:0;background:#0A0A0A;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0A0A0A;padding:28px 12px">` +
     `<tr><td align="center">` +
