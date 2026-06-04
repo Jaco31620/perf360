@@ -208,9 +208,9 @@ export default function PublicForm({ campaign }) {
           <div style={{ marginBottom: 20 }}>
             {config.newsletterIntro && <p style={{ fontSize: 13.5, color: "#555", fontWeight: 600, margin: "0 0 6px" }}>{config.newsletterIntro}</p>}
             {newsletterBullets.length > 0 && (
-              <ul style={{ margin: "0 0 12px", paddingLeft: 20, color: "#555", fontSize: 13.5, lineHeight: 1.55 }}>
-                {newsletterBullets.map((b, i) => <li key={i}>{b}</li>)}
-              </ul>
+              <div style={{ margin: "0 0 12px", color: "#555", fontSize: 13.5, lineHeight: 1.6 }}>
+                {newsletterBullets.map((b, i) => <div key={i}>{b}</div>)}
+              </div>
             )}
             <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
               <input type="checkbox" checked={f.newsletter} onChange={e => setF({ ...f, newsletter: e.target.checked })}

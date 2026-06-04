@@ -45,13 +45,13 @@ export const DEFAULT_CONFIG = {
      "generic" = le même code (genericCode) pour tout le monde. */
   codeMode: "unique",
   genericCode: "",
-  /* Bloc newsletter : intro + puces (une par ligne) + libellé de la case. */
+  /* Bloc newsletter : intro + lignes d'avantages (affichées telles quelles) + libellé de la case. */
   newsletterIntro: "Vous voulez en plus recevoir :",
   newsletterBullets:
-    "les nouveautés produits en avant-première\n" +
-    "des conseils d'experts en récupération, sommeil et performance\n" +
-    "les offres et concours réservés aux abonnés",
-  newsletterLabel: "Je souhaite m'abonner à la newsletter BLACKROLL®.",
+    "- les nouveautés produits en avant-première\n" +
+    "- des conseils d'experts en récupération, sommeil et performance\n" +
+    "- les offres et concours réservés aux abonnés",
+  newsletterLabel: "Je souhaite m'abonner à la newsletter BLACKROLL",
   /* Lien vers la politique de protection des données (affiché sous le formulaire). Vide = masqué. */
   privacyUrl: "https://blackroll.com/fr/service/protection-des-donnees",
   welcomeEmail: {

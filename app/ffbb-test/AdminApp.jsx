@@ -744,7 +744,7 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
         <RichEditor value={c.formIntro} onChange={(html) => set({ formIntro: html })} variables={[]} />
         <label style={{ ...lbl, marginTop: 14 }}>Newsletter — phrase d'intro</label>
         <input value={c.newsletterIntro ?? ""} placeholder="Vous voulez en plus recevoir :" onChange={e => set({ newsletterIntro: e.target.value })} style={darkInput} />
-        <label style={{ ...lbl, marginTop: 14 }}>Newsletter — avantages (une ligne = une puce)</label>
+        <label style={{ ...lbl, marginTop: 14 }}>Newsletter — avantages (une ligne affichée telle quelle ; mets ton marqueur, ex. « - »)</label>
         <textarea value={c.newsletterBullets ?? ""} rows={3} onChange={e => set({ newsletterBullets: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
         <label style={{ ...lbl, marginTop: 14 }}>Newsletter — libellé de la case</label>
         <textarea value={c.newsletterLabel} rows={2} onChange={e => set({ newsletterLabel: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
