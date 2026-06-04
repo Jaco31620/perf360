@@ -26,7 +26,6 @@ export default function AdminApp({ campaign }) {
   const [config, setConfig] = useState(campaign.config);
   // Compteurs (agrégats DB) au lieu de charger tous les codes/inscriptions → tient les gros volumes.
   const [counts, setCounts] = useState({ total: 0, available: 0, assigned: 0, regs: 0, newsletter: 0 });
-  const [recentRegs, setRecentRegs] = useState([]); // dernières inscriptions (aperçu)
   const [loading, setLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
   const [campaignName, setCampaignName] = useState(campaign.name);
@@ -36,16 +35,23 @@ export default function AdminApp({ campaign }) {
 
   /* Recharge les compteurs (codes total/dispo, inscrits, opt-in) + dernières inscriptions. */
   async function refreshCounts() {
-    const [tot, avail, regs, news, recent] = await Promise.all([
+    const [tot, avail, regs, news] = await Promise.all([
       supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
       supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("status", "available"),
       supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
       supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("newsletter", true),
-      supabase.from("ffbb_registrations").select("*").eq("campaign_id", cid).order("created_at", { ascending: false }).limit(200),
     ]);
     const t = tot.count || 0, a = avail.count || 0;
     setCounts({ total: t, available: a, assigned: t - a, regs: regs.count || 0, newsletter: news.count || 0 });
-    setRecentRegs((recent.data || []).map(r => ({ ...r, date: r.created_at })));
+  }
+
+  /* Une page d'inscriptions (récentes d'abord) — pour la pagination de l'onglet Attributions. */
+  async function fetchRegistrationsPage(from, size) {
+    const { data, error } = await supabase
+      .from("ffbb_registrations").select("*").eq("campaign_id", cid)
+      .order("created_at", { ascending: false }).range(from, from + size - 1);
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => ({ ...r, date: r.created_at }));
   }
 
   /* Renommage de l'instance (colonne ffbb_campaigns.name), débouncé. */
@@ -145,9 +151,9 @@ export default function AdminApp({ campaign }) {
     <PageShell>
       {authed ? (
         <Admin
-          config={config} counts={counts} recentRegs={recentRegs} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
+          config={config} counts={counts} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
           mutateCfg={mutateCfg} addCodes={addCodes} resetAll={resetAll}
-          searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations}
+          searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} fetchRegistrationsPage={fetchRegistrationsPage}
           onExit={() => router.push(`/${slug}`)}
           onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
         />
@@ -189,7 +195,7 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
 }
 
 /* ----------------------------- ADMIN ----------------------------- */
-function Admin({ config, counts, recentRegs, slug, campaignName, renameInstance, mutateCfg, addCodes, resetAll, searchRegistrations, fetchAllRegistrations, onExit, onLogout }) {
+function Admin({ config, counts, slug, campaignName, renameInstance, mutateCfg, addCodes, resetAll, searchRegistrations, fetchAllRegistrations, fetchRegistrationsPage, onExit, onLogout }) {
   const [tab, setTab] = useState("codes");
   const { total, available, assigned, regs: regsCount, newsletter: newsletterCount } = counts;
 
@@ -269,8 +275,8 @@ function Admin({ config, counts, recentRegs, slug, campaignName, renameInstance,
         </button>
       </div>
 
-      {tab === "codes" && <CodesTab config={config} counts={counts} addCodes={addCodes} mutateCfg={mutateCfg} hasRegs={regsCount > 0} />}
-      {tab === "regs" && <RegsTab recentRegs={recentRegs} total={regsCount} searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} />}
+      {tab === "codes" && <CodesTab config={config} addCodes={addCodes} mutateCfg={mutateCfg} hasRegs={regsCount > 0} />}
+      {tab === "regs" && <RegsTab total={regsCount} searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} fetchRegistrationsPage={fetchRegistrationsPage} />}
       {tab === "promote" && <PromoteTab slug={slug} />}
       {tab === "email" && <EmailTab config={config} mutateCfg={mutateCfg} />}
       {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
@@ -278,7 +284,7 @@ function Admin({ config, counts, recentRegs, slug, campaignName, renameInstance,
   );
 }
 
-function CodesTab({ config, counts, addCodes, mutateCfg, hasRegs }) {
+function CodesTab({ config, addCodes, mutateCfg, hasRegs }) {
   const [bulk, setBulk] = useState("");
   const [msg, setMsg] = useState("");
   const [adding, setAdding] = useState(false);
@@ -358,26 +364,28 @@ function CodesTab({ config, counts, addCodes, mutateCfg, hasRegs }) {
             <button onClick={handleAdd} disabled={adding} style={{ ...btnPrimary, width: "auto", margin: 0, opacity: adding ? 0.6 : 1 }}><Plus size={17} /> {adding ? "Ajout…" : "Ajouter au pool"}</button>
             {msg && <span style={{ color: C.green, fontSize: 13.5 }}>{msg}</span>}
           </div>
-
-          <div style={{ height: 1, background: C.line, margin: "24px 0" }} />
-          <h3 style={h3}>Pool de codes</h3>
-          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginTop: 10, fontSize: 14.5 }}>
-            <span style={{ color: C.cream }}>Total : <b>{counts.total}</b></span>
-            <span style={{ color: C.green }}>Disponibles : <b>{counts.available}</b></span>
-            <span style={{ color: C.gray }}>Attribués : <b>{counts.assigned}</b></span>
-          </div>
-          <p style={{ ...pSub, marginTop: 10, marginBottom: 0 }}>Pour retrouver à qui un code a été attribué, utilise la recherche de l'onglet <b>Attributions</b>.</p>
         </DarkCard>
       )}
     </div>
   );
 }
 
-function RegsTab({ recentRegs, total, searchRegistrations, fetchAllRegistrations }) {
+function RegsTab({ total, searchRegistrations, fetchAllRegistrations, fetchRegistrationsPage }) {
+  const PAGE = 50;
+  const [page, setPage] = useState(0);
+  const [rows, setRows] = useState([]);
+  const [loadingPage, setLoadingPage] = useState(true);
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null); // null = pas de recherche
   const [searching, setSearching] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingPage(true);
+    fetchRegistrationsPage(page * PAGE, PAGE).then(r => { if (alive) { setRows(r); setLoadingPage(false); } });
+    return () => { alive = false; };
+  }, [page]);
 
   async function doSearch() {
     const term = q.trim();
@@ -392,11 +400,11 @@ function RegsTab({ recentRegs, total, searchRegistrations, fetchAllRegistrations
     setExporting(true);
     const all = await fetchAllRegistrations();
     setExporting(false);
-    const rows = [["Date", "Prénom", "Nom", "Licence", "E-mail", "Code", "Newsletter"]];
-    all.forEach(r => rows.push([
+    const rowsCsv = [["Date", "Prénom", "Nom", "Licence", "E-mail", "Code", "Newsletter"]];
+    all.forEach(r => rowsCsv.push([
       r.date ? new Date(r.date).toLocaleString("fr-FR") : "", r.prenom, r.nom, r.licence, r.email, r.code, r.newsletter ? "Oui" : "Non",
     ]));
-    const csv = rows.map(row => row.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
+    const csv = rowsCsv.map(row => row.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -405,7 +413,8 @@ function RegsTab({ recentRegs, total, searchRegistrations, fetchAllRegistrations
   }
 
   const isSearch = results !== null;
-  const list = isSearch ? results : recentRegs;
+  const list = isSearch ? results : rows;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE));
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -424,34 +433,42 @@ function RegsTab({ recentRegs, total, searchRegistrations, fetchAllRegistrations
       </DarkCard>
 
       <DarkCard>
-        <h3 style={{ ...h3 }}>{isSearch ? `Résultats (${list.length})` : "Dernières inscriptions"}</h3>
-        {!isSearch && total > list.length && (
-          <p style={pSub}>Aperçu des {list.length} plus récentes sur {total}. Pour le reste : la recherche ou l'export CSV.</p>
-        )}
-        {list.length === 0 ? (
+        <h3 style={{ ...h3 }}>{isSearch ? `Résultats (${list.length})` : "Inscriptions"}</h3>
+        {(!isSearch && loadingPage) ? (
+          <p style={pSub}>Chargement…</p>
+        ) : list.length === 0 ? (
           <p style={pSub}>{isSearch ? "Aucun résultat." : "Aucune inscription pour l'instant."}</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-              <thead>
-                <tr style={{ textAlign: "left", color: C.gray, borderBottom: `1px solid ${C.line}` }}>
-                  {["Date", "Nom complet", "Licence", "E-mail", "Code", "Newsletter"].map(h => <th key={h} style={{ padding: "8px 10px", fontWeight: 600 }}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {list.map(r => (
-                  <tr key={r.id} style={{ borderBottom: `1px solid ${C.line}` }}>
-                    <td style={td}>{r.date ? new Date(r.date).toLocaleDateString("fr-FR") : "—"}</td>
-                    <td style={td}>{r.prenom} {r.nom}</td>
-                    <td style={td}>{r.licence}</td>
-                    <td style={td}>{r.email}</td>
-                    <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.code}</td>
-                    <td style={td}>{r.newsletter ? <Check size={16} color={C.green} /> : "—"}</td>
+          <>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: C.gray, borderBottom: `1px solid ${C.line}` }}>
+                    {["Date", "Nom complet", "Licence", "E-mail", "Code", "Newsletter"].map(h => <th key={h} style={{ padding: "8px 10px", fontWeight: 600 }}>{h}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {list.map(r => (
+                    <tr key={r.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                      <td style={td}>{r.date ? new Date(r.date).toLocaleDateString("fr-FR") : "—"}</td>
+                      <td style={td}>{r.prenom} {r.nom}</td>
+                      <td style={td}>{r.licence}</td>
+                      <td style={td}>{r.email}</td>
+                      <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.code}</td>
+                      <td style={td}>{r.newsletter ? <Check size={16} color={C.green} /> : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!isSearch && totalPages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginTop: 16, flexWrap: "wrap" }}>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ ...btnGhostLight, opacity: page === 0 ? 0.4 : 1 }}><ArrowLeft size={15} /> Précédent</button>
+                <span style={{ color: C.gray, fontSize: 13.5 }}>Page {page + 1} / {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={{ ...btnGhostLight, opacity: page >= totalPages - 1 ? 0.4 : 1 }}>Suivant →</button>
+              </div>
+            )}
+          </>
         )}
       </DarkCard>
     </div>
