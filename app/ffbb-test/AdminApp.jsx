@@ -9,7 +9,8 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut, Eye } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut, Eye, QrCode } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
   C, fillTemplate, maskDescription,
@@ -169,6 +170,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
   const tabs = [
     { id: "codes", label: "Codes", icon: Tag },
     { id: "regs", label: "Attributions", icon: Users },
+    { id: "promote", label: "Promouvoir", icon: QrCode },
     { id: "email", label: "E-mail", icon: Mail },
     { id: "license", label: "Licence", icon: Hash },
     { id: "settings", label: "Réglages", icon: Settings },
@@ -214,6 +216,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
 
       {tab === "codes" && <CodesTab config={config} codes={codes} addCodes={addCodes} removeCode={removeCode} mutateCfg={mutateCfg} />}
       {tab === "regs" && <RegsTab registrations={registrations} />}
+      {tab === "promote" && <PromoteTab slug={slug} />}
       {tab === "email" && <EmailTab config={config} codes={codes} mutateCfg={mutateCfg} />}
       {tab === "license" && <LicenseTab config={config} mutateCfg={mutateCfg} />}
       {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
@@ -332,6 +335,70 @@ function RegsTab({ registrations }) {
         </div>
       )}
     </DarkCard>
+  );
+}
+
+function PromoteTab({ slug }) {
+  const [url, setUrl] = useState("");
+  const [copied, setCopied] = useState("");
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setUrl(`${window.location.origin}/${slug}`);
+  }, [slug]);
+
+  const flash = (k) => { setCopied(k); setTimeout(() => setCopied(""), 1500); };
+  const getCanvas = () => boxRef.current?.querySelector("canvas");
+
+  async function copyLink() {
+    try { await navigator.clipboard.writeText(url); flash("link"); }
+    catch (e) { window.prompt("Lien (copiez-le) :", url); }
+  }
+  function copyQR() {
+    const cv = getCanvas(); if (!cv) return;
+    cv.toBlob(async (blob) => {
+      try {
+        await navigator.clipboard.write([new window.ClipboardItem({ "image/png": blob })]);
+        flash("qr");
+      } catch (e) {
+        console.error(e);
+        alert("La copie d'image n'est pas supportée par ce navigateur. Utilisez « Télécharger ».");
+      }
+    });
+  }
+  function downloadQR() {
+    const cv = getCanvas(); if (!cv) return;
+    const a = document.createElement("a");
+    a.href = cv.toDataURL("image/png");
+    a.download = `qr-${slug}.png`;
+    a.click();
+  }
+
+  if (!url) return <DarkCard><p style={pSub}>Préparation…</p></DarkCard>;
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <DarkCard>
+        <h3 style={h3}>Lien du formulaire</h3>
+        <p style={pSub}>Partagez ce lien aux participants pour qu'ils reçoivent leur code.</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <code style={{ flex: "1 1 240px", minWidth: 0, background: C.black, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", color: C.cream, fontSize: 14, overflowX: "auto", whiteSpace: "nowrap" }}>{url}</code>
+          <button onClick={copyLink} style={{ ...btnGhostLight }}>{copied === "link" ? "Copié !" : "Copier le lien"}</button>
+        </div>
+      </DarkCard>
+
+      <DarkCard>
+        <h3 style={h3}>QR code</h3>
+        <p style={pSub}>À imprimer ou intégrer sur un support. Il ouvre directement le formulaire.</p>
+        <div ref={boxRef} style={{ display: "inline-block", background: "#fff", padding: 16, borderRadius: 14 }}>
+          <QRCodeCanvas value={url} size={220} level="M" />
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <button onClick={copyQR} style={{ ...btnGhostLight }}>{copied === "qr" ? "Copié !" : "Copier le QR"}</button>
+          <button onClick={downloadQR} style={{ ...btnGhostLight }}><Download size={15} /> Télécharger (PNG)</button>
+        </div>
+      </DarkCard>
+    </div>
   );
 }
 
