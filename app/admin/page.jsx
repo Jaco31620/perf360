@@ -235,6 +235,7 @@ function Dashboard({ campaigns, refresh, onLogout }) {
                   style={{ flex: "1 1 200px", minWidth: 0, display: "block", textDecoration: "none", cursor: "pointer" }}>
                   <div style={{ fontWeight: 700, color: C.cream, fontSize: 15 }}>{c.name || c.slug}</div>
                   <div style={{ color: C.gray, fontSize: 12.5, fontFamily: "monospace", marginTop: 3 }}>/{c.slug}</div>
+                  <div style={{ color: C.gray, fontSize: 11.5, marginTop: 2 }}>Créée le {c.created_at ? new Date(c.created_at).toLocaleDateString("fr-FR") : "—"}</div>
                 </a>
                 <a href={`/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
                 <button onClick={() => copyPw(c)} title="Copier le mot de passe admin de cette instance" style={{ ...btnGhostLight }}><Key size={14} /> {copiedId === c.id ? "Copié !" : "Mot de passe"}</button>
@@ -274,6 +275,8 @@ Voici vos accès pour gérer l'instance « ${invite.name} » de l'outil BLACKROL
 - Formulaire public (à diffuser) : ${formUrl}
 - Espace d'administration : ${adminUrl}
 - Mot de passe administrateur : ${invite.password}
+
+Un QR code du formulaire (à imprimer ou afficher) est disponible dans l'espace d'administration, onglet « Promouvoir ».
 
 Depuis l'espace d'administration, vous pouvez gérer les codes, consulter les inscriptions, et personnaliser l'e-mail et le formulaire. Vous pouvez changer ce mot de passe dans Réglages > Sécurité.
 
