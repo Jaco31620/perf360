@@ -9,8 +9,9 @@ export default function AccueilPage() {
   return (
     <div style={{ background: "#0A0A0A", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Helvetica Neue, Helvetica, Arial, sans-serif", color: "#FEFFF0", padding: "24px 16px" }}>
       <div style={{ width: "100%", maxWidth: 460, textAlign: "center" }}>
-        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 28 }}>
-          BLACKROLL<sup style={{ fontSize: 10 }}>®</sup> <span style={{ color: "#1BE299" }}>Codes</span>
+        <div style={{ marginBottom: 28, textAlign: "center" }}>
+          <img src="/LogoBLACKROLL.png" alt="BLACKROLL" style={{ width: "auto", maxWidth: 280, maxHeight: 56, display: "inline-block" }} />
+          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, letterSpacing: "3px", textTransform: "uppercase", color: "#1BE299" }}>Codes</div>
         </div>
 
         <div style={{ background: "#FEFFF0", borderRadius: 22, padding: "34px 28px", boxShadow: "0 10px 40px rgba(0,0,0,0.4)" }}>
