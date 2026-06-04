@@ -167,10 +167,14 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
   const assigned = codes.filter(c => c.status === "assigned").length;
   const newsletterCount = registrations.filter(r => r.newsletter).length;
 
-  // Alerte stock (mode « codes uniques » uniquement).
+  // Alerte de distribution selon le mode.
   const total = codes.length;
   let warning = null;
-  if ((config.codeMode || "unique") === "unique") {
+  if ((config.codeMode || "unique") === "generic") {
+    if (!(config.genericCode || "").trim()) {
+      warning = { danger: true, text: "Aucun code générique défini : les inscriptions échoueront tant que le code n'est pas renseigné." };
+    }
+  } else {
     if (available === 0) {
       warning = { danger: true, text: "Aucun code disponible à distribuer : les inscriptions échoueront tant que le pool est vide." };
     } else if (total > 0 && available < total * 0.1) {
