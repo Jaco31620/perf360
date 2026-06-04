@@ -36,6 +36,8 @@ export default function SuperAdminPage() {
   }
 
   useEffect(() => {
+    // Session déjà ouverte avec le mot de passe maître → pas de re-login.
+    if (typeof window !== "undefined" && sessionStorage.getItem("ffbb_super_admin") === "1") setAuthed(true);
     (async () => {
       try {
         const [mc] = await Promise.all([loadMasterConfig()]);
@@ -69,7 +71,12 @@ export default function SuperAdminPage() {
 function MasterLogin({ master, onOk }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
-  const tryLogin = () => (pw === (master?.masterPassword ?? "admin") ? onOk() : setErr(true));
+  const tryLogin = () => {
+    if (pw === (master?.masterPassword ?? "admin")) {
+      try { sessionStorage.setItem("ffbb_super_admin", "1"); } catch (e) {}
+      onOk();
+    } else setErr(true);
+  };
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "60px 16px" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>

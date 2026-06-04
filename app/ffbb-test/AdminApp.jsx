@@ -43,6 +43,8 @@ export default function AdminApp({ campaign }) {
   }
 
   useEffect(() => {
+    // Authentifié au super-admin (mot de passe maître) → accès direct sans le mot de passe d'instance.
+    if (typeof window !== "undefined" && sessionStorage.getItem("ffbb_super_admin") === "1") setAuthed(true);
     (async () => {
       try {
         const [codesRes, regsRes] = await Promise.all([
