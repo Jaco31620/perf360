@@ -327,7 +327,7 @@ function CodesTab({ config, addCodes, mutateCfg, hasRegs }) {
         <p style={{ ...pSub, marginTop: 12, marginBottom: 0 }}>
           {mode === "generic"
             ? "Le même code est distribué à tous les inscrits — aucune liste nécessaire."
-            : "Chaque inscrit reçoit un code différent, tiré de la liste ci-dessous. Pool vide ⇒ le formulaire indique qu'aucun code n'est disponible."}
+            : "Chaque inscrit reçoit un code différent, tiré du pool. Ajoutez vos codes ci-dessous (le suivi du stock est dans les compteurs en haut). Pool vide ⇒ le formulaire indique qu'aucun code n'est disponible."}
         </p>
 
         {pendingMode && (
