@@ -8,7 +8,7 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState, useEffect } from "react";
-import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key } from "lucide-react";
+import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy } from "lucide-react";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
@@ -110,6 +110,7 @@ function Dashboard({ campaigns, refresh, onLogout }) {
   const [confirmDel, setConfirmDel] = useState(null);
   const [created, setCreated] = useState(null);   // {name, slug, password} après création
   const [copiedId, setCopiedId] = useState(null);
+  const [invite, setInvite] = useState(null);     // {name, slug, password} → modal d'envoi des accès
 
   const effectiveSlug = slug ? slugify(slug) : slugify(name);
 
@@ -213,6 +214,9 @@ function Dashboard({ campaigns, refresh, onLogout }) {
               <button onClick={async () => { if (await copyText(created.password)) { setCopiedId("banner"); setTimeout(() => setCopiedId(null), 1500); } }} style={{ ...btnGhostLight }}>
                 <Key size={14} /> {copiedId === "banner" ? "Copié !" : "Copier"}
               </button>
+              <button onClick={() => setInvite({ name: created.name, slug: created.slug, password: created.password })} style={{ ...btnGhostLight }}>
+                <Mail size={14} /> Envoyer les accès
+              </button>
             </div>
             <p style={{ ...pSub, marginTop: 8, marginBottom: 0 }}>Communique-le à l'admin de l'instance — il pourra le changer ensuite (Réglages → Sécurité). Toi (super-admin) n'en as pas besoin pour entrer.</p>
           </div>
@@ -234,6 +238,7 @@ function Dashboard({ campaigns, refresh, onLogout }) {
                 </a>
                 <a href={`/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
                 <button onClick={() => copyPw(c)} title="Copier le mot de passe admin de cette instance" style={{ ...btnGhostLight }}><Key size={14} /> {copiedId === c.id ? "Copié !" : "Mot de passe"}</button>
+                <button onClick={() => setInvite({ name: c.name || c.slug, slug: c.slug, password: c.config?.adminPassword || "" })} title="Envoyer les accès par e-mail" style={{ ...btnGhostLight }}><Mail size={14} /> Accès</button>
                 {confirmDel === c.id ? (
                   <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => handleDelete(c)} disabled={busy} style={{ ...btnGhostLight, borderColor: "#ff7a6b", color: "#ff7a6b" }}>Confirmer</button>
@@ -248,6 +253,71 @@ function Dashboard({ campaigns, refresh, onLogout }) {
         )}
         <p style={{ ...pSub, marginTop: 14 }}>⚠️ Supprimer une instance efface aussi ses codes et ses inscriptions (irréversible).</p>
       </DarkCard>
+
+      {invite && <InviteModal invite={invite} onClose={() => setInvite(null)} />}
+    </div>
+  );
+}
+
+/* Modal d'envoi des accès d'une instance à son admin (super-admin only).
+   E-mail prérempli + modifiable ; envoi via la messagerie de l'utilisateur (mailto)
+   ou copie — pas via un noreply, donc adapté à un message interne. */
+function InviteModal({ invite, onClose }) {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const formUrl = `${origin}/${invite.slug}`;
+  const adminUrl = `${origin}/${invite.slug}/admin`;
+  const defaultBody =
+`Bonjour,
+
+Voici vos accès pour gérer l'instance « ${invite.name} » de l'outil BLACKROLL Codes.
+
+- Formulaire public (à diffuser) : ${formUrl}
+- Espace d'administration : ${adminUrl}
+- Mot de passe administrateur : ${invite.password}
+
+Depuis l'espace d'administration, vous pouvez gérer les codes, consulter les inscriptions, et personnaliser l'e-mail et le formulaire. Vous pouvez changer ce mot de passe dans Réglages > Sécurité.
+
+Bonne gestion,`;
+
+  const [to, setTo] = useState("");
+  const [subject, setSubject] = useState(`Vos accès — ${invite.name} (BLACKROLL Codes)`);
+  const [body, setBody] = useState(defaultBody);
+  const [copied, setCopied] = useState(false);
+
+  function openMail() {
+    const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const a = document.createElement("a");
+    a.href = url; a.click();
+  }
+  async function copyAll() {
+    const text = `Objet : ${subject}\n\n${body}`;
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch (e) { window.prompt("Copiez le message :", text); }
+  }
+
+  return (
+    <div onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 580, maxHeight: "90vh", overflowY: "auto", background: C.ink, border: `1px solid ${C.line}`, borderRadius: 18, padding: 24 }}>
+        <h3 style={h3}>Envoyer les accès — {invite.name}</h3>
+        <p style={pSub}>E-mail prérempli et modifiable. « Ouvrir dans ma messagerie » l'ouvre dans ton client (Outlook, Gmail…) — il part donc de <b>ta</b> boîte. Sinon, copie-le.</p>
+
+        <label style={lbl}>Destinataire</label>
+        <input value={to} onChange={e => setTo(e.target.value)} placeholder="prenom.nom@exemple.com" style={darkInput} />
+
+        <label style={{ ...lbl, marginTop: 12 }}>Objet</label>
+        <input value={subject} onChange={e => setSubject(e.target.value)} style={darkInput} />
+
+        <label style={{ ...lbl, marginTop: 12 }}>Message</label>
+        <textarea value={body} rows={12} onChange={e => setBody(e.target.value)} style={{ ...darkInput, resize: "vertical", fontFamily: "inherit" }} />
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+          <button onClick={openMail} style={{ ...btnPrimary, width: "auto", margin: 0 }}><Mail size={16} /> Ouvrir dans ma messagerie</button>
+          <button onClick={copyAll} style={{ ...btnGhostLight }}><Copy size={15} /> {copied ? "Copié !" : "Copier"}</button>
+          <button onClick={onClose} style={{ ...btnGhostLight }}>Fermer</button>
+        </div>
+      </div>
     </div>
   );
 }
