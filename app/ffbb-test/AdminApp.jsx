@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode, AlertTriangle } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode, AlertTriangle, Search } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -24,14 +24,29 @@ export default function AdminApp({ campaign }) {
   const cid = campaign.id;
   const slug = campaign.slug;
   const [config, setConfig] = useState(campaign.config);
-  const [codes, setCodes] = useState([]);
-  const [registrations, setRegistrations] = useState([]);
+  // Compteurs (agrégats DB) au lieu de charger tous les codes/inscriptions → tient les gros volumes.
+  const [counts, setCounts] = useState({ total: 0, available: 0, assigned: 0, regs: 0, newsletter: 0 });
+  const [recentRegs, setRecentRegs] = useState([]); // dernières inscriptions (aperçu)
   const [loading, setLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
   const [campaignName, setCampaignName] = useState(campaign.name);
   const router = useRouter();
   const saveTimer = useRef(null);
   const nameTimer = useRef(null);
+
+  /* Recharge les compteurs (codes total/dispo, inscrits, opt-in) + dernières inscriptions. */
+  async function refreshCounts() {
+    const [tot, avail, regs, news, recent] = await Promise.all([
+      supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
+      supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("status", "available"),
+      supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
+      supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("newsletter", true),
+      supabase.from("ffbb_registrations").select("*").eq("campaign_id", cid).order("created_at", { ascending: false }).limit(200),
+    ]);
+    const t = tot.count || 0, a = avail.count || 0;
+    setCounts({ total: t, available: a, assigned: t - a, regs: regs.count || 0, newsletter: news.count || 0 });
+    setRecentRegs((recent.data || []).map(r => ({ ...r, date: r.created_at })));
+  }
 
   /* Renommage de l'instance (colonne ffbb_campaigns.name), débouncé. */
   function renameInstance(n) {
@@ -46,20 +61,7 @@ export default function AdminApp({ campaign }) {
   useEffect(() => {
     // Authentifié au super-admin (mot de passe maître) → accès direct sans le mot de passe d'instance.
     if (typeof window !== "undefined" && sessionStorage.getItem("ffbb_super_admin") === "1") setAuthed(true);
-    (async () => {
-      try {
-        const [codesRes, regsRes] = await Promise.all([
-          supabase.from("ffbb_codes").select("*").eq("campaign_id", cid).order("code"),
-          supabase.from("ffbb_registrations").select("*").eq("campaign_id", cid).order("created_at", { ascending: true }),
-        ]);
-        setCodes(codesRes.data || []);
-        setRegistrations((regsRes.data || []).map(r => ({ ...r, date: r.created_at })));
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    refreshCounts().catch(e => console.error(e)).finally(() => setLoading(false));
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       if (nameTimer.current) clearTimeout(nameTimer.current);
@@ -84,32 +86,57 @@ export default function AdminApp({ campaign }) {
     });
   }
 
+  /* Ajout par lots (chunks de 500) avec dédup côté base (contrainte unique
+     campaign_id,code). « added » = delta réel de compteur. Tient des dizaines de milliers. */
   async function addCodes(list) {
-    const existing = new Set(codes.map(c => c.code.toLowerCase()));
+    const seen = new Set();
     const fresh = [];
-    list.forEach(code => {
-      if (!existing.has(code.toLowerCase())) { fresh.push(code); existing.add(code.toLowerCase()); }
-    });
-    if (fresh.length) {
-      const rows = fresh.map(code => ({ campaign_id: cid, code, status: "available", assigned_to: null }));
-      const { data, error } = await supabase.from("ffbb_codes").insert(rows).select();
-      if (error) { console.error(error); return { added: 0, total: list.length, error: true }; }
-      setCodes(prev => [...prev, ...(data || [])]);
+    list.forEach(code => { const k = code.toLowerCase(); if (!seen.has(k)) { seen.add(k); fresh.push(code); } });
+    if (!fresh.length) return { added: 0, total: list.length };
+    const before = (await supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid)).count || 0;
+    for (let i = 0; i < fresh.length; i += 500) {
+      const rows = fresh.slice(i, i + 500).map(code => ({ campaign_id: cid, code, status: "available", assigned_to: null }));
+      const { error } = await supabase.from("ffbb_codes").upsert(rows, { onConflict: "campaign_id,code", ignoreDuplicates: true });
+      if (error) { console.error(error); await refreshCounts(); return { added: 0, total: list.length, error: true }; }
     }
-    return { added: fresh.length, total: list.length };
-  }
-
-  async function removeCode(code) {
-    const { error } = await supabase.from("ffbb_codes").delete().eq("campaign_id", cid).eq("code", code).eq("status", "available");
-    if (error) { console.error(error); return; }
-    setCodes(prev => prev.filter(c => c.code !== code));
+    const after = (await supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid)).count || 0;
+    await refreshCounts();
+    return { added: after - before, total: list.length };
   }
 
   async function resetAll() {
     const r1 = await supabase.from("ffbb_registrations").delete().eq("campaign_id", cid);
     const r2 = await supabase.from("ffbb_codes").delete().eq("campaign_id", cid);
     if (r1.error || r2.error) { console.error(r1.error || r2.error); return; }
-    setCodes([]); setRegistrations([]);
+    await refreshCounts();
+  }
+
+  /* Recherche d'inscriptions (par code, e-mail ou nom) — pour « qui a reçu tel code ». */
+  async function searchRegistrations(q) {
+    const term = (q || "").trim();
+    if (!term) return [];
+    const esc = term.replace(/[%,()]/g, " ");
+    const { data, error } = await supabase
+      .from("ffbb_registrations").select("*").eq("campaign_id", cid)
+      .or(`code.ilike.%${esc}%,email.ilike.%${esc}%,nom.ilike.%${esc}%,prenom.ilike.%${esc}%`)
+      .order("created_at", { ascending: false }).limit(50);
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => ({ ...r, date: r.created_at }));
+  }
+
+  /* Toutes les inscriptions (paginé) — pour l'export CSV complet. */
+  async function fetchAllRegistrations() {
+    const all = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("ffbb_registrations").select("*").eq("campaign_id", cid)
+        .order("created_at", { ascending: true }).range(from, from + PAGE - 1);
+      if (error) { console.error(error); break; }
+      all.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+    return all.map(r => ({ ...r, date: r.created_at }));
   }
 
   if (loading) return <Loader />;
@@ -118,8 +145,9 @@ export default function AdminApp({ campaign }) {
     <PageShell>
       {authed ? (
         <Admin
-          config={config} codes={codes} registrations={registrations} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
-          mutateCfg={mutateCfg} addCodes={addCodes} removeCode={removeCode} resetAll={resetAll}
+          config={config} counts={counts} recentRegs={recentRegs} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
+          mutateCfg={mutateCfg} addCodes={addCodes} resetAll={resetAll}
+          searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations}
           onExit={() => router.push(`/${slug}`)}
           onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
         />
@@ -161,14 +189,11 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
 }
 
 /* ----------------------------- ADMIN ----------------------------- */
-function Admin({ config, codes, registrations, slug, campaignName, renameInstance, mutateCfg, addCodes, removeCode, resetAll, onExit, onLogout }) {
+function Admin({ config, counts, recentRegs, slug, campaignName, renameInstance, mutateCfg, addCodes, resetAll, searchRegistrations, fetchAllRegistrations, onExit, onLogout }) {
   const [tab, setTab] = useState("codes");
-  const available = codes.filter(c => c.status === "available").length;
-  const assigned = codes.filter(c => c.status === "assigned").length;
-  const newsletterCount = registrations.filter(r => r.newsletter).length;
+  const { total, available, assigned, regs: regsCount, newsletter: newsletterCount } = counts;
 
   // Alerte de distribution selon le mode.
-  const total = codes.length;
   let warning = null;
   if ((config.codeMode || "unique") === "generic") {
     if (!(config.genericCode || "").trim()) {
@@ -223,7 +248,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
         ) : (
           <>
             <Stat label="Distribution" value="Générique" accent />
-            <Stat label="Inscrits" value={registrations.length} />
+            <Stat label="Inscrits" value={regsCount} />
           </>
         )}
         <Stat label="Opt-in newsletter" value={newsletterCount} />
@@ -244,18 +269,19 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
         </button>
       </div>
 
-      {tab === "codes" && <CodesTab config={config} codes={codes} addCodes={addCodes} removeCode={removeCode} mutateCfg={mutateCfg} hasRegs={registrations.length > 0} />}
-      {tab === "regs" && <RegsTab registrations={registrations} />}
+      {tab === "codes" && <CodesTab config={config} counts={counts} addCodes={addCodes} mutateCfg={mutateCfg} hasRegs={regsCount > 0} />}
+      {tab === "regs" && <RegsTab recentRegs={recentRegs} total={regsCount} searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} />}
       {tab === "promote" && <PromoteTab slug={slug} />}
-      {tab === "email" && <EmailTab config={config} codes={codes} mutateCfg={mutateCfg} />}
+      {tab === "email" && <EmailTab config={config} mutateCfg={mutateCfg} />}
       {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
     </div>
   );
 }
 
-function CodesTab({ config, codes, addCodes, removeCode, mutateCfg, hasRegs }) {
+function CodesTab({ config, counts, addCodes, mutateCfg, hasRegs }) {
   const [bulk, setBulk] = useState("");
   const [msg, setMsg] = useState("");
+  const [adding, setAdding] = useState(false);
   const [pendingMode, setPendingMode] = useState(null);
   const mode = config.codeMode || "unique";
 
@@ -273,8 +299,10 @@ function CodesTab({ config, codes, addCodes, removeCode, mutateCfg, hasRegs }) {
 
   async function handleAdd() {
     const list = bulk.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
-    if (!list.length) return;
+    if (!list.length || adding) return;
+    setAdding(true); setMsg("");
     const { added, total, error } = await addCodes(list);
+    setAdding(false);
     if (error) { setMsg("Erreur lors de l'ajout. Réessayez."); return; }
     setMsg(`${added} code(s) ajouté(s)${added !== total ? ` — ${total - added} doublon(s) ignoré(s)` : ""}.`);
     setBulk("");
@@ -323,75 +351,110 @@ function CodesTab({ config, codes, addCodes, removeCode, mutateCfg, hasRegs }) {
       ) : (
         <DarkCard>
           <h3 style={h3}>Ajouter une série de codes</h3>
-          <p style={pSub}>Collez vos codes (un par ligne, ou séparés par une virgule). Les doublons sont ignorés automatiquement.</p>
-          <textarea value={bulk} onChange={e => setBulk(e.target.value)} rows={5} placeholder={"CODE-001\nCODE-002\nCODE-003"}
+          <p style={pSub}>Collez vos codes (un par ligne, ou séparés par virgule/point-virgule). Les doublons sont ignorés automatiquement. Les gros volumes (plusieurs milliers) sont ajoutés par lots.</p>
+          <textarea value={bulk} onChange={e => setBulk(e.target.value)} rows={6} placeholder={"CODE-001\nCODE-002\nCODE-003"}
             style={{ width: "100%", padding: 12, borderRadius: 12, border: `1px solid ${C.line}`, background: C.black, color: C.cream, fontFamily: "monospace", fontSize: 14, boxSizing: "border-box", resize: "vertical" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
-            <button onClick={handleAdd} style={{ ...btnPrimary, width: "auto", margin: 0 }}><Plus size={17} /> Ajouter au pool</button>
+            <button onClick={handleAdd} disabled={adding} style={{ ...btnPrimary, width: "auto", margin: 0, opacity: adding ? 0.6 : 1 }}><Plus size={17} /> {adding ? "Ajout…" : "Ajouter au pool"}</button>
             {msg && <span style={{ color: C.green, fontSize: 13.5 }}>{msg}</span>}
           </div>
 
           <div style={{ height: 1, background: C.line, margin: "24px 0" }} />
-          <h3 style={h3}>Pool de codes ({codes.length})</h3>
-          {codes.length === 0 ? <p style={pSub}>Aucun code pour l'instant.</p> : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-              {codes.map(c => (
-                <span key={c.code} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px 6px 12px", borderRadius: 999, fontSize: 13, fontWeight: 600, background: c.status === "available" ? "rgba(27,226,153,0.12)" : C.black, color: c.status === "available" ? C.green : C.gray, border: `1px solid ${c.status === "available" ? "rgba(27,226,153,0.3)" : C.line}` }}>
-                  {c.code}{c.status === "assigned" && " · attribué"}
-                  {c.status === "available" && <Trash2 size={13} style={{ cursor: "pointer", opacity: 0.7 }} onClick={() => removeCode(c.code)} />}
-                </span>
-              ))}
-            </div>
-          )}
+          <h3 style={h3}>Pool de codes</h3>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginTop: 10, fontSize: 14.5 }}>
+            <span style={{ color: C.cream }}>Total : <b>{counts.total}</b></span>
+            <span style={{ color: C.green }}>Disponibles : <b>{counts.available}</b></span>
+            <span style={{ color: C.gray }}>Attribués : <b>{counts.assigned}</b></span>
+          </div>
+          <p style={{ ...pSub, marginTop: 10, marginBottom: 0 }}>Pour retrouver à qui un code a été attribué, utilise la recherche de l'onglet <b>Attributions</b>.</p>
         </DarkCard>
       )}
     </div>
   );
 }
 
-function RegsTab({ registrations }) {
-  function exportCsv() {
+function RegsTab({ recentRegs, total, searchRegistrations, fetchAllRegistrations }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState(null); // null = pas de recherche
+  const [searching, setSearching] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function doSearch() {
+    const term = q.trim();
+    if (!term) { setResults(null); return; }
+    setSearching(true);
+    const r = await searchRegistrations(term);
+    setSearching(false);
+    setResults(r);
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    const all = await fetchAllRegistrations();
+    setExporting(false);
     const rows = [["Date", "Prénom", "Nom", "Licence", "E-mail", "Code", "Newsletter"]];
-    registrations.forEach(r => rows.push([
+    all.forEach(r => rows.push([
       r.date ? new Date(r.date).toLocaleString("fr-FR") : "", r.prenom, r.nom, r.licence, r.email, r.code, r.newsletter ? "Oui" : "Non",
     ]));
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const csv = rows.map(row => row.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = "attributions.csv"; a.click();
     URL.revokeObjectURL(url);
   }
+
+  const isSearch = results !== null;
+  const list = isSearch ? results : recentRegs;
+
   return (
-    <DarkCard>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <h3 style={{ ...h3, margin: 0 }}>Codes attribués ({registrations.length})</h3>
-        {registrations.length > 0 && <button onClick={exportCsv} style={{ ...btnGhostLight }}><Download size={15} /> Exporter en CSV</button>}
-      </div>
-      {registrations.length === 0 ? <p style={pSub}>Aucune inscription pour l'instant.</p> : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: C.gray, borderBottom: `1px solid ${C.line}` }}>
-                {["Date", "Nom complet", "Licence", "E-mail", "Code", "Newsletter"].map(h => <th key={h} style={{ padding: "8px 10px", fontWeight: 600 }}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {registrations.slice().reverse().map(r => (
-                <tr key={r.id} style={{ borderBottom: `1px solid ${C.line}` }}>
-                  <td style={td}>{r.date ? new Date(r.date).toLocaleDateString("fr-FR") : "—"}</td>
-                  <td style={td}>{r.prenom} {r.nom}</td>
-                  <td style={td}>{r.licence}</td>
-                  <td style={td}>{r.email}</td>
-                  <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.code}</td>
-                  <td style={td}>{r.newsletter ? <Check size={16} color={C.green} /> : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div style={{ display: "grid", gap: 16 }}>
+      <DarkCard>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
+          <h3 style={{ ...h3, margin: 0 }}>Attributions ({total})</h3>
+          {total > 0 && <button onClick={exportCsv} disabled={exporting} style={{ ...btnGhostLight, opacity: exporting ? 0.6 : 1 }}><Download size={15} /> {exporting ? "Export…" : "Exporter en CSV (tout)"}</button>}
         </div>
-      )}
-    </DarkCard>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") doSearch(); }}
+            placeholder="Rechercher un code, un e-mail ou un nom…" style={{ ...darkInput, flex: "1 1 240px" }} />
+          <button onClick={doSearch} disabled={searching} style={{ ...btnGhostLight, opacity: searching ? 0.6 : 1 }}><Search size={15} /> {searching ? "…" : "Rechercher"}</button>
+          {isSearch && <button onClick={() => { setQ(""); setResults(null); }} style={{ ...btnGhostLight }}>Effacer</button>}
+        </div>
+        <p style={{ ...pSub, marginTop: 8, marginBottom: 0 }}>Saisis un <b>code</b> pour voir à qui il a été attribué (ou un e-mail / nom).</p>
+      </DarkCard>
+
+      <DarkCard>
+        <h3 style={{ ...h3 }}>{isSearch ? `Résultats (${list.length})` : "Dernières inscriptions"}</h3>
+        {!isSearch && total > list.length && (
+          <p style={pSub}>Aperçu des {list.length} plus récentes sur {total}. Pour le reste : la recherche ou l'export CSV.</p>
+        )}
+        {list.length === 0 ? (
+          <p style={pSub}>{isSearch ? "Aucun résultat." : "Aucune inscription pour l'instant."}</p>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: C.gray, borderBottom: `1px solid ${C.line}` }}>
+                  {["Date", "Nom complet", "Licence", "E-mail", "Code", "Newsletter"].map(h => <th key={h} style={{ padding: "8px 10px", fontWeight: 600 }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map(r => (
+                  <tr key={r.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                    <td style={td}>{r.date ? new Date(r.date).toLocaleDateString("fr-FR") : "—"}</td>
+                    <td style={td}>{r.prenom} {r.nom}</td>
+                    <td style={td}>{r.licence}</td>
+                    <td style={td}>{r.email}</td>
+                    <td style={{ ...td, color: C.green, fontWeight: 700 }}>{r.code}</td>
+                    <td style={td}>{r.newsletter ? <Check size={16} color={C.green} /> : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DarkCard>
+    </div>
   );
 }
 
@@ -459,9 +522,10 @@ function PromoteTab({ slug }) {
   );
 }
 
-function EmailTab({ config, codes, mutateCfg }) {
+function EmailTab({ config, mutateCfg }) {
   const e = config.welcomeEmail;
-  const sample = { prenom: "Camille", nom: "Durand", licence: "FED-1234-AB", code: codes[0]?.code || "CODE-001", email: "camille@exemple.fr" };
+  const sampleCode = (config.genericCode || "").trim() || "CODE-EXEMPLE";
+  const sample = { prenom: "Camille", nom: "Durand", licence: "FED-1234-AB", code: sampleCode, email: "camille@exemple.fr" };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
       <DarkCard>
