@@ -21,6 +21,13 @@ export function middleware(request) {
     });
   }
 
+  if (path === "/favicon.ico") {
+    // Fallback favicon : servir l'icône BLACKROLL (et non celle de perf360).
+    const url = request.nextUrl.clone();
+    url.pathname = "/icon-blackroll.svg";
+    return NextResponse.rewrite(url);
+  }
+
   if (path === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/accueil";
@@ -30,4 +37,4 @@ export function middleware(request) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/", "/manifest.json"] };
+export const config = { matcher: ["/", "/manifest.json", "/favicon.ico"] };
