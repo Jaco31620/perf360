@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode, AlertTriangle } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -167,6 +167,17 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
   const assigned = codes.filter(c => c.status === "assigned").length;
   const newsletterCount = registrations.filter(r => r.newsletter).length;
 
+  // Alerte stock (mode « codes uniques » uniquement).
+  const total = codes.length;
+  let warning = null;
+  if ((config.codeMode || "unique") === "unique") {
+    if (available === 0) {
+      warning = { danger: true, text: "Aucun code disponible à distribuer : les inscriptions échoueront tant que le pool est vide." };
+    } else if (total > 0 && available < total * 0.1) {
+      warning = { danger: false, text: `Plus que ${available} code${available > 1 ? "s" : ""} disponible${available > 1 ? "s" : ""} sur ${total} (moins de 10 %). Pensez à réapprovisionner le pool.` };
+    }
+  }
+
   // Onglets de gestion du fonctionnement (la licence est intégrée dans Réglages).
   const tabs = [
     { id: "codes", label: "Codes", icon: Tag },
@@ -188,6 +199,16 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
           <button onClick={onLogout} style={{ ...btnGhostLight }}><LogOut size={15} /> Se déconnecter</button>
         </div>
       </div>
+
+      {warning && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 16px", borderRadius: 12, marginBottom: 18,
+          background: warning.danger ? "rgba(255,122,107,0.12)" : "rgba(240,180,41,0.12)",
+          border: `1px solid ${warning.danger ? "#ff7a6b" : "#f0b429"}` }}>
+          <AlertTriangle size={18} color={warning.danger ? "#ff7a6b" : "#f0b429"} style={{ flexShrink: 0 }} />
+          <span style={{ flex: "1 1 220px", color: C.cream, fontSize: 14, lineHeight: 1.45 }}>{warning.text}</span>
+          <button onClick={() => setTab("codes")} style={{ ...btnGhostLight }}><Tag size={14} /> Aller aux codes</button>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 24 }}>
         {(config.codeMode || "unique") === "unique" ? (
