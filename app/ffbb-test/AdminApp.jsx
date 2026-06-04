@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode, ChevronDown } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -461,21 +461,11 @@ function EmailTab({ config, codes, mutateCfg }) {
 function LicenseCard({ config, mutateCfg }) {
   const l = config.license;
   const set = (patch) => mutateCfg(c => { c.license = { ...c.license, ...patch }; });
-  const [open, setOpen] = useState(false);
-  const enabled = l.enabled !== false;
   return (
     <DarkCard>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
-        <span>
-          <span style={{ ...h3, margin: 0, display: "block" }}>Numéro de licence</span>
-          <span style={{ ...pSub, margin: "4px 0 0" }}>{enabled ? "Demandé sur le formulaire" : "Non demandé"}</span>
-        </span>
-        <ChevronDown size={20} color={C.gray} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
-      </button>
-
-      {open && (<div style={{ marginTop: 16 }}>
-      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", marginBottom: 18 }}>
+      <h3 style={h3}>Numéro de licence</h3>
+      <p style={pSub}>Cochez pour demander un numéro de licence et en définir la règle de validation. Décochez pour retirer le champ du formulaire.</p>
+      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", marginBottom: l.enabled !== false ? 18 : 0 }}>
         <input type="checkbox" checked={l.enabled !== false} onChange={ev => set({ enabled: ev.target.checked })}
           style={{ marginTop: 2, width: 18, height: 18, accentColor: C.green }} />
         <span style={{ fontSize: 14, color: C.cream, lineHeight: 1.45 }}>
@@ -521,7 +511,6 @@ function LicenseCard({ config, mutateCfg }) {
       )}
       {l.mode === "none" && <p style={{ color: C.gray, fontSize: 14 }}>Tout numéro non vide est accepté.</p>}
       </>)}
-      </div>)}
     </DarkCard>
   );
 }
