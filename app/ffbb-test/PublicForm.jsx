@@ -8,7 +8,6 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronRight, ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -20,7 +19,6 @@ export default function PublicForm({ campaign }) {
   const config = campaign.config;
   const cid = campaign.id;
   const newsletterBullets = (config.newsletterBullets || "").split("\n").map(s => s.trim()).filter(Boolean);
-  const router = useRouter();
   const [f, setF] = useState({ prenom: "", nom: "", licence: "", email: "", newsletter: false });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -230,9 +228,6 @@ export default function PublicForm({ campaign }) {
             </p>
           )}
         </Card>
-        <div style={{ textAlign: "center", marginTop: 18 }}>
-          <button onClick={() => router.push(`/${campaign.slug}/admin`)} style={{ background: "none", border: "none", color: C.gray, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Espace administrateur</button>
-        </div>
       </div>
     </div>
   );
