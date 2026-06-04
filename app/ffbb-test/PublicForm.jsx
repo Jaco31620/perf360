@@ -216,7 +216,7 @@ export default function PublicForm({ campaign }) {
 
           {config.privacyUrl && (
             <p style={{ marginTop: 14, marginBottom: 0, fontSize: 11.5, color: "#888", lineHeight: 1.5, textAlign: "center" }}>
-              Vos données sont utilisées uniquement pour vous transmettre votre code.{" "}
+              Vos données sont utilisées pour vous transmettre votre code et, si vous en avez fait la demande, vous inscrire à la newsletter.{" "}
               <a href={config.privacyUrl} target="_blank" rel="noreferrer" style={{ color: C.greenDark, textDecoration: "underline" }}>Protection des données</a>
             </p>
           )}
