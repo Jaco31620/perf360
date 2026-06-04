@@ -55,6 +55,7 @@ export const DEFAULT_CONFIG = {
   /* Lien vers la politique de protection des données (affiché sous le formulaire). Vide = masqué. */
   privacyUrl: "https://blackroll.com/fr/service/protection-des-donnees",
   welcomeEmail: {
+    fromName: "BLACKROLL",
     replyTo: "jaco.barral@blackroll.com",
     ctaUrl: "",
     ctaLabel: "Profiter de mon code",
@@ -264,6 +265,7 @@ export async function sendWelcomeEmail(reg, config) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       to: reg.email,
+      fromName: config.welcomeEmail.fromName,
       replyTo: config.welcomeEmail.replyTo,
       headerImageUrl: config.headerImageUrl,
       altText: config.federationName,

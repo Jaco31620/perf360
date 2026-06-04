@@ -10,11 +10,13 @@ import { buildEmailHtml, htmlToText, isHttpUrl } from "../../../ffbb-test/emailT
 
 export const runtime = "nodejs";
 
-const FROM = "FFBB × BLACKROLL <noreply@perf360.fr>";
+const FROM_EMAIL = "noreply@perf360.fr";
 /* Adresse de réponse par défaut, si l'admin n'en a pas défini une dans la config. */
 const DEFAULT_REPLY_TO = "jaco.barral@blackroll.com";
 
 const isEmail = (s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s || "").trim());
+/* Nom d'expéditeur nettoyé (pas de caractères qui cassent l'en-tête From). */
+const senderName = (n) => String(n || "").replace(/[<>"\r\n]/g, "").trim() || "BLACKROLL";
 
 export async function POST(req) {
   let payload;
@@ -24,7 +26,7 @@ export async function POST(req) {
     return Response.json({ error: "Requête invalide." }, { status: 400 });
   }
 
-  const { to, subject, body, replyTo, ctaUrl, ctaLabel, headerImageUrl, altText, footer } = payload || {};
+  const { to, subject, body, replyTo, ctaUrl, ctaLabel, headerImageUrl, altText, footer, fromName } = payload || {};
   if (!to || !subject || !body) {
     return Response.json({ error: "Champs requis manquants (to, subject, body)." }, { status: 400 });
   }
@@ -50,7 +52,7 @@ export async function POST(req) {
   try {
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
-      from: FROM,
+      from: `${senderName(fromName)} <${FROM_EMAIL}>`,
       to: String(to).trim(),
       replyTo: replyAddr,
       subject: String(subject),

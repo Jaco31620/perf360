@@ -548,7 +548,10 @@ function EmailTab({ config, mutateCfg }) {
       <DarkCard>
         <h3 style={h3}>Personnaliser l'e-mail de bienvenue</h3>
         <p style={pSub}>Variables disponibles : {"{prenom}"}, {"{nom}"}, {"{licence}"}, {"{code}"}, {"{email}"}.</p>
-        <label style={lbl}>Adresse de réponse (Reply-To)</label>
+        <label style={lbl}>Nom de l'expéditeur</label>
+        <input value={e.fromName ?? ""} placeholder="BLACKROLL" onChange={ev => mutateCfg(c => { c.welcomeEmail.fromName = ev.target.value; })} style={darkInput} />
+        <p style={{ ...pSub, marginTop: 6 }}>Nom affiché dans la boîte du destinataire (l'adresse reste noreply@perf360.fr).</p>
+        <label style={{ ...lbl, marginTop: 14 }}>Adresse de réponse (Reply-To)</label>
         <input value={e.replyTo || ""} placeholder="contact@exemple.fr" onChange={ev => mutateCfg(c => { c.welcomeEmail.replyTo = ev.target.value; })} style={darkInput} />
         <p style={{ ...pSub, marginTop: 6 }}>Adresse qui recevra les réponses (et le désabonnement). L'expéditeur affiché reste noreply@perf360.fr.</p>
         <label style={{ ...lbl, marginTop: 14 }}>Objet</label>
