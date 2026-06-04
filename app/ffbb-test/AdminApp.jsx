@@ -744,6 +744,9 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
         <RichEditor value={c.formIntro} onChange={(html) => set({ formIntro: html })} variables={[]} />
         <label style={{ ...lbl, marginTop: 14 }}>Libellé de l'opt-in newsletter</label>
         <textarea value={c.newsletterLabel} rows={2} onChange={e => set({ newsletterLabel: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
+        <label style={{ ...lbl, marginTop: 14 }}>Lien « Protection des données » (RGPD)</label>
+        <input value={c.privacyUrl ?? ""} placeholder="https://… (laisser vide pour masquer)" onChange={e => set({ privacyUrl: e.target.value })} style={darkInput} />
+        <p style={{ ...pSub, marginTop: 6 }}>Affiché sous le bouton du formulaire. Vide = pas de lien.</p>
       </DarkCard>
       <LicenseCard config={config} mutateCfg={mutateCfg} />
       <DarkCard>

@@ -213,6 +213,13 @@ export default function PublicForm({ campaign }) {
           {err && <div style={{ background: "#fdecec", color: "#b3261e", padding: "11px 14px", borderRadius: 10, fontSize: 13.5, marginBottom: 14 }}>{err}</div>}
 
           <button onClick={submit} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "Traitement…" : <>Recevoir mon code <ChevronRight size={18} /></>}</button>
+
+          {config.privacyUrl && (
+            <p style={{ marginTop: 14, marginBottom: 0, fontSize: 11.5, color: "#888", lineHeight: 1.5, textAlign: "center" }}>
+              Vos données sont utilisées uniquement pour vous transmettre votre code.{" "}
+              <a href={config.privacyUrl} target="_blank" rel="noreferrer" style={{ color: C.greenDark, textDecoration: "underline" }}>Protection des données</a>
+            </p>
+          )}
         </Card>
         <div style={{ textAlign: "center", marginTop: 18 }}>
           <button onClick={() => router.push(`/${campaign.slug}/admin`)} style={{ background: "none", border: "none", color: C.gray, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Espace administrateur</button>

@@ -43,6 +43,8 @@ export const DEFAULT_CONFIG = {
   genericCode: "",
   newsletterLabel:
     "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
+  /* Lien vers la politique de protection des données (affiché sous le formulaire). Vide = masqué. */
+  privacyUrl: "https://blackroll.com/fr/service/protection-des-donnees",
   welcomeEmail: {
     replyTo: "jaco.barral@blackroll.com",
     ctaUrl: "",
