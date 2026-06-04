@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut, Eye } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   C, fillTemplate, maskDescription,
@@ -182,7 +182,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
           {campaignName && <div style={{ color: C.gray, fontSize: 13.5, marginTop: 2 }}>{campaignName} · /{slug}</div>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={onExit} style={{ ...btnGhostLight }}><ArrowLeft size={15} /> Voir le formulaire</button>
+          <button onClick={onExit} style={{ ...btnGhostLight }}><Eye size={15} /> Voir le formulaire</button>
           <button onClick={onLogout} style={{ ...btnGhostLight }}><LogOut size={15} /> Se déconnecter</button>
         </div>
       </div>
