@@ -8,7 +8,7 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState, useEffect } from "react";
-import { Lock, Plus, ExternalLink, Trash2, Settings } from "lucide-react";
+import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut } from "lucide-react";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
@@ -63,7 +63,11 @@ export default function SuperAdminPage() {
 
   return (
     <PageShell>
-      <Dashboard campaigns={campaigns} refresh={refresh} />
+      <Dashboard
+        campaigns={campaigns}
+        refresh={refresh}
+        onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
+      />
     </PageShell>
   );
 }
@@ -97,7 +101,7 @@ function MasterLogin({ master, onOk }) {
   );
 }
 
-function Dashboard({ campaigns, refresh }) {
+function Dashboard({ campaigns, refresh, onLogout }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [dupFrom, setDupFrom] = useState("");
@@ -149,9 +153,12 @@ function Dashboard({ campaigns, refresh }) {
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "28px 16px 60px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-        <Settings size={22} color={C.green} />
-        <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: "-0.6px" }}>Instances</h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Settings size={22} color={C.green} />
+          <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: "-0.6px" }}>Instances</h1>
+        </div>
+        <button onClick={onLogout} style={{ ...btnGhostLight }}><LogOut size={15} /> Se déconnecter</button>
       </div>
 
       <DarkCard>

@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   C, fillTemplate, maskDescription,
@@ -120,6 +120,7 @@ export default function AdminApp({ campaign }) {
           config={config} codes={codes} registrations={registrations} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
           mutateCfg={mutateCfg} addCodes={addCodes} removeCode={removeCode} resetAll={resetAll}
           onExit={() => router.push(`/${slug}`)}
+          onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
         />
       ) : (
         <AdminLogin
@@ -159,7 +160,7 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
 }
 
 /* ----------------------------- ADMIN ----------------------------- */
-function Admin({ config, codes, registrations, slug, campaignName, renameInstance, mutateCfg, addCodes, removeCode, resetAll, onExit }) {
+function Admin({ config, codes, registrations, slug, campaignName, renameInstance, mutateCfg, addCodes, removeCode, resetAll, onExit, onLogout }) {
   const [tab, setTab] = useState("codes");
   const available = codes.filter(c => c.status === "available").length;
   const assigned = codes.filter(c => c.status === "assigned").length;
@@ -180,7 +181,10 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
           <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: "-0.6px" }}>Tableau de bord</h1>
           {campaignName && <div style={{ color: C.gray, fontSize: 13.5, marginTop: 2 }}>{campaignName} · /{slug}</div>}
         </div>
-        <button onClick={onExit} style={{ ...btnGhostLight }}><ArrowLeft size={15} /> Voir le formulaire</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={onExit} style={{ ...btnGhostLight }}><ArrowLeft size={15} /> Voir le formulaire</button>
+          <button onClick={onLogout} style={{ ...btnGhostLight }}><LogOut size={15} /> Se déconnecter</button>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 24 }}>
