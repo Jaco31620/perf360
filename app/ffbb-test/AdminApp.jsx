@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Hash, Image as ImageIcon, LogOut, Eye, QrCode } from "lucide-react";
+import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Image as ImageIcon, LogOut, Eye, QrCode, ChevronDown } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
@@ -167,14 +167,14 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
   const assigned = codes.filter(c => c.status === "assigned").length;
   const newsletterCount = registrations.filter(r => r.newsletter).length;
 
+  // Onglets de gestion du fonctionnement (la licence est intégrée dans Réglages).
   const tabs = [
     { id: "codes", label: "Codes", icon: Tag },
     { id: "regs", label: "Attributions", icon: Users },
-    { id: "promote", label: "Promouvoir", icon: QrCode },
     { id: "email", label: "E-mail", icon: Mail },
-    { id: "license", label: "Licence", icon: Hash },
     { id: "settings", label: "Réglages", icon: Settings },
   ];
+  const tabBtn = (on) => ({ display: "flex", alignItems: "center", gap: 7, padding: "9px 15px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, background: on ? C.green : C.ink, color: on ? C.black : C.cream });
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 16px 60px" }}>
@@ -202,23 +202,25 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
         <Stat label="Opt-in newsletter" value={newsletterCount} />
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         {tabs.map(t => {
           const I = t.icon, on = tab === t.id;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 15px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 600, background: on ? C.green : C.ink, color: on ? C.black : C.cream }}>
+            <button key={t.id} onClick={() => setTab(t.id)} style={tabBtn(on)}>
               <I size={15} /> {t.label}
             </button>
           );
         })}
+        {/* Promouvoir : séparé à droite (diffusion, pas gestion). */}
+        <button onClick={() => setTab("promote")} style={{ ...tabBtn(tab === "promote"), marginLeft: "auto" }}>
+          <QrCode size={15} /> Promouvoir
+        </button>
       </div>
 
       {tab === "codes" && <CodesTab config={config} codes={codes} addCodes={addCodes} removeCode={removeCode} mutateCfg={mutateCfg} />}
       {tab === "regs" && <RegsTab registrations={registrations} />}
       {tab === "promote" && <PromoteTab slug={slug} />}
       {tab === "email" && <EmailTab config={config} codes={codes} mutateCfg={mutateCfg} />}
-      {tab === "license" && <LicenseTab config={config} mutateCfg={mutateCfg} />}
       {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
     </div>
   );
@@ -456,14 +458,23 @@ function EmailTab({ config, codes, mutateCfg }) {
   );
 }
 
-function LicenseTab({ config, mutateCfg }) {
+function LicenseCard({ config, mutateCfg }) {
   const l = config.license;
   const set = (patch) => mutateCfg(c => { c.license = { ...c.license, ...patch }; });
+  const [open, setOpen] = useState(false);
+  const enabled = l.enabled !== false;
   return (
     <DarkCard>
-      <h3 style={h3}>Numéro de licence</h3>
-      <p style={pSub}>Choisissez si le formulaire public demande un numéro de licence, et la règle de validation.</p>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+        <span>
+          <span style={{ ...h3, margin: 0, display: "block" }}>Numéro de licence</span>
+          <span style={{ ...pSub, margin: "4px 0 0" }}>{enabled ? "Demandé sur le formulaire" : "Non demandé"}</span>
+        </span>
+        <ChevronDown size={20} color={C.gray} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+      </button>
 
+      {open && (<div style={{ marginTop: 16 }}>
       <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", marginBottom: 18 }}>
         <input type="checkbox" checked={l.enabled !== false} onChange={ev => set({ enabled: ev.target.checked })}
           style={{ marginTop: 2, width: 18, height: 18, accentColor: C.green }} />
@@ -510,6 +521,7 @@ function LicenseTab({ config, mutateCfg }) {
       )}
       {l.mode === "none" && <p style={{ color: C.gray, fontSize: 14 }}>Tout numéro non vide est accepté.</p>}
       </>)}
+      </div>)}
     </DarkCard>
   );
 }
@@ -608,6 +620,7 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
         <label style={{ ...lbl, marginTop: 14 }}>Libellé de l'opt-in newsletter</label>
         <textarea value={c.newsletterLabel} rows={2} onChange={e => set({ newsletterLabel: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
       </DarkCard>
+      <LicenseCard config={config} mutateCfg={mutateCfg} />
       <DarkCard>
         <h3 style={h3}>Sécurité</h3>
         <label style={lbl}>Mot de passe administrateur (de cette instance)</label>
