@@ -19,6 +19,7 @@ import {
 export default function PublicForm({ campaign }) {
   const config = campaign.config;
   const cid = campaign.id;
+  const newsletterBullets = (config.newsletterBullets || "").split("\n").map(s => s.trim()).filter(Boolean);
   const router = useRouter();
   const [f, setF] = useState({ prenom: "", nom: "", licence: "", email: "", newsletter: false });
   const [err, setErr] = useState("");
@@ -204,11 +205,19 @@ export default function PublicForm({ campaign }) {
             <Field label="Adresse e-mail"><input style={inputStyle} type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
           </div>
 
-          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", marginBottom: 20 }}>
-            <input type="checkbox" checked={f.newsletter} onChange={e => setF({ ...f, newsletter: e.target.checked })}
-              style={{ marginTop: 3, width: 18, height: 18, accentColor: C.greenDark }} />
-            <span style={{ fontSize: 13.5, color: "#555", lineHeight: 1.45 }}>{config.newsletterLabel}</span>
-          </label>
+          <div style={{ marginBottom: 20 }}>
+            {config.newsletterIntro && <p style={{ fontSize: 13.5, color: "#555", fontWeight: 600, margin: "0 0 6px" }}>{config.newsletterIntro}</p>}
+            {newsletterBullets.length > 0 && (
+              <ul style={{ margin: "0 0 12px", paddingLeft: 20, color: "#555", fontSize: 13.5, lineHeight: 1.55 }}>
+                {newsletterBullets.map((b, i) => <li key={i}>{b}</li>)}
+              </ul>
+            )}
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+              <input type="checkbox" checked={f.newsletter} onChange={e => setF({ ...f, newsletter: e.target.checked })}
+                style={{ marginTop: 3, width: 18, height: 18, accentColor: C.greenDark }} />
+              <span style={{ fontSize: 13.5, color: "#555", lineHeight: 1.45 }}>{config.newsletterLabel}</span>
+            </label>
+          </div>
 
           {err && <div style={{ background: "#fdecec", color: "#b3261e", padding: "11px 14px", borderRadius: 10, fontSize: 13.5, marginBottom: 14 }}>{err}</div>}
 

@@ -30,6 +30,10 @@ export const NEW_INTRO =
   nb +
   "% de réduction sur leurs achats. Renseignez vos informations ci-dessous pour recevoir votre code de réduction personnel par e-mail.";
 
+/* Ancien libellé d'opt-in newsletter (migré vers le nouveau bloc). */
+export const OLD_NEWSLETTER_LABEL =
+  "Je souhaite également recevoir la newsletter et les actualités par e-mail.";
+
 /* Configuration éditable par défaut — stockée dans ffbb_config.data (id = 1). */
 export const DEFAULT_CONFIG = {
   adminPassword: "admin",
@@ -41,8 +45,13 @@ export const DEFAULT_CONFIG = {
      "generic" = le même code (genericCode) pour tout le monde. */
   codeMode: "unique",
   genericCode: "",
-  newsletterLabel:
-    "Je souhaite également recevoir la newsletter et les actualités par e-mail.",
+  /* Bloc newsletter : intro + puces (une par ligne) + libellé de la case. */
+  newsletterIntro: "Vous voulez en plus recevoir :",
+  newsletterBullets:
+    "les nouveautés produits en avant-première\n" +
+    "des conseils d'experts en récupération, sommeil et performance\n" +
+    "les offres et concours réservés aux abonnés",
+  newsletterLabel: "Je souhaite m'abonner à la newsletter BLACKROLL®.",
   /* Lien vers la politique de protection des données (affiché sous le formulaire). Vide = masqué. */
   privacyUrl: "https://blackroll.com/fr/service/protection-des-donnees",
   welcomeEmail: {
@@ -141,6 +150,7 @@ export function normalizeConfig(stored) {
     license: { ...DEFAULT_CONFIG.license, ...((stored && stored.license) || {}) },
   };
   if (cfg.formIntro === OLD_INTRO) cfg.formIntro = NEW_INTRO;
+  if (cfg.newsletterLabel === OLD_NEWSLETTER_LABEL) cfg.newsletterLabel = DEFAULT_CONFIG.newsletterLabel;
   if (cfg.headerImageUrl === undefined) cfg.headerImageUrl = "";
   // Migration : ancien texte d'intro du formulaire en texte brut → HTML (une seule fois).
   if (cfg.formIntro && !looksLikeHtml(cfg.formIntro)) {

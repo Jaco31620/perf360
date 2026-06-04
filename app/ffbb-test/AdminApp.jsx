@@ -742,7 +742,11 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
         <input value={c.formTitle || ""} placeholder="Inscription licencié" onChange={e => set({ formTitle: e.target.value })} style={darkInput} />
         <label style={{ ...lbl, marginTop: 14 }}>Texte d'introduction</label>
         <RichEditor value={c.formIntro} onChange={(html) => set({ formIntro: html })} variables={[]} />
-        <label style={{ ...lbl, marginTop: 14 }}>Libellé de l'opt-in newsletter</label>
+        <label style={{ ...lbl, marginTop: 14 }}>Newsletter — phrase d'intro</label>
+        <input value={c.newsletterIntro ?? ""} placeholder="Vous voulez en plus recevoir :" onChange={e => set({ newsletterIntro: e.target.value })} style={darkInput} />
+        <label style={{ ...lbl, marginTop: 14 }}>Newsletter — avantages (une ligne = une puce)</label>
+        <textarea value={c.newsletterBullets ?? ""} rows={3} onChange={e => set({ newsletterBullets: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
+        <label style={{ ...lbl, marginTop: 14 }}>Newsletter — libellé de la case</label>
         <textarea value={c.newsletterLabel} rows={2} onChange={e => set({ newsletterLabel: e.target.value })} style={{ ...darkInput, resize: "vertical" }} />
         <label style={{ ...lbl, marginTop: 14 }}>Lien « Protection des données » (RGPD)</label>
         <input value={c.privacyUrl ?? ""} placeholder="https://… (laisser vide pour masquer)" onChange={e => set({ privacyUrl: e.target.value })} style={darkInput} />
