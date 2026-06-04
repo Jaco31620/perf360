@@ -5,5 +5,5 @@
 import { redirect } from "next/navigation";
 
 export default function FfbbTestRedirect() {
-  redirect("/c/ffbb-blackroll");
+  redirect("/ffbb-blackroll");
 }

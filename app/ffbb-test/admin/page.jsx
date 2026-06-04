@@ -4,5 +4,5 @@
 import { redirect } from "next/navigation";
 
 export default function FfbbTestAdminRedirect() {
-  redirect("/c/ffbb-blackroll/admin");
+  redirect("/ffbb-blackroll/admin");
 }

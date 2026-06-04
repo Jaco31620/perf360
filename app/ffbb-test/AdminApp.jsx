@@ -117,13 +117,13 @@ export default function AdminApp({ campaign }) {
         <Admin
           config={config} codes={codes} registrations={registrations} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
           mutateCfg={mutateCfg} addCodes={addCodes} removeCode={removeCode} resetAll={resetAll}
-          onExit={() => router.push(`/c/${slug}`)}
+          onExit={() => router.push(`/${slug}`)}
         />
       ) : (
         <AdminLogin
           config={config} campaignName={campaignName}
           onOk={() => setAuthed(true)}
-          onBack={() => router.push(`/c/${slug}`)}
+          onBack={() => router.push(`/${slug}`)}
         />
       )}
     </PageShell>
@@ -176,7 +176,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0, letterSpacing: "-0.6px" }}>Tableau de bord</h1>
-          {campaignName && <div style={{ color: C.gray, fontSize: 13.5, marginTop: 2 }}>{campaignName} · /c/{slug}</div>}
+          {campaignName && <div style={{ color: C.gray, fontSize: 13.5, marginTop: 2 }}>{campaignName} · /{slug}</div>}
         </div>
         <button onClick={onExit} style={{ ...btnGhostLight }}><ArrowLeft size={15} /> Voir le formulaire</button>
       </div>
@@ -494,7 +494,7 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
         <h3 style={h3}>Instance</h3>
         <label style={lbl}>Nom de l'instance</label>
         <input value={campaignName || ""} onChange={e => renameInstance(e.target.value)} placeholder="Nom de l'instance" style={darkInput} />
-        <p style={{ ...pSub, marginTop: 6 }}>Identifiant d'URL (slug) : <code style={{ color: C.green }}>/c/{slug}</code> — non modifiable.</p>
+        <p style={{ ...pSub, marginTop: 6 }}>Identifiant d'URL (slug) : <code style={{ color: C.green }}>/{slug}</code> — non modifiable.</p>
       </DarkCard>
       <DarkCard>
         <h3 style={h3}>En-tête (logo)</h3>

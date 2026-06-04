@@ -215,7 +215,7 @@ export default function PublicForm({ campaign }) {
           <button onClick={submit} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "Traitement…" : <>Recevoir mon code <ChevronRight size={18} /></>}</button>
         </Card>
         <div style={{ textAlign: "center", marginTop: 18 }}>
-          <button onClick={() => router.push(`/c/${campaign.slug}/admin`)} style={{ background: "none", border: "none", color: C.gray, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Espace administrateur</button>
+          <button onClick={() => router.push(`/${campaign.slug}/admin`)} style={{ background: "none", border: "none", color: C.gray, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Espace administrateur</button>
         </div>
       </div>
     </div>

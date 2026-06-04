@@ -12,7 +12,7 @@ import { Lock, Plus, ExternalLink, Copy, Trash2, Settings, Users } from "lucide-
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, renameCampaign, loadMasterConfig, loadCampaignBySlug,
+  listCampaigns, createCampaign, deleteCampaign, renameCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -104,6 +104,7 @@ function Dashboard({ campaigns, refresh }) {
     setErr("");
     const s = effectiveSlug;
     if (!s) { setErr("Indiquez au moins un nom ou un slug."); return; }
+    if (RESERVED_SLUGS.includes(s)) { setErr(`Le slug « ${s} » est réservé. Choisis-en un autre.`); return; }
     if (campaigns.some(c => c.slug === s)) { setErr(`Le slug « ${s} » existe déjà.`); return; }
     setBusy(true);
     try {
@@ -157,7 +158,7 @@ function Dashboard({ campaigns, refresh }) {
           <div style={{ flex: "1 1 200px" }}>
             <label style={lbl}>Slug (URL)</label>
             <input value={slug} onChange={e => setSlug(e.target.value)} placeholder={effectiveSlug || "partenaire-x"} style={{ ...darkInput, fontFamily: "monospace" }} />
-            {effectiveSlug && <div style={{ color: C.gray, fontSize: 12, marginTop: 4 }}>/c/{effectiveSlug}</div>}
+            {effectiveSlug && <div style={{ color: C.gray, fontSize: 12, marginTop: 4 }}>/{effectiveSlug}</div>}
           </div>
           <div style={{ flex: "1 1 200px" }}>
             <label style={lbl}>Dupliquer depuis (optionnel)</label>
@@ -186,10 +187,10 @@ function Dashboard({ campaigns, refresh }) {
                   <input defaultValue={c.name || ""} placeholder={c.slug}
                     onBlur={async (e) => { const v = e.target.value.trim(); if (v && v !== c.name) { try { await renameCampaign(c.id, v); await refresh(); } catch (err) { console.error(err); } } }}
                     style={{ width: "100%", background: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, color: C.cream, fontWeight: 700, fontSize: 15, padding: "6px 8px", outline: "none", boxSizing: "border-box" }} />
-                  <div style={{ color: C.gray, fontSize: 12.5, fontFamily: "monospace", marginTop: 3 }}>/c/{c.slug}</div>
+                  <div style={{ color: C.gray, fontSize: 12.5, fontFamily: "monospace", marginTop: 3 }}>/{c.slug}</div>
                 </div>
-                <a href={`/c/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
-                <a href={`/c/${c.slug}/admin`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><Users size={14} /> Admin</a>
+                <a href={`/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
+                <a href={`/${c.slug}/admin`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><Users size={14} /> Admin</a>
                 {confirmDel === c.id ? (
                   <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => handleDelete(c)} disabled={busy} style={{ ...btnGhostLight, borderColor: "#ff7a6b", color: "#ff7a6b" }}>Confirmer</button>

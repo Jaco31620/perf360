@@ -165,6 +165,14 @@ export async function loadConfig() {
 /* Chaque instance du dispositif = une ligne ffbb_campaigns (slug + config jsonb).
    Les codes/inscriptions sont rattachés par campaign_id. */
 
+/* Slugs interdits à la création : ils correspondent à de vraies routes
+   (sinon l'instance serait masquée par la route statique homonyme). */
+export const RESERVED_SLUGS = [
+  "admin", "api", "c", "ffbb-test", "respiration", "soutenir",
+  "connexion", "auth", "ami-invisible", "_next", "favicon.ico",
+  "robots.txt", "sitemap.xml", "www",
+];
+
 export async function loadCampaignBySlug(slug) {
   const { data, error } = await supabase
     .from("ffbb_campaigns")
