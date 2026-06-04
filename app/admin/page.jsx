@@ -8,11 +8,11 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState, useEffect } from "react";
-import { Lock, Plus, ExternalLink, Copy, Trash2, Settings, Users } from "lucide-react";
+import { Lock, Plus, ExternalLink, Trash2, Settings } from "lucide-react";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, renameCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS,
+  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -183,14 +183,12 @@ function Dashboard({ campaigns, refresh }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
             {campaigns.map(c => (
               <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 14px", background: C.black, border: `1px solid ${C.line}`, borderRadius: 12 }}>
-                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                  <input defaultValue={c.name || ""} placeholder={c.slug}
-                    onBlur={async (e) => { const v = e.target.value.trim(); if (v && v !== c.name) { try { await renameCampaign(c.id, v); await refresh(); } catch (err) { console.error(err); } } }}
-                    style={{ width: "100%", background: C.ink, border: `1px solid ${C.line}`, borderRadius: 8, color: C.cream, fontWeight: 700, fontSize: 15, padding: "6px 8px", outline: "none", boxSizing: "border-box" }} />
+                <a href={`/${c.slug}/admin`} title="Ouvrir l'admin de cette instance"
+                  style={{ flex: "1 1 200px", minWidth: 0, display: "block", textDecoration: "none", cursor: "pointer" }}>
+                  <div style={{ fontWeight: 700, color: C.cream, fontSize: 15 }}>{c.name || c.slug}</div>
                   <div style={{ color: C.gray, fontSize: 12.5, fontFamily: "monospace", marginTop: 3 }}>/{c.slug}</div>
-                </div>
+                </a>
                 <a href={`/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
-                <a href={`/${c.slug}/admin`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><Users size={14} /> Admin</a>
                 {confirmDel === c.id ? (
                   <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => handleDelete(c)} disabled={busy} style={{ ...btnGhostLight, borderColor: "#ff7a6b", color: "#ff7a6b" }}>Confirmer</button>
