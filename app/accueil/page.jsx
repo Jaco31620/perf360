@@ -11,13 +11,12 @@ export default function AccueilPage() {
       <div style={{ width: "100%", maxWidth: 460, textAlign: "center" }}>
         <div style={{ marginBottom: 28, textAlign: "center" }}>
           <img src="/LogoBLACKROLL.png" alt="BLACKROLL" style={{ width: "auto", maxWidth: 280, maxHeight: 56, display: "inline-block" }} />
-          <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, letterSpacing: "3px", textTransform: "uppercase", color: "#1BE299" }}>Codes</div>
         </div>
 
         <div style={{ background: "#FEFFF0", borderRadius: 22, padding: "34px 28px", boxShadow: "0 10px 40px rgba(0,0,0,0.4)" }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: "#161614", margin: "0 0 12px", letterSpacing: "-0.5px" }}>Outil interne</h1>
           <p style={{ color: "#555", fontSize: 15, lineHeight: 1.6, margin: "0 0 24px" }}>
-            Ce site est un outil interne de gestion de codes de réduction. Il n'est pas destiné au grand public.
+            Cet espace est un outil interne, réservé à un usage professionnel. Il n'est pas destiné au grand public.
           </p>
           <a href="https://blackroll.com/fr"
             style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", boxSizing: "border-box", padding: "14px 18px", borderRadius: 999, background: "#1BE299", color: "#0A0A0A", fontSize: 15.5, fontWeight: 700, textDecoration: "none" }}>
