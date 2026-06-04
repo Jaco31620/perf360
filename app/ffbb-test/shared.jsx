@@ -169,7 +169,7 @@ export async function loadConfig() {
    (sinon l'instance serait masquée par la route statique homonyme). */
 export const RESERVED_SLUGS = [
   "admin", "api", "c", "ffbb-test", "respiration", "soutenir",
-  "connexion", "auth", "ami-invisible", "_next", "favicon.ico",
+  "connexion", "auth", "ami-invisible", "accueil", "_next", "favicon.ico",
   "robots.txt", "sitemap.xml", "www",
 ];
 
