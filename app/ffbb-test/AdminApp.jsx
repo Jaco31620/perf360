@@ -221,9 +221,11 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
             <Stat label="Codes attribués" value={assigned} />
           </>
         ) : (
-          <Stat label="Distribution" value="Générique" accent />
+          <>
+            <Stat label="Distribution" value="Générique" accent />
+            <Stat label="Inscrits" value={registrations.length} />
+          </>
         )}
-        <Stat label="Inscrits" value={registrations.length} />
         <Stat label="Opt-in newsletter" value={newsletterCount} />
       </div>
 
