@@ -23,7 +23,9 @@ export default function RichEditor({ value, onChange, variables = VARS }) {
     }
   });
 
-  const emit = () => onChange(ref.current?.innerHTML || "");
+  // On nettoie les variables CSS Tailwind (--tw-*) que contentEditable injecte,
+  // sinon Gmail rejette le style (l'encadré du code disparaissait).
+  const emit = () => onChange((ref.current?.innerHTML || "").replace(/--tw-[\w-]+\s*:\s*[^;"']*;?/g, ""));
 
   function exec(cmd, arg) {
     document.execCommand("styleWithCSS", false, true);

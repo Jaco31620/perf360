@@ -59,10 +59,18 @@ function headerHtml(headerImageUrl, altText) {
   return `FFBB <span style="color:#1BE299">&#215;</span> BLACKROLL<sup style="font-size:9px">&#174;</sup>`;
 }
 
+/* Retire les variables CSS Tailwind (--tw-*) injectées par l'éditeur WYSIWYG :
+   certains clients mail (Gmail) rejettent le style entier à cause d'elles, ce qui
+   faisait disparaître l'encadré du code. */
+export function stripEditorJunk(html) {
+  return String(html || "").replace(/--tw-[\w-]+\s*:\s*[^;"']*;?/g, "");
+}
+
 /* E-mail complet : en-tête co-brandé sombre + carte crème (corps) + bouton + footer.
    footer : undefined → texte par défaut ; "" → pas de footer ; sinon le texte fourni. */
 export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altText, footer) {
   const cta = ctaButtonHtml(ctaUrl, ctaLabel);
+  const cleanBody = stripEditorJunk(bodyHtml);
   const footerText = footer === undefined
     ? "Dispositif licenci&#233;s FFBB &#215; BLACKROLL."
     : (String(footer).trim() ? escapeHtml(String(footer)) : "");
@@ -83,7 +91,7 @@ export function buildEmailHtml(bodyHtml, ctaUrl, ctaLabel, headerImageUrl, altTe
     `</td></tr>` +
     `<tr><td style="background:#FEFFF0;border-radius:22px;padding:30px 28px;` +
     `font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#161614">` +
-    `${bodyHtml}` +
+    `${cleanBody}` +
     (cta ? `<div style="text-align:center">${cta}</div>` : "") +
     `</td></tr>` +
     footerRow +
