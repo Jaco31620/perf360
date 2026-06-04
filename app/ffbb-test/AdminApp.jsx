@@ -244,7 +244,7 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
         </button>
       </div>
 
-      {tab === "codes" && <CodesTab config={config} codes={codes} addCodes={addCodes} removeCode={removeCode} mutateCfg={mutateCfg} />}
+      {tab === "codes" && <CodesTab config={config} codes={codes} addCodes={addCodes} removeCode={removeCode} mutateCfg={mutateCfg} hasRegs={registrations.length > 0} />}
       {tab === "regs" && <RegsTab registrations={registrations} />}
       {tab === "promote" && <PromoteTab slug={slug} />}
       {tab === "email" && <EmailTab config={config} codes={codes} mutateCfg={mutateCfg} />}
@@ -253,10 +253,23 @@ function Admin({ config, codes, registrations, slug, campaignName, renameInstanc
   );
 }
 
-function CodesTab({ config, codes, addCodes, removeCode, mutateCfg }) {
+function CodesTab({ config, codes, addCodes, removeCode, mutateCfg, hasRegs }) {
   const [bulk, setBulk] = useState("");
   const [msg, setMsg] = useState("");
+  const [pendingMode, setPendingMode] = useState(null);
   const mode = config.codeMode || "unique";
+
+  /* Changement de mode : confirmation requise s'il y a déjà des inscrits. */
+  function requestMode(newMode) {
+    if (newMode === mode) return;
+    if (hasRegs) setPendingMode(newMode);
+    else mutateCfg(c => { c.codeMode = newMode; });
+  }
+  function confirmMode() {
+    const m = pendingMode;
+    setPendingMode(null);
+    mutateCfg(c => { c.codeMode = m; });
+  }
 
   async function handleAdd() {
     const list = bulk.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
@@ -273,7 +286,7 @@ function CodesTab({ config, codes, addCodes, removeCode, mutateCfg }) {
         <h3 style={h3}>Type de distribution</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
           {[["unique", "Codes uniques (liste)"], ["generic", "Code générique (un seul)"]].map(([id, lab]) => (
-            <button key={id} onClick={() => mutateCfg(c => { c.codeMode = id; })}
+            <button key={id} onClick={() => requestMode(id)}
               style={{ padding: "9px 15px", borderRadius: 999, cursor: "pointer", fontSize: 13.5, fontWeight: 600, background: mode === id ? C.green : C.black, color: mode === id ? C.black : C.cream, borderWidth: 1, borderStyle: "solid", borderColor: mode === id ? C.green : C.line }}>{lab}</button>
           ))}
         </div>
@@ -282,6 +295,21 @@ function CodesTab({ config, codes, addCodes, removeCode, mutateCfg }) {
             ? "Le même code est distribué à tous les inscrits — aucune liste nécessaire."
             : "Chaque inscrit reçoit un code différent, tiré de la liste ci-dessous. Pool vide ⇒ le formulaire indique qu'aucun code n'est disponible."}
         </p>
+
+        {pendingMode && (
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 12, background: "rgba(240,180,41,0.12)", border: "1px solid #f0b429" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+              <AlertTriangle size={18} color="#f0b429" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span style={{ color: C.cream, fontSize: 14, lineHeight: 1.5 }}>
+                Des inscrits existent déjà. En passant en <b>{pendingMode === "generic" ? "code générique" : "codes uniques"}</b>, les inscrits actuels <b>conservent leur code</b> ; seuls les nouveaux utiliseront le nouveau mode. Continuer&nbsp;?
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={confirmMode} style={{ ...btnPrimary, width: "auto", margin: 0, background: "#f0b429" }}>Confirmer le changement</button>
+              <button onClick={() => setPendingMode(null)} style={{ ...btnGhostLight, margin: 0 }}>Annuler</button>
+            </div>
+          </div>
+        )}
       </DarkCard>
 
       {mode === "generic" ? (
