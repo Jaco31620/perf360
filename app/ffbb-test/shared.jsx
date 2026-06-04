@@ -187,10 +187,25 @@ export async function loadCampaignBySlug(slug) {
 export async function listCampaigns() {
   const { data, error } = await supabase
     .from("ffbb_campaigns")
-    .select("id,slug,name,created_at")
+    .select("id,slug,name,config,created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data || [];
+}
+
+/* Mot de passe aléatoire robuste (sans caractères ambigus 0/O/1/l/I) pour
+   initialiser le mot de passe admin d'une nouvelle instance. */
+export function generatePassword(len = 14) {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const a = new Uint32Array(len);
+    crypto.getRandomValues(a);
+    for (let i = 0; i < len; i++) out += chars[a[i] % chars.length];
+  } else {
+    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
 }
 
 /* Crée une instance. config optionnelle (sinon valeurs par défaut). */

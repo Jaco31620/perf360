@@ -8,11 +8,11 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState, useEffect } from "react";
-import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut } from "lucide-react";
+import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key } from "lucide-react";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS,
+  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -108,8 +108,19 @@ function Dashboard({ campaigns, refresh, onLogout }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [confirmDel, setConfirmDel] = useState(null);
+  const [created, setCreated] = useState(null);   // {name, slug, password} après création
+  const [copiedId, setCopiedId] = useState(null);
 
   const effectiveSlug = slug ? slugify(slug) : slugify(name);
+
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; }
+  }
+  async function copyPw(c) {
+    const pw = c.config?.adminPassword || "";
+    if (await copyText(pw)) { setCopiedId(c.id); setTimeout(() => setCopiedId(null), 1500); }
+    else window.prompt("Mot de passe (copiez-le) :", pw);
+  }
 
   async function handleCreate() {
     setErr("");
@@ -126,7 +137,11 @@ function Dashboard({ campaigns, refresh, onLogout }) {
       } else {
         config = structuredClone(DEFAULT_CONFIG);
       }
-      await createCampaign({ slug: s, name: name || s, config });
+      const password = generatePassword();
+      config.adminPassword = password;          // mot de passe robuste, indépendant de la source dupliquée
+      const finalName = name || s;
+      await createCampaign({ slug: s, name: finalName, config });
+      setCreated({ name: finalName, slug: s, password });
       setName(""); setSlug(""); setDupFrom("");
       await refresh();
     } catch (e) {
@@ -187,6 +202,21 @@ function Dashboard({ campaigns, refresh, onLogout }) {
           <Plus size={17} /> Créer l'instance
         </button>
         {dupFrom && <p style={{ ...pSub, marginTop: 8 }}>La duplication copie le branding, les textes et l'e-mail — <b>pas</b> les codes ni les inscriptions.</p>}
+
+        {created && (
+          <div style={{ marginTop: 14, background: "rgba(27,226,153,0.1)", border: `1px solid ${C.green}`, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 14, color: C.cream, marginBottom: 8 }}>
+              ✅ Instance « <b>{created.name}</b> » créée. Mot de passe administrateur :
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <code style={{ background: C.black, border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 10px", color: C.green, fontSize: 15, letterSpacing: "0.5px" }}>{created.password}</code>
+              <button onClick={async () => { if (await copyText(created.password)) { setCopiedId("banner"); setTimeout(() => setCopiedId(null), 1500); } }} style={{ ...btnGhostLight }}>
+                <Key size={14} /> {copiedId === "banner" ? "Copié !" : "Copier"}
+              </button>
+            </div>
+            <p style={{ ...pSub, marginTop: 8, marginBottom: 0 }}>Communique-le à l'admin de l'instance — il pourra le changer ensuite (Réglages → Sécurité). Toi (super-admin) n'en as pas besoin pour entrer.</p>
+          </div>
+        )}
       </DarkCard>
 
       <div style={{ height: 16 }} />
@@ -203,6 +233,7 @@ function Dashboard({ campaigns, refresh, onLogout }) {
                   <div style={{ color: C.gray, fontSize: 12.5, fontFamily: "monospace", marginTop: 3 }}>/{c.slug}</div>
                 </a>
                 <a href={`/${c.slug}`} target="_blank" rel="noreferrer" style={{ ...btnGhostLight, textDecoration: "none" }}><ExternalLink size={14} /> Formulaire</a>
+                <button onClick={() => copyPw(c)} title="Copier le mot de passe admin de cette instance" style={{ ...btnGhostLight }}><Key size={14} /> {copiedId === c.id ? "Copié !" : "Mot de passe"}</button>
                 {confirmDel === c.id ? (
                   <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                     <button onClick={() => handleDelete(c)} disabled={busy} style={{ ...btnGhostLight, borderColor: "#ff7a6b", color: "#ff7a6b" }}>Confirmer</button>
