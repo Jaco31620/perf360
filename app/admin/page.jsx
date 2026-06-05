@@ -12,7 +12,7 @@ import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy } f
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword,
+  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword, duplicateHeaderImage,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -135,6 +135,11 @@ function Dashboard({ campaigns, refresh, onLogout }) {
       if (dupFrom) {
         const src = await loadCampaignBySlug(dupFrom);
         config = src ? structuredClone(src.config) : structuredClone(DEFAULT_CONFIG);
+        // Image d'en-tête : copie propre à la nouvelle instance (indépendance).
+        if (config.headerImageUrl) {
+          const copied = await duplicateHeaderImage(config.headerImageUrl, s);
+          if (copied) config.headerImageUrl = copied;
+        }
       } else {
         config = structuredClone(DEFAULT_CONFIG);
       }

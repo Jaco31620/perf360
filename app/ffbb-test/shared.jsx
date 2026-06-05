@@ -245,6 +245,21 @@ export async function isHeaderUsedElsewhere(url, exceptSlug) {
   return (data || []).length > 0;
 }
 
+/* Copie l'image d'en-tête vers un fichier propre à la nouvelle instance (duplication)
+   → instances indépendantes dès la création. Retourne la nouvelle URL, ou null
+   (URL externe, ou échec — ex. fichier source supprimé) → on garde alors l'URL d'origine. */
+export async function duplicateHeaderImage(url, newSlug) {
+  const m = String(url || "").match(/\/storage\/v1\/object\/public\/ffbb-assets\/(.+)$/);
+  if (!m) return null;
+  const srcPath = m[1].split("?")[0];
+  const ext = (srcPath.split(".").pop() || "png").toLowerCase();
+  const destPath = `${newSlug}/header-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from("ffbb-assets").copy(srcPath, destPath);
+  if (error) { console.error("Copie image:", error); return null; }
+  const { data } = supabase.storage.from("ffbb-assets").getPublicUrl(destPath);
+  return data?.publicUrl || null;
+}
+
 /* Renomme une instance (colonne name). */
 export async function renameCampaign(id, name) {
   const { error } = await supabase.from("ffbb_campaigns").update({ name }).eq("id", id);
