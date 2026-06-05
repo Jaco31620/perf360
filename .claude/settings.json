@@ -22,7 +22,22 @@
       "Bash(claude --version)",
       "Bash(bash scripts/check-sync.sh)",
       "WebSearch",
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Bash(node scripts/promote-perms.mjs)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/promote-perms.mjs\"",
+            "timeout": 15,
+            "statusMessage": "Synchro des permissions durables…"
+          }
+        ]
+      }
     ]
   }
 }
