@@ -232,6 +232,19 @@ export async function createCampaign({ slug, name, config }) {
   return data;
 }
 
+/* Une autre instance (≠ exceptSlug) utilise-t-elle cette même image d'en-tête ?
+   Sert à ne pas supprimer un fichier partagé (cas des instances dupliquées). */
+export async function isHeaderUsedElsewhere(url, exceptSlug) {
+  if (!url) return false;
+  const { data, error } = await supabase
+    .from("ffbb_campaigns").select("slug")
+    .eq("config->>headerImageUrl", url)
+    .neq("slug", exceptSlug)
+    .limit(1);
+  if (error) { console.error(error); return true; } // en cas de doute, on ne supprime pas
+  return (data || []).length > 0;
+}
+
 /* Renomme une instance (colonne name). */
 export async function renameCampaign(id, name) {
   const { error } = await supabase.from("ffbb_campaigns").update({ name }).eq("id", id);

@@ -13,7 +13,7 @@ import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Im
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
-  C, fillTemplate, maskDescription,
+  C, fillTemplate, maskDescription, isHeaderUsedElsewhere,
   Card, DarkCard, Stat, Check, PageShell, Loader,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, td, darkInput,
 } from "./shared";
@@ -669,6 +669,8 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
   async function deleteStored(url) {
     const path = storagePath(url);
     if (!path) return;
+    // Ne pas supprimer un fichier encore utilisé par une autre instance (ex. duplication).
+    if (await isHeaderUsedElsewhere(url, slug)) return;
     const { error } = await supabase.storage.from("ffbb-assets").remove([path]);
     if (error) console.error("Suppression storage:", error);
   }
