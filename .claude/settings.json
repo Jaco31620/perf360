@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git config *)",
+      "Bash(git check-ignore *)",
+      "Bash(npm install *)",
+      "Bash(npm uninstall *)",
+      "Bash(npm run *)",
+      "Bash(npm view *)",
+      "Bash(npm -v)",
+      "Bash(timeout 300 npm run build)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(grep *)",
+      "Bash(cat)",
+      "Bash(claude --version)",
+      "Bash(bash scripts/check-sync.sh)",
+      "WebSearch",
+      "Skill(update-config)"
+    ]
+  }
+}
