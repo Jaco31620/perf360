@@ -2,13 +2,24 @@
 /*
  * Pièces communes au formulaire public (page.jsx) et à l'espace admin (admin/page.jsx)
  * du dispositif licenciés FFBB × BLACKROLL. Constantes de marque, helpers purs
- * (validation licence, gabarits e-mail, masques), composants UI et styles.
+ * (validation licence, masques), composants UI et styles.
+ *
+ * SÉCURITÉ : depuis l'activation de la RLS, le client ne touche PLUS la base en
+ * direct. Tous les accès données passent par des routes serveur (/api/ffbb/*),
+ * authentifiées par un jeton signé (cf. couche « ACCÈS SERVEUR » plus bas).
+ * Constantes & normalisation de config : module pur ./configDefaults (partagé serveur).
  *
  * NB : ce dispositif est volontairement autonome — aucun lien vers l'accueil perf360.
  */
 import { Check } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { escapeHtml, looksLikeHtml } from "./emailTemplate";
+import {
+  nb, OLD_INTRO, NEW_INTRO, OLD_NEWSLETTER_LABEL, DEFAULT_CONFIG,
+  normalizeConfig, RESERVED_SLUGS,
+} from "./configDefaults";
+
+/* Ré-export pour les pages/écrans existants (la définition vit dans ./configDefaults). */
+export { nb, OLD_INTRO, NEW_INTRO, OLD_NEWSLETTER_LABEL, DEFAULT_CONFIG, normalizeConfig, RESERVED_SLUGS };
 
 export const C = {
   black: "#0A0A0A",
@@ -19,64 +30,6 @@ export const C = {
   gray: "#8c8c84",
   line: "#2b2b28",
   cardLine: "#e6e6da",
-};
-
-export const nb = " ";
-
-export const OLD_INTRO =
-  "Saisissez vos informations pour recevoir votre code personnel unique par e-mail.";
-export const NEW_INTRO =
-  "Dans le cadre du partenariat entre BLACKROLL et la FFBB, les licenciés bénéficient de 15" +
-  nb +
-  "% de réduction sur leurs achats. Renseignez vos informations ci-dessous pour recevoir votre code de réduction personnel par e-mail.";
-
-/* Ancien libellé d'opt-in newsletter (migré vers le nouveau bloc). */
-export const OLD_NEWSLETTER_LABEL =
-  "Je souhaite également recevoir la newsletter et les actualités par e-mail.";
-
-/* Configuration éditable par défaut — stockée dans ffbb_config.data (id = 1). */
-export const DEFAULT_CONFIG = {
-  adminPassword: "admin",
-  federationName: "VOTRE FÉDÉRATION",
-  headerImageUrl: "",
-  formTitle: "Inscription licencié",
-  formIntro: NEW_INTRO,
-  /* Distribution : "unique" = un code différent par inscrit (liste ffbb_codes) ;
-     "generic" = le même code (genericCode) pour tout le monde. */
-  codeMode: "unique",
-  genericCode: "",
-  /* Bloc newsletter : intro + lignes d'avantages (affichées telles quelles) + libellé de la case. */
-  newsletterIntro: "Vous voulez en plus recevoir :",
-  newsletterBullets:
-    "- les nouveautés produits en avant-première\n" +
-    "- des conseils d'experts en récupération, sommeil et performance\n" +
-    "- les offres et concours réservés aux abonnés",
-  newsletterLabel: "Je souhaite m'abonner à la newsletter BLACKROLL",
-  /* Lien vers la politique de protection des données (affiché sous le formulaire). Vide = masqué. */
-  privacyUrl: "https://blackroll.com/fr/service/protection-des-donnees",
-  welcomeEmail: {
-    fromName: "BLACKROLL",
-    replyTo: "jaco.barral@blackroll.com",
-    ctaUrl: "",
-    ctaLabel: "Profiter de mon code",
-    footer: "Dispositif licenciés FFBB × BLACKROLL.",
-    subject: "Bienvenue {prenom}, voici votre code de réduction",
-    /* Corps en HTML (éditeur WYSIWYG). Le {code} est mis en avant dans un encadré. */
-    body:
-      "Bonjour {prenom},<br><br>" +
-      "Bienvenue et merci pour votre inscription. Dans le cadre du partenariat <b>FFBB × BLACKROLL</b>, vous bénéficiez de <b>15" +
-      nb +
-      "% de réduction</b> sur vos achats.<br><br>" +
-      "Voici votre code personnel unique" +
-      nb +
-      ":" +
-      "<div style=\"margin:16px 0;padding:14px 18px;background:#0A0A0A;border-radius:12px;text-align:center;font-size:22px;font-weight:800;letter-spacing:2px;color:#1BE299\">{code}</div>" +
-      "Conservez-le précieusement" +
-      nb +
-      ": il est valable pour vous seul·e.<br><br>" +
-      "À très bientôt,<br>L'équipe",
-  },
-  license: { enabled: true, mode: "none", exact: 8, charType: "alnum", mask: "FED-####-AA" },
 };
 
 /* --------------------------- HELPERS PURS --------------------------- */
@@ -141,69 +94,95 @@ export function validateLicense(value, cfg) {
   return { ok: true };
 }
 
-/* --------------------------- CONFIG SUPABASE --------------------------- */
-/* Fusionne la config stockée par-dessus les valeurs par défaut + migrations douces. */
-export function normalizeConfig(stored) {
-  const cfg = {
-    ...structuredClone(DEFAULT_CONFIG),
-    ...(stored || {}),
-    welcomeEmail: { ...DEFAULT_CONFIG.welcomeEmail, ...((stored && stored.welcomeEmail) || {}) },
-    license: { ...DEFAULT_CONFIG.license, ...((stored && stored.license) || {}) },
-  };
-  if (cfg.formIntro === OLD_INTRO) cfg.formIntro = NEW_INTRO;
-  if (cfg.newsletterLabel === OLD_NEWSLETTER_LABEL) cfg.newsletterLabel = DEFAULT_CONFIG.newsletterLabel;
-  if (cfg.headerImageUrl === undefined) cfg.headerImageUrl = "";
-  // Migration : ancien texte d'intro du formulaire en texte brut → HTML (une seule fois).
-  if (cfg.formIntro && !looksLikeHtml(cfg.formIntro)) {
-    cfg.formIntro = escapeHtml(cfg.formIntro).replace(/\n/g, "<br>");
-  }
-  // Migration : ancien corps d'e-mail en texte brut → HTML (une seule fois).
-  if (cfg.welcomeEmail.body && !looksLikeHtml(cfg.welcomeEmail.body)) {
-    cfg.welcomeEmail.body = escapeHtml(cfg.welcomeEmail.body).replace(/\n/g, "<br>");
-  }
-  return cfg;
+/* ===================================================================== */
+/* ACCÈS SERVEUR — jetons d'auth (sessionStorage) + appels aux routes API */
+/* ===================================================================== */
+const TKEY_MASTER = "ffbb_mt";
+const tkeyCampaign = (slug) => "ffbb_ct_" + slug;
+
+export function setMasterToken(t) {
+  try { t ? sessionStorage.setItem(TKEY_MASTER, t) : sessionStorage.removeItem(TKEY_MASTER); } catch (e) {}
+}
+export function getMasterToken() {
+  try { return sessionStorage.getItem(TKEY_MASTER); } catch (e) { return null; }
+}
+export function setCampaignToken(slug, t) {
+  try { t ? sessionStorage.setItem(tkeyCampaign(slug), t) : sessionStorage.removeItem(tkeyCampaign(slug)); } catch (e) {}
+}
+export function getCampaignToken(slug) {
+  try { return sessionStorage.getItem(tkeyCampaign(slug)); } catch (e) { return null; }
 }
 
-export async function loadConfig() {
-  const { data, error } = await supabase
-    .from("ffbb_config")
-    .select("data")
-    .eq("id", 1)
-    .maybeSingle();
-  if (error) throw error;
-  return data && data.data ? normalizeConfig(data.data) : structuredClone(DEFAULT_CONFIG);
+/* Appel POST JSON générique. Joint le jeton dans l'en-tête x-ffbb-auth si fourni.
+   Lève une Error (avec .status) si la réponse n'est pas 2xx. */
+async function api(path, { body, token } = {}) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { "x-ffbb-auth": token } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const err = new Error(data.error || "Une erreur est survenue.");
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
 }
 
-/* --------------------------- CAMPAGNES (INSTANCES) --------------------------- */
-/* Chaque instance du dispositif = une ligne ffbb_campaigns (slug + config jsonb).
-   Les codes/inscriptions sont rattachés par campaign_id. */
+/* --- Connexions (vérif. du mot de passe CÔTÉ SERVEUR) --- */
+export async function authMaster(password, masterTok) {
+  const data = await api("/api/ffbb/auth", { body: { scope: "master", password }, token: masterTok });
+  setMasterToken(data.token);
+  return data.token;
+}
+export async function authCampaign(slug, { password, token } = {}) {
+  const data = await api("/api/ffbb/auth", { body: { scope: "campaign", slug, password }, token });
+  setCampaignToken(slug, data.token);
+  return data; // { token, campaign: { id, slug, name, config } }
+}
 
-/* Slugs interdits à la création : ils correspondent à de vraies routes
-   (sinon l'instance serait masquée par la route statique homonyme). */
-export const RESERVED_SLUGS = [
-  "admin", "api", "c", "ffbb-test", "respiration", "soutenir",
-  "connexion", "auth", "ami-invisible", "accueil", "_next", "favicon.ico",
-  "robots.txt", "sitemap.xml", "www",
-];
+/* --- Opérations admin d'instance (jeton de campagne explicite) --- */
+export function adminCall(action, cid, extra, token) {
+  return api("/api/ffbb/admin", { body: { action, cid, ...(extra || {}) }, token });
+}
 
+/* --- Opérations super-admin (jeton master joint automatiquement) --- */
+function superCall(action, extra) {
+  return api("/api/ffbb/super", { body: { action, ...(extra || {}) }, token: getMasterToken() });
+}
+
+/* --------------------------- CONFIG / CAMPAGNES --------------------------- */
+/* Charge une instance par slug pour le formulaire public — config SANS SECRET
+   (le mot de passe admin est retiré côté serveur). Retourne null si introuvable. */
 export async function loadCampaignBySlug(slug) {
-  const { data, error } = await supabase
-    .from("ffbb_campaigns")
-    .select("id,slug,name,config")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return { id: data.id, slug: data.slug, name: data.name, config: normalizeConfig(data.config) };
+  const res = await fetch(`/api/ffbb/campaign?slug=${encodeURIComponent(slug)}`);
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || "Chargement impossible.");
+  return data.campaign || null;
 }
 
 export async function listCampaigns() {
-  const { data, error } = await supabase
-    .from("ffbb_campaigns")
-    .select("id,slug,name,config,created_at")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data || [];
+  return (await superCall("list")).campaigns || [];
+}
+
+export async function createCampaign({ slug, name, config }) {
+  return (await superCall("create", { slug, name, config })).campaign;
+}
+
+export async function deleteCampaign(id) {
+  await superCall("delete", { id });
+}
+
+export async function loadMasterConfig() {
+  return (await superCall("loadMaster")).master;
+}
+
+export async function saveMasterConfig(patch) {
+  return (await superCall("saveMaster", { patch })).master;
 }
 
 /* Mot de passe aléatoire robuste (sans caractères ambigus 0/O/1/l/I) pour
@@ -221,33 +200,9 @@ export function generatePassword(len = 14) {
   return out;
 }
 
-/* Crée une instance. config optionnelle (sinon valeurs par défaut). */
-export async function createCampaign({ slug, name, config }) {
-  const { data, error } = await supabase
-    .from("ffbb_campaigns")
-    .insert({ slug, name: name || slug, config: config || structuredClone(DEFAULT_CONFIG) })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-/* Une autre instance (≠ exceptSlug) utilise-t-elle cette même image d'en-tête ?
-   Sert à ne pas supprimer un fichier partagé (cas des instances dupliquées). */
-export async function isHeaderUsedElsewhere(url, exceptSlug) {
-  if (!url) return false;
-  const { data, error } = await supabase
-    .from("ffbb_campaigns").select("slug")
-    .eq("config->>headerImageUrl", url)
-    .neq("slug", exceptSlug)
-    .limit(1);
-  if (error) { console.error(error); return true; } // en cas de doute, on ne supprime pas
-  return (data || []).length > 0;
-}
-
-/* Copie l'image d'en-tête vers un fichier propre à la nouvelle instance (duplication)
-   → instances indépendantes dès la création. Retourne la nouvelle URL, ou null
-   (URL externe, ou échec — ex. fichier source supprimé) → on garde alors l'URL d'origine. */
+/* Copie l'image d'en-tête vers un fichier propre à la nouvelle instance (duplication).
+   Opération Storage (bucket public ffbb-assets) — conservée côté client. Retourne la
+   nouvelle URL, ou null (URL externe / échec) → on garde alors l'URL d'origine. */
 export async function duplicateHeaderImage(url, newSlug) {
   const m = String(url || "").match(/\/storage\/v1\/object\/public\/ffbb-assets\/(.+)$/);
   if (!m) return null;
@@ -258,69 +213,6 @@ export async function duplicateHeaderImage(url, newSlug) {
   if (error) { console.error("Copie image:", error); return null; }
   const { data } = supabase.storage.from("ffbb-assets").getPublicUrl(destPath);
   return data?.publicUrl || null;
-}
-
-/* Renomme une instance (colonne name). */
-export async function renameCampaign(id, name) {
-  const { error } = await supabase.from("ffbb_campaigns").update({ name }).eq("id", id);
-  if (error) throw error;
-}
-
-/* Supprime une instance (cascade : ses codes + inscriptions via FK on delete cascade). */
-export async function deleteCampaign(id) {
-  const { error } = await supabase.from("ffbb_campaigns").delete().eq("id", id);
-  if (error) throw error;
-}
-
-/* Réglages globaux (ffbb_config id=1) : mot de passe du super-admin. */
-export async function loadMasterConfig() {
-  const { data, error } = await supabase.from("ffbb_config").select("data").eq("id", 1).maybeSingle();
-  if (error) throw error;
-  return data?.data || { masterPassword: "admin" };
-}
-
-/* Met à jour les réglages globaux (ffbb_config id=1) sans écraser les autres clés
-   de `data` (ex. réglages du formulaire par défaut stockés sur la même ligne). */
-export async function saveMasterConfig(patch) {
-  const current = await loadMasterConfig();
-  const next = { ...current, ...patch };
-  const { error } = await supabase
-    .from("ffbb_config")
-    .upsert({ id: 1, data: next }, { onConflict: "id" });
-  if (error) throw error;
-  return next;
-}
-
-/* Construit et envoie l'e-mail de bienvenue réel via la route serveur /api/ffbb/send. */
-export async function sendWelcomeEmail(reg, config) {
-  const vars = {
-    prenom: reg.prenom,
-    nom: reg.nom,
-    licence: reg.licence,
-    code: reg.code,
-    email: reg.email,
-  };
-  const res = await fetch("/api/ffbb/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      to: reg.email,
-      fromName: config.welcomeEmail.fromName,
-      replyTo: config.welcomeEmail.replyTo,
-      headerImageUrl: config.headerImageUrl,
-      altText: config.federationName,
-      ctaUrl: fillTemplate(config.welcomeEmail.ctaUrl, vars),
-      ctaLabel: fillTemplate(config.welcomeEmail.ctaLabel, vars),
-      footer: config.welcomeEmail.footer,
-      subject: fillTemplate(config.welcomeEmail.subject, vars),
-      body: fillTemplate(config.welcomeEmail.body, vars),
-    }),
-  });
-  if (!res.ok) {
-    let detail = "";
-    try { detail = (await res.json()).error || ""; } catch (e) {}
-    throw new Error(detail || "Échec de l'envoi de l'e-mail.");
-  }
 }
 
 /* --------------------------- EN-TÊTE CO-BRANDÉ --------------------------- */

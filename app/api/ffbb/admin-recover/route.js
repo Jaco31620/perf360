@@ -6,7 +6,7 @@
  * mot de passe ; il n'arrive que dans la boîte du propriétaire.
  */
 import { Resend } from "resend";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
@@ -15,16 +15,14 @@ const FROM_EMAIL = "noreply@perf360.fr";
 const RECOVERY_EMAIL = "jaco31@gmail.com";
 
 export async function POST() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const apiKey = process.env.RESEND_FFBB_KEY;
-  if (!supabaseUrl || !supabaseKey || !apiKey) {
+  if (!apiKey) {
     return Response.json({ error: "Service non configuré." }, { status: 500 });
   }
 
   let masterPassword;
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.from("ffbb_config").select("data").eq("id", 1).maybeSingle();
     if (error) throw error;
     masterPassword = data?.data?.masterPassword || "admin";

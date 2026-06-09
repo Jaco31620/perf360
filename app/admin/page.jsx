@@ -1,9 +1,9 @@
 "use client";
 /*
  * Super-admin du dispositif — gère les instances (campagnes).
- * Protégé par un mot de passe maître (ffbb_config id=1 → data.masterPassword).
- * Permet de lister, créer, dupliquer et supprimer des instances. Chaque instance
- * a ensuite son propre formulaire (/c/<slug>) et son propre admin (/c/<slug>/admin).
+ * Protégé par un mot de passe maître vérifié CÔTÉ SERVEUR (ffbb_config id=1 →
+ * data.masterPassword) ; un jeton master signé est ensuite joint aux opérations
+ * (/api/ffbb/super). Permet de lister, créer, dupliquer et supprimer des instances.
  *
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
@@ -12,7 +12,8 @@ import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy, Sh
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, saveMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword, duplicateHeaderImage,
+  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, saveMasterConfig, RESERVED_SLUGS, generatePassword, duplicateHeaderImage,
+  authMaster, getMasterToken, setMasterToken,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -30,25 +31,32 @@ export default function SuperAdminPage() {
   const [loading, setLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
 
-  async function refresh() {
-    const list = await listCampaigns();
+  /* Charge instances + réglages maître (nécessite un jeton master valide). */
+  async function loadData() {
+    const [list, mc] = await Promise.all([listCampaigns(), loadMasterConfig()]);
     setCampaigns(list);
+    setMaster(mc);
+  }
+  async function refresh() {
+    setCampaigns(await listCampaigns());
   }
 
   useEffect(() => {
-    // Session déjà ouverte avec le mot de passe maître → pas de re-login.
-    if (typeof window !== "undefined" && sessionStorage.getItem("ffbb_super_admin") === "1") setAuthed(true);
+    let alive = true;
     (async () => {
+      // Session super-admin déjà ouverte (jeton en sessionStorage) → entrée directe.
+      if (!getMasterToken()) { if (alive) setLoading(false); return; }
       try {
-        const [mc] = await Promise.all([loadMasterConfig()]);
-        setMaster(mc);
-        await refresh();
+        await loadData();
+        if (alive) setAuthed(true);
       } catch (e) {
         console.error(e);
+        setMasterToken(null); // jeton invalide/expiré
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+    return () => { alive = false; };
   }, []);
 
   if (loading) return <Loader />;
@@ -56,7 +64,7 @@ export default function SuperAdminPage() {
   if (!authed) {
     return (
       <PageShell>
-        <MasterLogin master={master} onOk={() => setAuthed(true)} />
+        <MasterLogin onAuthed={async () => { await loadData(); setAuthed(true); }} />
       </PageShell>
     );
   }
@@ -68,23 +76,31 @@ export default function SuperAdminPage() {
         refresh={refresh}
         master={master}
         onMasterChange={setMaster}
-        onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
+        onLogout={() => { setMasterToken(null); setAuthed(false); }}
       />
     </PageShell>
   );
 }
 
-function MasterLogin({ master, onOk }) {
+function MasterLogin({ onAuthed }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [recoverMsg, setRecoverMsg] = useState("");
-  const tryLogin = () => {
-    if (pw === (master?.masterPassword ?? "admin")) {
-      try { sessionStorage.setItem("ffbb_super_admin", "1"); } catch (e) {}
-      onOk();
-    } else setErr(true);
-  };
+
+  async function tryLogin() {
+    if (busy) return;
+    setBusy(true); setErr(false);
+    try {
+      await authMaster(pw);     // vérifie le mot de passe côté serveur + stocke le jeton
+      await onAuthed();
+    } catch (e) {
+      setErr(true);
+      setBusy(false);
+    }
+  }
+
   async function recover() {
     setRecovering(true); setRecoverMsg("");
     try {
@@ -111,7 +127,7 @@ function MasterLogin({ master, onOk }) {
             onKeyDown={e => { if (e.key === "Enter") tryLogin(); }}
             style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${err ? "#b3261e" : C.cardLine}`, fontSize: 15, boxSizing: "border-box", color: C.ink, background: "#fff", outline: "none" }} />
           {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>Mot de passe incorrect.</div>}
-          <button onClick={tryLogin} style={btnPrimary}>Se connecter</button>
+          <button onClick={tryLogin} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "Connexion…" : "Se connecter"}</button>
           <button onClick={recover} disabled={recovering}
             style={{ background: "none", border: "none", color: "#888", fontSize: 13, textDecoration: "underline", cursor: "pointer", marginTop: 12, padding: 0, width: "100%", textAlign: "center" }}>
             {recovering ? "Envoi en cours…" : "Mot de passe oublié ?"}
@@ -155,7 +171,8 @@ function Dashboard({ campaigns, refresh, master, onMasterChange, onLogout }) {
     try {
       let config;
       if (dupFrom) {
-        const src = await loadCampaignBySlug(dupFrom);
+        // Clone à partir de l'instance source déjà en mémoire (config complète).
+        const src = campaigns.find(c => c.slug === dupFrom);
         config = src ? structuredClone(src.config) : structuredClone(DEFAULT_CONFIG);
         // Image d'en-tête : copie propre à la nouvelle instance (indépendance).
         if (config.headerImageUrl) {
@@ -174,7 +191,7 @@ function Dashboard({ campaigns, refresh, master, onMasterChange, onLogout }) {
       await refresh();
     } catch (e) {
       console.error(e);
-      setErr("Création impossible (slug déjà pris ?).");
+      setErr(e?.data?.error || "Création impossible (slug déjà pris ?).");
     } finally {
       setBusy(false);
     }

@@ -1,53 +1,34 @@
 "use client";
 /*
  * Formulaire public d'une instance (campagne) de codes de réduction.
- * Reçoit `campaign` = { id, slug, config }. Toutes les requêtes sont scopées
- * par campaign_id : pool de codes, doublons, inscriptions. Attribution atomique
- * d'un code « available », création de l'inscription, envoi de l'e-mail réel.
+ * Reçoit `campaign` = { id, slug, config }. Tout le traitement (doublons,
+ * attribution de code, création de l'inscription, envoi de l'e-mail) se fait
+ * CÔTÉ SERVEUR via /api/ffbb/register — le navigateur ne touche plus la base et
+ * ne reçoit jamais les données d'un autre inscrit.
  *
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState } from "react";
 import { ChevronRight, ArrowLeft } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import {
-  C, nb, sendWelcomeEmail, validateLicense, maskDescription, maskEmail,
+  C, nb, validateLicense, maskDescription,
   CoBrandHeader, Card, Field, Check, btnPrimary, btnGhost,
 } from "./shared";
 
 export default function PublicForm({ campaign }) {
   const config = campaign.config;
-  const cid = campaign.id;
+  const slug = campaign.slug;
   const newsletterBullets = (config.newsletterBullets || "").split("\n").map(s => s.trim()).filter(Boolean);
   const [f, setF] = useState({ prenom: "", nom: "", licence: "", email: "", newsletter: false });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
-  const [conflict, setConflict] = useState(null);
+  const [conflict, setConflict] = useState(null); // { maskedEmail, resendToken }
 
   const inputStyle = {
     width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${C.cardLine}`,
     background: "#fff", color: C.ink, fontSize: 15, outline: "none", boxSizing: "border-box",
   };
-
-  /* Réserve atomiquement un code disponible de CETTE campagne. Retourne le code ou null. */
-  async function claimCode() {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const { data: free, error } = await supabase
-        .from("ffbb_codes").select("code").eq("campaign_id", cid).eq("status", "available").limit(1).maybeSingle();
-      if (error) throw error;
-      if (!free) return null;
-      const { data: claimed, error: upErr } = await supabase
-        .from("ffbb_codes")
-        .update({ status: "assigned" })
-        .eq("campaign_id", cid).eq("code", free.code).eq("status", "available")
-        .select();
-      if (upErr) throw upErr;
-      if (claimed && claimed.length === 1) return free.code; // on détient le code
-      // sinon : pris entre-temps par quelqu'un d'autre → nouvelle tentative
-    }
-    return null;
-  }
 
   async function submit() {
     if (busy) return;
@@ -58,56 +39,25 @@ export default function PublicForm({ campaign }) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) return setErr("Adresse e-mail invalide.");
 
     const emailNorm = f.email.trim();
-    const licNorm = f.licence.trim();
     setBusy(true);
     try {
-      // Doublon e-mail (dans cette campagne) → renvoi du code existant.
-      const { data: byEmail } = await supabase
-        .from("ffbb_registrations").select("*").eq("campaign_id", cid).ilike("email", emailNorm).limit(1).maybeSingle();
-      if (byEmail) {
-        await sendWelcomeEmail(byEmail, config);
-        setDone({ ...byEmail, resent: true });
-        return;
-      }
-
-      // Doublon licence → écran de conflit. Ignoré si la demande de licence est désactivée.
-      if (config.license.enabled !== false && licNorm) {
-        const { data: byLicence } = await supabase
-          .from("ffbb_registrations").select("*").eq("campaign_id", cid).ilike("licence", licNorm).limit(1).maybeSingle();
-        if (byLicence) { setConflict(byLicence); return; }
-      }
-
-      // Détermination du code selon le mode de distribution de l'instance.
-      const generic = config.codeMode === "generic";
-      let code;
-      if (generic) {
-        code = (config.genericCode || "").trim();
-        if (!code) return setErr("Le code n'est pas encore disponible. Merci de réessayer plus tard.");
-      } else {
-        code = await claimCode();
-        if (!code) return setErr("Aucun code disponible pour le moment. Merci de réessayer plus tard.");
-      }
-
-      // Création de l'inscription.
-      const { data: reg, error: insErr } = await supabase
-        .from("ffbb_registrations")
-        .insert({
-          campaign_id: cid,
+      const res = await fetch("/api/ffbb/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
           prenom: f.prenom.trim(), nom: f.nom.trim(),
-          licence: licNorm, email: emailNorm,
-          newsletter: f.newsletter, code,
-        })
-        .select().single();
-      if (insErr) {
-        // Mode liste : on relâche le code réservé pour ne pas le perdre.
-        if (!generic) await supabase.from("ffbb_codes").update({ status: "available", assigned_to: null }).eq("campaign_id", cid).eq("code", code);
-        throw insErr;
-      }
+          licence: f.licence.trim(), email: emailNorm,
+          newsletter: f.newsletter,
+        }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch (e) {}
 
-      // Mode liste : lien code → inscription. Puis envoi de l'e-mail réel.
-      if (!generic) await supabase.from("ffbb_codes").update({ assigned_to: String(reg.id) }).eq("campaign_id", cid).eq("code", code);
-      await sendWelcomeEmail(reg, config);
-      setDone(reg);
+      if (data.status === "ok") { setDone({ emailDisplay: emailNorm, resent: false }); return; }
+      if (data.status === "resent") { setDone({ emailDisplay: emailNorm, resent: true }); return; }
+      if (data.status === "conflict") { setConflict({ maskedEmail: data.maskedEmail, resendToken: data.resendToken }); return; }
+      setErr(data.message || "Une erreur est survenue. Merci de réessayer dans quelques instants.");
     } catch (e) {
       console.error(e);
       setErr("Une erreur est survenue. Merci de réessayer dans quelques instants.");
@@ -119,11 +69,22 @@ export default function PublicForm({ campaign }) {
   async function resendFromConflict() {
     if (!conflict || busy) return;
     setBusy(true);
+    setErr("");
     try {
-      await sendWelcomeEmail(conflict, config);
-      const r = conflict;
-      setConflict(null);
-      setDone({ ...r, resent: true, masked: true });
+      const res = await fetch("/api/ffbb/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resendToken: conflict.resendToken }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch (e) {}
+      if (res.ok && data.status === "resent") {
+        const masked = conflict.maskedEmail;
+        setConflict(null);
+        setDone({ emailDisplay: masked, resent: true });
+      } else {
+        setErr(data.error || "L'envoi a échoué. Merci de réessayer.");
+      }
     } catch (e) {
       console.error(e);
       setErr("L'envoi a échoué. Merci de réessayer.");
@@ -144,8 +105,8 @@ export default function PublicForm({ campaign }) {
             <h2 style={{ fontSize: 26, fontWeight: 800, color: C.ink, margin: "0 0 8px", letterSpacing: "-0.5px" }}>{done.resent ? "Code renvoyé" : "C'est confirmé" + nb + "!"}</h2>
             <p style={{ color: "#555", margin: "0 0 18px", fontSize: 15, lineHeight: 1.6 }}>
               {done.resent
-                ? <>Vous étiez déjà inscrit. Votre code personnel vous a été renvoyé par e-mail à <b>{done.masked ? maskEmail(done.email) : done.email}</b>.</>
-                : <>Votre code personnel vient de vous être envoyé par e-mail à <b>{done.email}</b>.</>}
+                ? <>Vous étiez déjà inscrit. Votre code personnel vous a été renvoyé par e-mail à <b>{done.emailDisplay}</b>.</>
+                : <>Votre code personnel vient de vous être envoyé par e-mail à <b>{done.emailDisplay}</b>.</>}
             </p>
             <div style={{ padding: "16px 18px", background: "#f3f3e8", borderRadius: 12, fontSize: 14, color: "#444", lineHeight: 1.55 }}>
               Consultez votre boîte de réception pour le récupérer. Pensez à vérifier vos courriers indésirables si vous ne le voyez pas d'ici quelques minutes.
@@ -166,7 +127,7 @@ export default function PublicForm({ campaign }) {
           <Card>
             <h2 style={{ fontSize: 24, fontWeight: 800, color: C.ink, margin: "0 0 10px", letterSpacing: "-0.5px" }}>Licence déjà inscrite</h2>
             <p style={{ color: "#555", margin: "0 0 16px", fontSize: 15, lineHeight: 1.6 }}>
-              Ce numéro de licence a déjà reçu un code, associé à l'adresse <b>{maskEmail(conflict.email)}</b>.
+              Ce numéro de licence a déjà reçu un code, associé à l'adresse <b>{conflict.maskedEmail}</b>.
             </p>
             <p style={{ color: "#666", margin: "0 0 18px", fontSize: 14, lineHeight: 1.55 }}>
               Si cette adresse est bien la vôtre, vous pouvez vous faire renvoyer votre code. Sinon, vérifiez le numéro saisi.

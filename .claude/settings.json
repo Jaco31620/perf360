@@ -23,7 +23,9 @@
       "Bash(bash scripts/check-sync.sh)",
       "WebSearch",
       "Skill(update-config)",
-      "Bash(node scripts/promote-perms.mjs)"
+      "Bash(node scripts/promote-perms.mjs)",
+      "Bash(npx next *)",
+      "Bash(npx supabase *)"
     ]
   },
   "hooks": {

@@ -1,9 +1,10 @@
 "use client";
 /*
  * Espace administrateur d'une instance (campagne). Reçoit `campaign`
- * = { id, slug, name, config }. La config est sauvegardée (débounce) dans
- * ffbb_campaigns.config ; pool de codes et inscriptions sont scopés par
- * campaign_id ; les logos sont rangés dans le bucket sous le préfixe du slug.
+ * = { id, slug, name, config } (config PUBLIQUE, sans mot de passe). L'auth se
+ * fait CÔTÉ SERVEUR (/api/ffbb/auth) ; un jeton de campagne signé est ensuite
+ * joint à chaque opération (/api/ffbb/admin). Le client ne touche plus la base
+ * en direct — sauf le Storage (logos, bucket public ffbb-assets).
  *
  * Dispositif autonome : navigation interne uniquement, AUCUN lien vers l'accueil perf360.
  */
@@ -13,7 +14,8 @@ import { Lock, Plus, Download, Mail, Settings, Tag, Users, Trash2, ArrowLeft, Im
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
-  C, fillTemplate, maskDescription, isHeaderUsedElsewhere,
+  C, fillTemplate, maskDescription,
+  authCampaign, adminCall, getCampaignToken, setCampaignToken, getMasterToken,
   Card, DarkCard, Stat, Check, PageShell, Loader,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, td, darkInput,
 } from "./shared";
@@ -30,56 +32,78 @@ export default function AdminApp({ campaign }) {
   const [authed, setAuthed] = useState(false);
   const [campaignName, setCampaignName] = useState(campaign.name);
   const router = useRouter();
+  const tokenRef = useRef(null);       // jeton de campagne courant
   const saveTimer = useRef(null);
   const nameTimer = useRef(null);
 
-  /* Recharge les compteurs (codes total/dispo, inscrits, opt-in) + dernières inscriptions. */
+  /* Recharge les compteurs (codes total/dispo, inscrits, opt-in). */
   async function refreshCounts() {
-    const [tot, avail, regs, news] = await Promise.all([
-      supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
-      supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("status", "available"),
-      supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid),
-      supabase.from("ffbb_registrations").select("*", { count: "exact", head: true }).eq("campaign_id", cid).eq("newsletter", true),
-    ]);
-    const t = tot.count || 0, a = avail.count || 0;
-    setCounts({ total: t, available: a, assigned: t - a, regs: regs.count || 0, newsletter: news.count || 0 });
+    const { counts: c } = await adminCall("stats", cid, {}, tokenRef.current);
+    setCounts(c);
   }
 
   /* Une page d'inscriptions (récentes d'abord) — pour la pagination de l'onglet Attributions. */
   async function fetchRegistrationsPage(from, size) {
-    const { data, error } = await supabase
-      .from("ffbb_registrations").select("*").eq("campaign_id", cid)
-      .order("created_at", { ascending: false }).range(from, from + size - 1);
-    if (error) { console.error(error); return []; }
-    return (data || []).map(r => ({ ...r, date: r.created_at }));
+    try {
+      const { rows } = await adminCall("regsPage", cid, { from, size }, tokenRef.current);
+      return rows || [];
+    } catch (e) { console.error(e); return []; }
   }
 
-  /* Renommage de l'instance (colonne ffbb_campaigns.name), débouncé. */
+  /* Recherche d'inscriptions (par code, e-mail ou nom). */
+  async function searchRegistrations(q) {
+    try {
+      const { rows } = await adminCall("search", cid, { q }, tokenRef.current);
+      return rows || [];
+    } catch (e) { console.error(e); return []; }
+  }
+
+  /* Toutes les inscriptions (paginé côté serveur) — pour l'export CSV complet. */
+  async function fetchAllRegistrations() {
+    try {
+      const { rows } = await adminCall("exportAll", cid, {}, tokenRef.current);
+      return rows || [];
+    } catch (e) { console.error(e); return []; }
+  }
+
+  /* Ajout par lots (dédup + upsert côté serveur). Renvoie { added, total }. */
+  async function addCodes(list) {
+    try {
+      const r = await adminCall("addCodes", cid, { codes: list }, tokenRef.current);
+      await refreshCounts();
+      return r;
+    } catch (e) { console.error(e); await refreshCounts().catch(() => {}); return { added: 0, total: list.length, error: true }; }
+  }
+
+  async function resetAll() {
+    try {
+      await adminCall("reset", cid, {}, tokenRef.current);
+      await refreshCounts();
+    } catch (e) { console.error(e); }
+  }
+
+  /* Une autre instance utilise-t-elle cette image d'en-tête ? (avant suppression Storage) */
+  async function headerUsedElsewhere(url) {
+    try {
+      const { used } = await adminCall("headerUsedElsewhere", cid, { url }, tokenRef.current);
+      return used;
+    } catch (e) { console.error(e); return true; } // en cas de doute, on ne supprime pas
+  }
+
+  /* Renommage de l'instance (débouncé). */
   function renameInstance(n) {
     setCampaignName(n);
     if (nameTimer.current) clearTimeout(nameTimer.current);
     nameTimer.current = setTimeout(() => {
-      supabase.from("ffbb_campaigns").update({ name: n }).eq("id", cid)
-        .then(({ error }) => { if (error) console.error(error); });
+      adminCall("rename", cid, { name: n }, tokenRef.current).catch(e => console.error(e));
     }, 500);
   }
 
-  useEffect(() => {
-    // Authentifié au super-admin (mot de passe maître) → accès direct sans le mot de passe d'instance.
-    if (typeof window !== "undefined" && sessionStorage.getItem("ffbb_super_admin") === "1") setAuthed(true);
-    refreshCounts().catch(e => console.error(e)).finally(() => setLoading(false));
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (nameTimer.current) clearTimeout(nameTimer.current);
-    };
-  }, [cid]);
-
-  /* Sauvegarde débouncée de la config dans ffbb_campaigns. */
+  /* Sauvegarde débouncée de la config. */
   function persistConfig(cfg) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      supabase.from("ffbb_campaigns").update({ config: cfg }).eq("id", cid)
-        .then(({ error }) => { if (error) console.error(error); });
+      adminCall("saveConfig", cid, { config: cfg }, tokenRef.current).catch(e => console.error(e));
     }, 500);
   }
 
@@ -92,58 +116,51 @@ export default function AdminApp({ campaign }) {
     });
   }
 
-  /* Ajout par lots (chunks de 500) avec dédup côté base (contrainte unique
-     campaign_id,code). « added » = delta réel de compteur. Tient des dizaines de milliers. */
-  async function addCodes(list) {
-    const seen = new Set();
-    const fresh = [];
-    list.forEach(code => { const k = code.toLowerCase(); if (!seen.has(k)) { seen.add(k); fresh.push(code); } });
-    if (!fresh.length) return { added: 0, total: list.length };
-    const before = (await supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid)).count || 0;
-    for (let i = 0; i < fresh.length; i += 500) {
-      const rows = fresh.slice(i, i + 500).map(code => ({ campaign_id: cid, code, status: "available", assigned_to: null }));
-      const { error } = await supabase.from("ffbb_codes").upsert(rows, { onConflict: "campaign_id,code", ignoreDuplicates: true });
-      if (error) { console.error(error); await refreshCounts(); return { added: 0, total: list.length, error: true }; }
+  /* Connexion réussie (mot de passe vérifié côté serveur) → jeton + config complète. */
+  async function applyAuth(result) {
+    tokenRef.current = result.token;
+    if (result.campaign) {
+      setConfig(result.campaign.config);
+      if (result.campaign.name != null) setCampaignName(result.campaign.name);
     }
-    const after = (await supabase.from("ffbb_codes").select("*", { count: "exact", head: true }).eq("campaign_id", cid)).count || 0;
-    await refreshCounts();
-    return { added: after - before, total: list.length };
+    setAuthed(true);
+    try { await refreshCounts(); } catch (e) { console.error(e); }
   }
 
-  async function resetAll() {
-    const r1 = await supabase.from("ffbb_registrations").delete().eq("campaign_id", cid);
-    const r2 = await supabase.from("ffbb_codes").delete().eq("campaign_id", cid);
-    if (r1.error || r2.error) { console.error(r1.error || r2.error); return; }
-    await refreshCounts();
-  }
-
-  /* Recherche d'inscriptions (par code, e-mail ou nom) — pour « qui a reçu tel code ». */
-  async function searchRegistrations(q) {
-    const term = (q || "").trim();
-    if (!term) return [];
-    const esc = term.replace(/[%,()]/g, " ");
-    const { data, error } = await supabase
-      .from("ffbb_registrations").select("*").eq("campaign_id", cid)
-      .or(`code.ilike.%${esc}%,email.ilike.%${esc}%,nom.ilike.%${esc}%,prenom.ilike.%${esc}%`)
-      .order("created_at", { ascending: false }).limit(50);
-    if (error) { console.error(error); return []; }
-    return (data || []).map(r => ({ ...r, date: r.created_at }));
-  }
-
-  /* Toutes les inscriptions (paginé) — pour l'export CSV complet. */
-  async function fetchAllRegistrations() {
-    const all = [];
-    const PAGE = 1000;
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
-        .from("ffbb_registrations").select("*").eq("campaign_id", cid)
-        .order("created_at", { ascending: true }).range(from, from + PAGE - 1);
-      if (error) { console.error(error); break; }
-      all.push(...(data || []));
-      if (!data || data.length < PAGE) break;
-    }
-    return all.map(r => ({ ...r, date: r.created_at }));
-  }
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const ct = getCampaignToken(slug);
+      const mt = getMasterToken();
+      try {
+        if (ct) {
+          // Jeton de campagne stocké → on le revalide et on charge la config complète.
+          const r = await adminCall("getConfig", cid, {}, ct);
+          if (!alive) return;
+          tokenRef.current = ct;
+          setConfig(r.config);
+          if (r.name != null) setCampaignName(r.name);
+          setAuthed(true);
+          await refreshCounts();
+        } else if (mt) {
+          // Session super-admin ouverte → entrée directe sans re-saisie.
+          const r = await authCampaign(slug, { token: mt });
+          if (!alive) return;
+          await applyAuth(r);
+        }
+      } catch (e) {
+        // Jeton invalide/expiré → on nettoie et on affiche le login.
+        setCampaignToken(slug, null);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (nameTimer.current) clearTimeout(nameTimer.current);
+    };
+  }, [cid]);
 
   if (loading) return <Loader />;
 
@@ -152,15 +169,15 @@ export default function AdminApp({ campaign }) {
       {authed ? (
         <Admin
           config={config} counts={counts} slug={slug} campaignName={campaignName} renameInstance={renameInstance}
-          mutateCfg={mutateCfg} addCodes={addCodes} resetAll={resetAll}
+          mutateCfg={mutateCfg} addCodes={addCodes} resetAll={resetAll} headerUsedElsewhere={headerUsedElsewhere}
           searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} fetchRegistrationsPage={fetchRegistrationsPage}
           onExit={() => router.push(`/${slug}`)}
-          onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
+          onLogout={() => { setCampaignToken(slug, null); tokenRef.current = null; setAuthed(false); }}
         />
       ) : (
         <AdminLogin
-          config={config} campaignName={campaignName}
-          onOk={() => setAuthed(true)}
+          slug={slug} campaignName={campaignName}
+          onAuthed={applyAuth}
           onBack={() => router.push(`/${slug}`)}
         />
       )}
@@ -169,10 +186,21 @@ export default function AdminApp({ campaign }) {
 }
 
 /* ----------------------------- ADMIN LOGIN ----------------------------- */
-function AdminLogin({ config, campaignName, onOk, onBack }) {
+function AdminLogin({ slug, campaignName, onAuthed, onBack }) {
   const [pw, setPw] = useState("");
-  const [err, setErr] = useState(false);
-  const tryLogin = () => (pw === config.adminPassword ? onOk() : setErr(true));
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function tryLogin() {
+    if (busy) return;
+    setBusy(true); setErr("");
+    try {
+      const r = await authCampaign(slug, { password: pw });
+      await onAuthed(r);
+    } catch (e) {
+      setErr(e.status === 401 ? "Mot de passe incorrect." : "Connexion impossible. Réessayez.");
+      setBusy(false);
+    }
+  }
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "60px 16px" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
@@ -182,11 +210,11 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
           </div>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: "0 0 4px", letterSpacing: "-0.4px" }}>Espace administrateur</h2>
           {campaignName && <p style={{ color: "#888", fontSize: 13.5, margin: "0 0 16px" }}>{campaignName}</p>}
-          <input type="password" value={pw} placeholder="Mot de passe" onChange={e => { setPw(e.target.value); setErr(false); }}
+          <input type="password" value={pw} placeholder="Mot de passe" onChange={e => { setPw(e.target.value); setErr(""); }}
             onKeyDown={e => { if (e.key === "Enter") tryLogin(); }}
             style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${err ? "#b3261e" : C.cardLine}`, fontSize: 15, boxSizing: "border-box", color: C.ink, background: "#fff", outline: "none" }} />
-          {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>Mot de passe incorrect.</div>}
-          <button onClick={tryLogin} style={btnPrimary}>Se connecter</button>
+          {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>{err}</div>}
+          <button onClick={tryLogin} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "Connexion…" : "Se connecter"}</button>
           <button onClick={onBack} style={{ ...btnGhost, marginTop: 8 }}><ArrowLeft size={15} /> Retour au formulaire</button>
         </Card>
       </div>
@@ -195,7 +223,7 @@ function AdminLogin({ config, campaignName, onOk, onBack }) {
 }
 
 /* ----------------------------- ADMIN ----------------------------- */
-function Admin({ config, counts, slug, campaignName, renameInstance, mutateCfg, addCodes, resetAll, searchRegistrations, fetchAllRegistrations, fetchRegistrationsPage, onExit, onLogout }) {
+function Admin({ config, counts, slug, campaignName, renameInstance, mutateCfg, addCodes, resetAll, headerUsedElsewhere, searchRegistrations, fetchAllRegistrations, fetchRegistrationsPage, onExit, onLogout }) {
   const [tab, setTab] = useState("codes");
   const { total, available, assigned, regs: regsCount, newsletter: newsletterCount } = counts;
 
@@ -279,7 +307,7 @@ function Admin({ config, counts, slug, campaignName, renameInstance, mutateCfg, 
       {tab === "regs" && <RegsTab total={regsCount} searchRegistrations={searchRegistrations} fetchAllRegistrations={fetchAllRegistrations} fetchRegistrationsPage={fetchRegistrationsPage} />}
       {tab === "promote" && <PromoteTab slug={slug} />}
       {tab === "email" && <EmailTab config={config} mutateCfg={mutateCfg} />}
-      {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} />}
+      {tab === "settings" && <SettingsTab config={config} mutateCfg={mutateCfg} resetAll={resetAll} slug={slug} campaignName={campaignName} renameInstance={renameInstance} headerUsedElsewhere={headerUsedElsewhere} />}
     </div>
   );
 }
@@ -654,7 +682,7 @@ function LicenseCard({ config, mutateCfg }) {
   );
 }
 
-function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameInstance }) {
+function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameInstance, headerUsedElsewhere }) {
   const c = config;
   const set = (patch) => mutateCfg(cfg => Object.assign(cfg, patch));
   const [reset, setReset] = useState(false);
@@ -670,7 +698,7 @@ function SettingsTab({ config, mutateCfg, resetAll, slug, campaignName, renameIn
     const path = storagePath(url);
     if (!path) return;
     // Ne pas supprimer un fichier encore utilisé par une autre instance (ex. duplication).
-    if (await isHeaderUsedElsewhere(url, slug)) return;
+    if (await headerUsedElsewhere(url)) return;
     const { error } = await supabase.storage.from("ffbb-assets").remove([path]);
     if (error) console.error("Suppression storage:", error);
   }
