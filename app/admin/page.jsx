@@ -77,12 +77,27 @@ export default function SuperAdminPage() {
 function MasterLogin({ master, onOk }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverMsg, setRecoverMsg] = useState("");
   const tryLogin = () => {
     if (pw === (master?.masterPassword ?? "admin")) {
       try { sessionStorage.setItem("ffbb_super_admin", "1"); } catch (e) {}
       onOk();
     } else setErr(true);
   };
+  async function recover() {
+    setRecovering(true); setRecoverMsg("");
+    try {
+      const res = await fetch("/api/ffbb/admin-recover", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) setRecoverMsg(`✅ Le mot de passe a été envoyé à ${data.hint || "l'adresse du propriétaire"}.`);
+      else setRecoverMsg(`⚠️ ${data.error || "Envoi impossible."}`);
+    } catch (e) {
+      setRecoverMsg("⚠️ Envoi impossible.");
+    } finally {
+      setRecovering(false);
+    }
+  }
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "60px 16px" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
@@ -97,6 +112,11 @@ function MasterLogin({ master, onOk }) {
             style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${err ? "#b3261e" : C.cardLine}`, fontSize: 15, boxSizing: "border-box", color: C.ink, background: "#fff", outline: "none" }} />
           {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>Mot de passe incorrect.</div>}
           <button onClick={tryLogin} style={btnPrimary}>Se connecter</button>
+          <button onClick={recover} disabled={recovering}
+            style={{ background: "none", border: "none", color: "#888", fontSize: 13, textDecoration: "underline", cursor: "pointer", marginTop: 12, padding: 0, width: "100%", textAlign: "center" }}>
+            {recovering ? "Envoi en cours…" : "Mot de passe oublié ?"}
+          </button>
+          {recoverMsg && <div style={{ fontSize: 13, marginTop: 10, color: recoverMsg.startsWith("✅") ? "#0a7d4f" : "#b3261e", textAlign: "center" }}>{recoverMsg}</div>}
         </Card>
       </div>
     </div>
