@@ -279,6 +279,18 @@ export async function loadMasterConfig() {
   return data?.data || { masterPassword: "admin" };
 }
 
+/* Met à jour les réglages globaux (ffbb_config id=1) sans écraser les autres clés
+   de `data` (ex. réglages du formulaire par défaut stockés sur la même ligne). */
+export async function saveMasterConfig(patch) {
+  const current = await loadMasterConfig();
+  const next = { ...current, ...patch };
+  const { error } = await supabase
+    .from("ffbb_config")
+    .upsert({ id: 1, data: next }, { onConflict: "id" });
+  if (error) throw error;
+  return next;
+}
+
 /* Construit et envoie l'e-mail de bienvenue réel via la route serveur /api/ffbb/send. */
 export async function sendWelcomeEmail(reg, config) {
   const vars = {

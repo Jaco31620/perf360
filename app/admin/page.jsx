@@ -8,11 +8,11 @@
  * Dispositif autonome : AUCUN lien vers l'accueil perf360.
  */
 import { useState, useEffect } from "react";
-import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy } from "lucide-react";
+import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy, ShieldCheck } from "lucide-react";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
-  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword, duplicateHeaderImage,
+  listCampaigns, createCampaign, deleteCampaign, loadMasterConfig, saveMasterConfig, loadCampaignBySlug, RESERVED_SLUGS, generatePassword, duplicateHeaderImage,
 } from "../ffbb-test/shared";
 
 function slugify(s) {
@@ -66,6 +66,8 @@ export default function SuperAdminPage() {
       <Dashboard
         campaigns={campaigns}
         refresh={refresh}
+        master={master}
+        onMasterChange={setMaster}
         onLogout={() => { try { sessionStorage.removeItem("ffbb_super_admin"); } catch (e) {} setAuthed(false); }}
       />
     </PageShell>
@@ -101,7 +103,7 @@ function MasterLogin({ master, onOk }) {
   );
 }
 
-function Dashboard({ campaigns, refresh, onLogout }) {
+function Dashboard({ campaigns, refresh, master, onMasterChange, onLogout }) {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [dupFrom, setDupFrom] = useState("");
@@ -260,8 +262,78 @@ function Dashboard({ campaigns, refresh, onLogout }) {
         <p style={{ ...pSub, marginTop: 14 }}>⚠️ Supprimer une instance efface aussi ses codes et ses inscriptions (irréversible).</p>
       </DarkCard>
 
+      <div style={{ height: 16 }} />
+
+      <SecurityCard master={master} onMasterChange={onMasterChange} />
+
       {invite && <InviteModal invite={invite} onClose={() => setInvite(null)} />}
     </div>
+  );
+}
+
+/* Sécurité du super-admin : changer le mot de passe maître (ffbb_config id=1).
+   Le mot de passe protège l'accès à TOUTES les instances — à garder fort. */
+function SecurityCard({ master, onMasterChange }) {
+  const current = master?.masterPassword ?? "admin";
+  const isDefault = current === "admin";
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setErr(""); setMsg("");
+    if (pw1.length < 6) { setErr("Le mot de passe doit faire au moins 6 caractères."); return; }
+    if (pw1 !== pw2) { setErr("Les deux mots de passe ne correspondent pas."); return; }
+    setBusy(true);
+    try {
+      const next = await saveMasterConfig({ masterPassword: pw1 });
+      onMasterChange?.(next);
+      setPw1(""); setPw2("");
+      setMsg("Mot de passe maître mis à jour.");
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) {
+      console.error(e);
+      setErr("Enregistrement impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DarkCard>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <ShieldCheck size={18} color={C.green} />
+        <h3 style={{ ...h3, margin: 0 }}>Sécurité</h3>
+      </div>
+      <p style={{ ...pSub, marginTop: 8 }}>Mot de passe maître du super-admin — il protège l'accès à toutes les instances.</p>
+      {isDefault && (
+        <div style={{ background: "rgba(255,122,107,0.12)", border: "1px solid #ff7a6b", borderRadius: 10, padding: "10px 12px", margin: "0 0 14px", color: "#ffb3a8", fontSize: 13 }}>
+          ⚠️ Le mot de passe est actuellement la valeur par défaut <code>admin</code>. Change-le.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 220px" }}>
+          <label style={lbl}>Nouveau mot de passe</label>
+          <input type={show ? "text" : "password"} value={pw1} onChange={e => { setPw1(e.target.value); setErr(""); }} style={darkInput} />
+        </div>
+        <div style={{ flex: "1 1 220px" }}>
+          <label style={lbl}>Confirmer</label>
+          <input type={show ? "text" : "password"} value={pw2} onChange={e => { setPw2(e.target.value); setErr(""); }}
+            onKeyDown={e => { if (e.key === "Enter") save(); }} style={darkInput} />
+        </div>
+      </div>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 7, color: C.gray, fontSize: 13, marginTop: 10, cursor: "pointer" }}>
+        <input type="checkbox" checked={show} onChange={e => setShow(e.target.checked)} /> Afficher les mots de passe
+      </label>
+      {err && <div style={{ color: "#ff7a6b", fontSize: 13, marginTop: 10 }}>{err}</div>}
+      {msg && <div style={{ color: C.green, fontSize: 13, marginTop: 10 }}>✅ {msg}</div>}
+      <button onClick={save} disabled={busy || !pw1} style={{ ...btnPrimary, width: "auto", marginTop: 14, opacity: busy || !pw1 ? 0.6 : 1 }}>
+        <Key size={16} /> Enregistrer le mot de passe
+      </button>
+    </DarkCard>
   );
 }
 
