@@ -1,0 +1,34 @@
+# Maintien Supabase — déclencheur INDÉPENDANT de Vercel.
+#
+# Pourquoi : le Cron Vercel (vercel.json) ne s'est pas révélé fiable sur l'offre
+# gratuite et le projet Supabase a failli être mis en pause (mail du 26/06).
+# Cette Action GitHub appelle l'endpoint /api/keep-alive deux fois par jour, ce
+# qui force une vraie requête sur la base et réinitialise le compteur
+# d'inactivité (~7 jours sur l'offre gratuite Supabase).
+#
+# L'endpoint est public et inoffensif (aucune écriture, aucune donnée renvoyée),
+# donc aucun secret n'est nécessaire ici.
+
+name: Supabase keep-alive
+
+on:
+  schedule:
+    # 2 passages/jour (UTC), minutes décalées car GitHub déconseille HH:00
+    # (forte charge) et peut décaler/sauter les exécutions planifiées.
+    - cron: "17 7 * * *"
+    - cron: "17 19 * * *"
+  workflow_dispatch: {} # permet un déclenchement manuel depuis l'onglet Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping keep-alive
+        run: |
+          echo "Ping de l'endpoint de maintien Supabase…"
+          code=$(curl -sS -m 30 -o /tmp/body.txt -w "%{http_code}" \
+            https://perf360.vercel.app/api/keep-alive)
+          echo "HTTP $code"
+          echo "Réponse : $(cat /tmp/body.txt)"
+          # Échec du job si l'endpoint ne répond pas 200 → notification GitHub.
+          test "$code" = "200"
