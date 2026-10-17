@@ -27,6 +27,16 @@ export default function Presenter({ code }) {
   const [settings, setSettings] = useState(false);
   const [origin, setOrigin] = useState("");
   const [viewOnly, setViewOnly] = useState(false);
+  const [qrBoxH, setQrBoxH] = useState(0); // hauteur du cadre QR → hauteur de l'image de titre
+  const qrBoxRef = useRef(null);
+
+  useEffect(() => {
+    const el = qrBoxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setQrBoxH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const token = useRef(null);
 
   useEffect(() => {
@@ -125,11 +135,12 @@ export default function Presenter({ code }) {
       <header className="flex items-start gap-6 px-6 sm:px-10 pt-6">
         <div className="flex-1 min-w-0">
           {t.image
-            ? <img src={t.image} alt={s?.question || ""} className="block max-h-[16vh] max-w-full object-contain object-left" />
+            ? <img src={t.image} alt={s?.question || ""} className="block max-w-full object-contain object-left"
+                style={qrBoxH ? { height: qrBoxH } : { maxHeight: "16vh" }} />
             : <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>}
           {s && s.status !== "open" && <p className="mt-2 text-sm font-semibold" style={{ color: t.sub }}>🔒 Envois fermés</p>}
         </div>
-        <button onClick={() => setBigQr(true)} className="hidden sm:flex items-center gap-4 rounded-2xl p-3 shrink-0 text-left" style={{ background: t.panel }}>
+        <button ref={qrBoxRef} onClick={() => setBigQr(true)} className="hidden sm:flex items-center gap-4 rounded-2xl p-3 shrink-0 text-left" style={{ background: t.panel }}>
           <div className="text-sm leading-snug">
             <div style={{ color: t.sub }}>Rendez-vous sur</div>
             <div className="font-bold">{host}/nuage</div>
