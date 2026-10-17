@@ -136,7 +136,10 @@ export default function Presenter({ code }) {
         <div className="flex-1 min-w-0">
           {t.image
             ? <img src={t.image} alt={s?.question || ""} className="block max-w-full object-contain object-left"
-                style={qrBoxH ? { height: qrBoxH } : { maxHeight: "16vh" }} />
+                style={qrBoxH
+                  // ~1,3× le cadre QR, plafonné (hauteur 22 % de l'écran, largeur 45 %)
+                  ? { height: Math.round(qrBoxH * 1.3), maxHeight: "22vh", maxWidth: "45vw" }
+                  : { maxHeight: "16vh" }} />
             : <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>}
           {s && s.status !== "open" && <p className="mt-2 text-sm font-semibold" style={{ color: t.sub }}>🔒 Envois fermés</p>}
         </div>
