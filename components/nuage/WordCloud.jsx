@@ -162,7 +162,21 @@ const gap = (a, b) => Math.hypot(
 );
 
 /* Place les mots (triés par fréquence décroissante) ; renvoie null si l'un ne rentre pas. */
-function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread, fx, obstacles = [] }) {
+/* Zone d'impression : ellipse centrée dont la taille suit le nombre de mots
+ * (petite avec peu de mots → mots de taille raisonnable ; ≈ tout l'écran à
+ * partir de ~35 mots). Légèrement plus grande que l'écran au maximum, pour que
+ * les coins ne restent pas complètement vides. */
+function ellipseFor(n, W, H) {
+  const k = Math.min(1, 0.25 + 0.75 * Math.sqrt(n / 40)) * 1.1;
+  return { cx: W / 2, cy: H / 2, rx: (W / 2) * k, ry: (H / 2) * k };
+}
+/* Taille maximale du plus gros mot : modeste avec peu de mots. */
+const maxFontFor = (n, H) => H * (0.14 + 0.18 * Math.min(1, n / 12));
+const ellNorm = (e, x, y) => Math.hypot((x - e.cx) / e.rx, (y - e.cy) / e.ry);
+const insideEllipse = (e, b) =>
+  ellNorm(e, b.x, b.y) <= 1 && ellNorm(e, b.x + b.w, b.y) <= 1 && ellNorm(e, b.x, b.y + b.h) <= 1 && ellNorm(e, b.x + b.w, b.y + b.h) <= 1;
+
+function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread, fx, obstacles = [], ellipse }) {
   const placed = [];
   const cx = W / 2, cy = H / 2;
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
@@ -176,6 +190,11 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     const x0 = Math.max(0, Math.floor(o.x / CELL)), x1 = Math.min(GW, Math.ceil((o.x + o.w) / CELL));
     const y0 = Math.max(0, Math.floor(o.y / CELL)), y1 = Math.min(GH, Math.ceil((o.y + o.h) / CELL));
     for (let y = y0; y < y1; y++) board.fill(1, y * GW + x0, y * GW + x1);
+  }
+  // hors de l'ellipse : interdit
+  if (ellipse) {
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++)
+      if (ellNorm(ellipse, (x + 0.5) * CELL, (y + 0.5) * CELL) > 1) board[y * GW + x] = 1;
   }
   const collides = (mask, gx, gy) => {
     const r = mask.runs;
@@ -229,7 +248,8 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
       if (gx < 0 || gy < 0 || gx + mask.cw > GW || gy + mask.ch > GH) return false;
       const box = { x: gx * CELL, y: gy * CELL, w, h };
       // rectangle libre → pas besoin du masque ; sinon test lettre à lettre
-      if ((placed.some((p) => overlaps(box, p)) || obstacles.some((o) => overlaps(box, o))) && collides(mask, gx, gy)) return false;
+      const maybe = placed.some((p) => overlaps(box, p)) || obstacles.some((o) => overlaps(box, o)) || (ellipse && !insideEllipse(ellipse, box));
+      if (maybe && collides(mask, gx, gy)) return false;
       const score = alignment(box, box.y + m + mt.asc * k, size, placed, fx);
       if (score >= 1) { spot = box; return true; }
       if (!fallback) fallbackR = r;
@@ -308,7 +328,8 @@ function placeAll(list, W, H, opts) {
   // Taille plancher : en dessous, on préfère laisser de côté les mots les moins
   // cités plutôt que de rendre tout le nuage illisible.
   const floor = Math.max(24, Math.min(W, H) * 0.09);
-  const free = W * H - (opts.obstacles || []).reduce((sum, o) => sum + o.w * o.h, 0);
+  const e = opts.ellipse;
+  const free = (e ? Math.min(W * H, Math.PI * e.rx * e.ry) : W * H) - (opts.obstacles || []).reduce((sum, o) => sum + o.w * o.h, 0);
   let maxFont = Math.max(floor, Math.min(H * 0.3, W * 0.18, 160, Math.sqrt((0.45 * free) / area)));
   for (let i = 0; i < 10; i++) {
     const atFloor = maxFont <= floor || i === 9;
@@ -320,7 +341,8 @@ function placeAll(list, W, H, opts) {
       // Avec obstacles, pas d'agrandissement final (il les chevaucherait) : on
       // agrandit plutôt la police tant que tous les mots trouvent leur place.
       let best = res;
-      for (let g = 0; g < 6 && maxFont < Math.min(H * 0.4, W * 0.25, 300); g++) {
+      const cap = Math.min(maxFontFor(list.length, H), W * 0.25, 300);
+      for (let g = 0; g < 6 && maxFont * 1.18 <= cap; g++) {
         maxFont *= 1.18;
         const next = tryLayout(list, W, H, maxFont, Math.max(12, maxFont * 0.2), maxN, false, opts);
         if (!next) break;
@@ -342,17 +364,26 @@ const bounds = (placed) => {
 /* Agrandit uniformément le nuage pour qu'il remplisse l'écran (les proportions
  * et les écarts sont conservés, donc aucun chevauchement). Le plus gros mot ne
  * dépasse pas 45 % de la hauteur, pour ne pas écraser un nuage de 1–2 mots. */
-function fit(placed, W, H) {
+function fit(placed, W, H, e) {
   if (!placed.length) return { placed, scale: 1 };
-  const b = bounds(placed);
   const biggest = Math.max(...placed.map((p) => p.size));
-  const s = Math.max(1, Math.min(W / b.w, H / b.h, (H * 0.45) / biggest));
-  const dx = (W - b.w * s) / 2 - b.x0 * s, dy = (H - b.h * s) / 2 - b.y0 * s;
+  // agrandissement autour du centre de l'ellipse, jusqu'à ce qu'un coin de mot
+  // touche l'ellipse ou le bord de l'écran
+  let s = maxFontFor(placed.length, H) / biggest;
+  for (const p of placed) {
+    for (const [x, y] of [[p.x, p.y], [p.x + p.w, p.y], [p.x, p.y + p.h], [p.x + p.w, p.y + p.h]]) {
+      const n = ellNorm(e, x, y);
+      if (n > 0) s = Math.min(s, 1 / n);
+      if (x < e.cx) s = Math.min(s, e.cx / (e.cx - x)); else if (x > e.cx) s = Math.min(s, (W - e.cx) / (x - e.cx));
+      if (y < e.cy) s = Math.min(s, e.cy / (e.cy - y)); else if (y > e.cy) s = Math.min(s, (H - e.cy) / (y - e.cy));
+    }
+  }
+  s = Math.max(1, s);
+  const tx = (v) => e.cx + (v - e.cx) * s, ty = (v) => e.cy + (v - e.cy) * s;
   return {
     scale: s * biggest,
     placed: placed.map((p) => ({
-      ...p, x: p.x * s + dx, y: p.y * s + dy, w: p.w * s, h: p.h * s, size: p.size * s,
-      bx: p.bx * s + dx, by: p.by * s + dy,
+      ...p, x: tx(p.x), y: ty(p.y), w: p.w * s, h: p.h * s, size: p.size * s, bx: tx(p.bx), by: ty(p.by),
     })),
   };
 }
@@ -361,17 +392,18 @@ function layout(words, W, H, weight, spread, effect, obstacles = []) {
   const fx = EFFECTS[effect] || EFFECTS.medium;
   if (!words.length || W < 50 || H < 50) return [];
   const list = words.slice(0, MAX_WORDS);
-  if (obstacles.length) return placeAll(list, W, H, { weight, stretch: 1, spread, fx, obstacles, grow: true });
+  const ellipse = ellipseFor(list.length, W, H);
+  if (obstacles.length) return placeAll(list, W, H, { weight, stretch: 1, spread, fx, obstacles, ellipse, grow: true });
   // 1er essai : spirale aux proportions de l'écran. Puis on corrige l'ellipse
   // d'après la forme obtenue (trop large / trop haute) et on garde le meilleur
   // remplissage (= le plus gros mot après agrandissement).
-  const a = placeAll(list, W, H, { weight, stretch: 1, spread, fx });
+  const a = placeAll(list, W, H, { weight, stretch: 1, spread, fx, ellipse });
   if (!a.length) return [];
   const b0 = bounds(a);
   const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
-  const fa = fit(a, W, H);
+  const fa = fit(a, W, H, ellipse);
   if (Math.abs(stretch - 1) < 0.25) return fa.placed; // forme déjà adaptée : pas de 2e passe
-  const fb = fit(placeAll(list, W, H, { weight, stretch, spread, fx }), W, H);
+  const fb = fit(placeAll(list, W, H, { weight, stretch, spread, fx, ellipse }), W, H, ellipse);
   return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
 }
 
