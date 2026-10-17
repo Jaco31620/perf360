@@ -59,24 +59,23 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
   const placed = [];
   const cx = W / 2, cy = H / 2;
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
-  const rMax = Math.hypot(W, H) * Math.max(sa, 1 / sa);
+  const rMax = Math.max(W / sa, H * sa) * 1.05;
   let failed = false;
 
   /* Point de départ de la spirale d'un mot.
    * - « centre » : tous autour du centre (léger décentrage stable) → les plus
    *   cités au milieu.
-   * - « réparti » : les 6 plus cités sont disposés en couronne (angle d'or) loin
-   *   les uns des autres, les autres partent d'un point stable au hasard ; les
-   *   petits mots viennent combler les espaces entre les gros. */
+   * - « réparti » : les plus cités (jusqu'à 6) sont disposés en couronne
+   *   (angle d'or), espacés entre eux ; tous les autres repartent du centre, si
+   *   bien que les petits mots comblent les espaces entre les gros et que le
+   *   nuage reste dense (pas de mots isolés). */
   function anchor(word, rank, hk) {
     const u = ((hk >>> 8) % 1000) / 1000, v = ((hk >>> 18) % 1000) / 1000;
-    if (!spread) return [cx + (u - 0.5) * W * 0.06, cy + (v - 0.5) * H * 0.06];
-    if (rank < 6) {
-      const a = 0.6 + rank * 2.39996;
-      const rad = rank === 0 ? 0.18 : 0.3;
-      return [cx + Math.cos(a) * rad * W, cy + Math.sin(a) * rad * H];
-    }
-    return [W * (0.08 + 0.84 * u), H * (0.1 + 0.8 * v)];
+    const center = [cx + (u - 0.5) * W * 0.06, cy + (v - 0.5) * H * 0.06];
+    if (!spread || rank >= Math.min(6, Math.ceil(words.length / 5))) return center;
+    const a = 0.6 + rank * 2.39996;
+    const rad = rank === 0 ? 0.08 : 0.24;
+    return [cx + Math.cos(a) * rad * W, cy + Math.sin(a) * rad * H];
   }
   words.forEach((word, rank) => tryPlace(word, rank));
   return failed ? null : placed;
@@ -98,19 +97,32 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     const [ax, ay] = anchor(word, rank, hk);
     let spot = null;
     let last = null; // dernier obstacle rencontré : souvent le même au pas suivant
-    for (let t = 0, r = 0; r < rMax; ) {
-      const x = ax + r * Math.cos(dir * t + start) * sa - w / 2;
-      const y = ay + r * Math.sin(dir * t + start) / sa - h / 2;
-      if (x >= 0 && y >= 0 && x + w <= W && y + h <= H) {
-        const box = { x, y, w, h };
-        if (!(last && overlaps(box, last))) {
-          last = placed.find((p) => overlaps(box, p)) || null;
-          if (!last) { spot = box; break; }
-        }
+    const test = (x, y) => {
+      if (x < 0 || y < 0 || x + w > W || y + h > H) return false;
+      const box = { x, y, w, h };
+      if (last && overlaps(box, last)) return false;
+      last = placed.find((p) => overlaps(box, p)) || null;
+      if (last) return false;
+      spot = box;
+      return true;
+    };
+    // Spirale RECTANGULAIRE aux proportions de l'écran : anneaux rectangulaires
+    // de plus en plus grands, parcourus à partir d'un point propre au mot. Le
+    // nuage prend ainsi la forme de l'écran (coins compris) au lieu d'une ellipse.
+    const phase = start / 6.28;
+    search: for (let r = 0; r < rMax; r += 8) {
+      const hw = r * sa, hh = r / sa;
+      const per = 4 * (hw + hh);
+      const n = Math.max(1, Math.floor(per / 6));
+      for (let i = 0; i < n; i++) {
+        let d = ((i / n + phase) % 1) * per;
+        let px, py;
+        if (d < 2 * hw) { px = -hw + d; py = -hh; }
+        else if ((d -= 2 * hw) < 2 * hh) { px = hw; py = -hh + d; }
+        else if ((d -= 2 * hh) < 2 * hw) { px = hw - d; py = hh; }
+        else { d -= 2 * hw; px = -hw; py = hh - d; }
+        if (test(ax + dir * px - w / 2, ay + py - h / 2)) break search;
       }
-      // pas angulaire ≈ 5 px d'arc, spirale d'Archimède r = 2.2·t
-      t += 5 / Math.max(r, 8);
-      r = 2.2 * t;
     }
     if (!spot) { if (!allowDrop) failed = true; return; }
     // point d'ancrage SVG = ligne de base, début du texte
@@ -163,6 +175,35 @@ function placeAll(list, W, H, opts) {
   return [];
 }
 
+/* Tassement : chaque mot glisse par petits pas vers le centre tant qu'il ne
+ * touche aucun autre mot (essai en diagonale, puis horizontal, puis vertical).
+ * Les espaces vides se referment ; l'agrandissement (fit) en profite ensuite. */
+function compact(placed, W, H) {
+  const ps = placed.map((p) => ({ ...p }));
+  const cx = W / 2, cy = H / 2;
+  for (let iter = 0; iter < 40; iter++) {
+    let moved = false;
+    for (const p of ps) {
+      // direction vers le centre mesurée en proportion de l'écran : le nuage
+      // se resserre en gardant une forme rectangulaire (coins remplis)
+      const vx = (cx - (p.x + p.w / 2)) / W, vy = (cy - (p.y + p.h / 2)) / H;
+      const len = Math.hypot(vx, vy);
+      if (len < 0.002) continue;
+      const ux = (vx / len) * 6 * Math.sqrt(W / H), uy = (vy / len) * 6 / Math.sqrt(W / H);
+      for (const [dx, dy] of [[ux, uy], [ux, 0], [0, uy]]) {
+        if (Math.abs(dx) + Math.abs(dy) < 0.5) continue;
+        const box = { x: p.x + dx, y: p.y + dy, w: p.w, h: p.h };
+        if (ps.some((q) => q !== p && overlaps(box, q))) continue;
+        p.x += dx; p.y += dy; p.bx += dx; p.by += dy;
+        moved = true;
+        break;
+      }
+    }
+    if (!moved) break;
+  }
+  return ps;
+}
+
 const bounds = (placed) => {
   const x0 = Math.min(...placed.map((p) => p.x)), y0 = Math.min(...placed.map((p) => p.y));
   const x1 = Math.max(...placed.map((p) => p.x + p.w)), y1 = Math.max(...placed.map((p) => p.y + p.h));
@@ -197,9 +238,9 @@ function layout(words, W, H, weight, spread) {
   if (!a.length) return [];
   const b0 = bounds(a);
   const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
-  const fa = fit(a, W, H);
+  const fa = fit(compact(a, W, H), W, H);
   if (Math.abs(stretch - 1) < 0.05) return fa.placed;
-  const fb = fit(placeAll(list, W, H, { weight, stretch, spread }), W, H);
+  const fb = fit(compact(placeAll(list, W, H, { weight, stretch, spread }), W, H), W, H);
   return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
 }
 
