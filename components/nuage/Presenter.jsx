@@ -26,13 +26,21 @@ export default function Presenter({ code }) {
   const [bigQr, setBigQr] = useState(false);
   const [settings, setSettings] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [viewOnly, setViewOnly] = useState(false);
   const token = useRef(null);
 
   useEffect(() => {
+    // ?affichage : écran de diffusion seul (TV, 2e écran…) — aucun réglage,
+    // même sur un appareil où l'on est présentateur.
+    if (new URLSearchParams(window.location.search).has("affichage")) {
+      setViewOnly(true);
+      setOrigin(window.location.origin);
+      return;
+    }
     const m = window.location.hash.match(/t=([a-f0-9]+)/);
     if (m) {
       setAdminToken(code, m[1]);
-      history.replaceState(null, "", window.location.pathname);
+      history.replaceState(null, "", window.location.pathname + window.location.search);
     }
     token.current = getAdminToken(code);
     setOrigin(window.location.origin);
@@ -152,7 +160,7 @@ export default function Presenter({ code }) {
             {s.status === "open" ? "⏸ Fermer les envois" : "▶ Ouvrir les envois"}
           </button>
         )}
-        {data?.words.length > 0 && (
+        {!viewOnly && data?.words.length > 0 && (
           <button onClick={() => exportCloudImage({ words: data.words, theme: t, question: s?.question, filename: `nuage-${code}.png` })}
             className={btn} style={{ background: t.panel }} title="Enregistrer le nuage en image (sans QR code ni boutons)">
             ⬇ Image
@@ -163,9 +171,9 @@ export default function Presenter({ code }) {
             ✉️ Envoyer
           </button>
         )}
-        <button onClick={() => setBigQr(true)} className={btn} style={{ background: t.panel }}>QR code</button>
+        {!viewOnly && <button onClick={() => setBigQr(true)} className={btn} style={{ background: t.panel }}>QR code</button>}
         {isAdmin && <button onClick={() => setStylePanel(true)} className={btn} style={{ background: t.panel }}>🎨 Style</button>}
-        <button onClick={toggleFullscreen} className={btn} style={{ background: t.panel }}>⛶</button>
+        <button onClick={toggleFullscreen} className={`${btn} ${viewOnly ? "opacity-40 hover:opacity-100" : ""}`} style={{ background: t.panel }} title="Plein écran">⛶</button>
         {isAdmin && <button onClick={() => setSettings(true)} className={btn} style={{ background: t.panel }}>⚙️</button>}
       </footer>
 
@@ -460,10 +468,10 @@ function Settings({ session, words, hidden, code, token, origin, onClose, act, o
   const [question, setQuestion] = useState(session.question);
   const [copied, setCopied] = useState(false);
 
-  const copyPresenterLink = async () => {
+  const copy = async (text, which) => {
     try {
-      await navigator.clipboard.writeText(`${origin}/nuage/${code}/presenter#t=${token}`);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
       setTimeout(() => setCopied(false), 2000);
     } catch (e) { /* ignoré */ }
   };
@@ -495,9 +503,15 @@ function Settings({ session, words, hidden, code, token, origin, onClose, act, o
         <WordList words={words} hidden={hidden} act={act} />
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-600">Présenter depuis un autre appareil</h3>
-          <button onClick={copyPresenterLink} className="w-full border-2 border-gray-200 rounded-full py-2 text-sm font-semibold hover:bg-gray-50">
-            {copied ? "✓ Lien copié" : "Copier le lien présentateur"}
+          <h3 className="text-sm font-semibold text-gray-600">Afficher sur un autre écran</h3>
+          <button onClick={() => copy(`${origin}/nuage/${code}/presenter?affichage`, "view")}
+            className="w-full border-2 border-gray-200 rounded-full py-2 text-sm font-semibold hover:bg-gray-50">
+            {copied === "view" ? "✓ Lien copié" : "Copier le lien d'affichage (sans réglages)"}
+          </button>
+          <p className="text-xs text-gray-400">Nuage en direct avec la question et le QR code, sans aucun bouton de réglage : idéal pour une TV ou un 2e écran. Peut être partagé sans risque.</p>
+          <button onClick={() => copy(`${origin}/nuage/${code}/presenter#t=${token}`, "admin")}
+            className="w-full border-2 border-gray-200 rounded-full py-2 text-sm font-semibold hover:bg-gray-50">
+            {copied === "admin" ? "✓ Lien copié" : "Copier le lien présentateur"}
           </button>
           <p className="text-xs text-gray-400">Ce lien donne le contrôle du nuage : ne le partagez pas avec le public.</p>
         </section>
