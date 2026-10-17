@@ -192,7 +192,7 @@ function StylePanel({ style, onChange, onClose }) {
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-600">Fond</h3>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-7 gap-2">
             {BACKGROUNDS.map((b) => (
               <button key={b.value} title={b.label} onClick={() => onChange({ bg: b.value })}
                 className={`aspect-square rounded-xl border-2 ${style.bg === b.value ? "border-violet-600 ring-2 ring-violet-300" : "border-gray-200"}`}
