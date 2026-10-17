@@ -385,9 +385,19 @@ function WordList({ words, hidden, act }) {
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState(null); // clé du mot en cours de correction
   const [draft, setDraft] = useState("");
+  const [sort, setSort] = useState("count"); // "count" | "alpha"
 
+  useEffect(() => {
+    try { if (localStorage.getItem("nuage_word_sort") === "alpha") setSort("alpha"); } catch (e) { /* ignoré */ }
+  }, []);
+  const changeSort = (v) => {
+    setSort(v);
+    try { localStorage.setItem("nuage_word_sort", v); } catch (e) { /* ignoré */ }
+  };
+
+  const alpha = (a, b) => a.w.localeCompare(b.w, "fr", { sensitivity: "base" });
   const all = [...words.map((w) => ({ ...w, hidden: false })), ...hidden.map((w) => ({ ...w, hidden: true }))]
-    .sort((a, b) => b.n - a.n || a.w.localeCompare(b.w));
+    .sort(sort === "alpha" ? alpha : (a, b) => b.n - a.n || alpha(a, b));
   const f = filter.trim().toLowerCase();
   const list = f ? all.filter((w) => w.w.toLowerCase().includes(f)) : all;
 
@@ -399,7 +409,17 @@ function WordList({ words, hidden, act }) {
 
   return (
     <section className="space-y-2">
-      <h3 className="text-sm font-semibold text-gray-600">Mots publiés ({all.length})</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-600">Mots publiés ({all.length})</h3>
+        <div className="flex rounded-full bg-gray-100 p-0.5 text-xs font-semibold" role="radiogroup" aria-label="Classement">
+          {[["count", "Nb d'envois"], ["alpha", "A → Z"]].map(([v, label]) => (
+            <button key={v} type="button" role="radio" aria-checked={sort === v} onClick={() => changeSort(v)}
+              className={`px-3 py-1 rounded-full transition-colors ${sort === v ? "bg-violet-600 text-white shadow" : "text-gray-500 hover:text-gray-700"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="text-xs text-gray-400">Corrigez une faute (✏️) : si le mot corrigé existe déjà, les deux sont fusionnés. Astuce : un clic sur un mot du nuage le masque.</p>
       {all.length > 8 && (
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher…"
