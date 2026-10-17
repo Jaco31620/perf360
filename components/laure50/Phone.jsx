@@ -10,6 +10,7 @@ import Backdrop from "./Backdrop";
 import { startClock } from "./clock";
 import { loadLyrics, sungFraction, visibleLines } from "./lyrics";
 import { TitleScreen, OutroScreen } from "./Screens";
+import FullscreenButton from "./FullscreenButton";
 
 const FONT = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
 
@@ -58,6 +59,15 @@ function layoutLyrics(items, width) {
 }
 
 export default function Phone() {
+  return (
+    <>
+      <PhoneContent />
+      <FullscreenButton />
+    </>
+  );
+}
+
+function PhoneContent() {
   const [lyrics, setLyrics] = useState(null);
   const [state, setState] = useState(null);
   const [pos, setPos] = useState(0);

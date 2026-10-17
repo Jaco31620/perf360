@@ -1,0 +1,14 @@
+{
+  "id": "/laure50",
+  "name": "Laure · 50 ans · Karaoké",
+  "short_name": "Karaoké Laure",
+  "start_url": "/laure50",
+  "scope": "/laure50",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#261408",
+  "theme_color": "#261408",
+  "icons": [
+    { "src": "/laure50/logo.png", "sizes": "1964x1473", "type": "image/png", "purpose": "any" }
+  ]
+}

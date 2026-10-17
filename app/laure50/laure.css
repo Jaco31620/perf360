@@ -57,6 +57,21 @@
 .l50-bar button.on { background: rgba(240, 148, 58, .55); }
 .l50-url { margin-top: 16px; font-size: clamp(16px, 4.5vw, 24px); color: #f0943a; }
 
+/* Plein écran (téléphones) */
+.l50-fs {
+  position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); z-index: 20;
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(244, 231, 199, .3);
+  background: rgba(26, 13, 5, .7); color: #f4e7c7; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.l50-fs-tip {
+  position: fixed; left: 16px; right: 16px; bottom: 74px; z-index: 21; padding: 14px 16px; border-radius: 16px;
+  background: #f4e7c7; color: #261408; font: 600 15px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+.l50-fs-close { display: block; margin-top: 8px; text-align: right; color: #c8431a; font-weight: 800; }
+
 /* Régie */
 .l50-regie { position: fixed; inset: 0; background: #000; }
 .l50-regie.l50-nocursor { cursor: none; }

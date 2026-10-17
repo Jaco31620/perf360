@@ -7,7 +7,8 @@ import "./laure.css";
 export const metadata = {
   title: "Laure · 50 ans · Karaoké",
   icons: { icon: "/laure50/logo.png", apple: "/laure50/logo.png" },
-  manifest: null,
+  manifest: "/manifest-laure50.json",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Karaoké Laure" },
   robots: { index: false, follow: false },
 };
 
