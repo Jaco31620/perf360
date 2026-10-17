@@ -2,20 +2,20 @@
 /*
  * Nuage de mots dynamique — placement maison en spirale (aucune dépendance).
  * Les mots les plus envoyés sont les plus gros et placés au centre. Chaque mot
- * est positionné en absolu et ses changements (taille, position) sont animés en
- * CSS, ce qui donne un nuage qui « respire » au fil des envois.
+ * occupe la boîte RÉELLE de ses lettres (pas la hauteur de ligne), ce qui évite
+ * les grands vides autour des gros mots. Rendu en SVG (positionnement exact sur
+ * la ligne de base) ; tailles et positions sont animées en CSS.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 const WEIGHT = 800;
-const LINE = 1.15;
 const MAX_WORDS = 120;
+const REF = 100; // taille de référence pour la mesure (les métriques sont proportionnelles)
 
-/* Marge autour de chaque mot (proportionnelle à sa taille) : garantit de l'air
- * entre les mots. Le texte est ensuite légèrement décalé dans cette marge pour
- * casser l'alignement en lignes. */
-const marginFor = (size) => 4 + size * 0.16;
+/* Marge autour de chaque mot : de l'air entre les mots, sans gaspiller de place
+ * autour des très gros mots. */
+const marginFor = (size) => 4 + size * 0.05;
 
 function hash(str) {
   let h = 2166136261;
@@ -23,11 +23,26 @@ function hash(str) {
   return h >>> 0;
 }
 
+/* Boîte d'encre du mot à la taille REF : largeur, dépassement à gauche,
+ * hauteur au-dessus (ascent) et en dessous (descent) de la ligne de base. */
 let _ctx = null;
-function measure(text, size) {
+const _metrics = new Map();
+function metrics(text) {
+  let m = _metrics.get(text);
+  if (m) return m;
   if (!_ctx) _ctx = document.createElement("canvas").getContext("2d");
-  _ctx.font = `${WEIGHT} ${size}px ${FONT}`;
-  return _ctx.measureText(text).width;
+  _ctx.font = `${WEIGHT} ${REF}px ${FONT}`;
+  const t = _ctx.measureText(text);
+  const left = Number.isFinite(t.actualBoundingBoxLeft) ? t.actualBoundingBoxLeft : 0;
+  const right = Number.isFinite(t.actualBoundingBoxRight) ? t.actualBoundingBoxRight : t.width;
+  m = {
+    left,
+    w: left + right,
+    asc: Number.isFinite(t.actualBoundingBoxAscent) ? t.actualBoundingBoxAscent : REF * 0.75,
+    desc: Number.isFinite(t.actualBoundingBoxDescent) ? t.actualBoundingBoxDescent : REF * 0.22,
+  };
+  _metrics.set(text, m);
+  return m;
 }
 
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -47,18 +62,23 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop) {
   for (const word of words) {
     const size = minFont + (maxFont - minFont) * (word.n / maxN);
     const m = marginFor(size);
-    const tw = measure(word.w, size);
-    const th = size * LINE;
-    const w = tw + 2 * m, h = th + 2 * m;
+    const k = size / REF;
+    const mt = metrics(word.w);
+    const w = mt.w * k + 2 * m, h = (mt.asc + mt.desc) * k + 2 * m;
     if (w > W || h > H) { if (allowDrop) continue; return null; }
 
+    // Spirale propre à chaque mot (stable) : angle de départ, sens de rotation et
+    // léger décentrage → placement moins « en lignes », plus organique.
     const hk = hash(word.k);
     const start = (hk % 628) / 100;
+    const dir = hk & 1 ? 1 : -1;
+    const ox = (((hk >>> 8) % 1000) / 1000 - 0.5) * W * 0.06;
+    const oy = (((hk >>> 18) % 1000) / 1000 - 0.5) * H * 0.06;
     let spot = null;
     let last = null; // dernier obstacle rencontré : souvent le même au pas suivant
     for (let t = 0, r = 0; r < rMax; ) {
-      const x = cx + r * Math.cos(t + start) * sa - w / 2;
-      const y = cy + r * Math.sin(t + start) / sa - h / 2;
+      const x = cx + ox + r * Math.cos(dir * t + start) * sa - w / 2;
+      const y = cy + oy + r * Math.sin(dir * t + start) / sa - h / 2;
       if (x >= 0 && y >= 0 && x + w <= W && y + h <= H) {
         const box = { x, y, w, h };
         if (!(last && overlaps(box, last))) {
@@ -71,10 +91,12 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop) {
       r = 2.2 * t;
     }
     if (!spot) { if (allowDrop) continue; return null; }
-    // décalage pseudo-aléatoire stable, dans ±m/2 (l'écart minimal reste garanti)
-    const jx = (((hk >>> 8) % 1000) / 1000 - 0.5) * m;
-    const jy = (((hk >>> 18) % 1000) / 1000 - 0.5) * m;
-    placed.push({ ...spot, size, tx: spot.x + m + jx, ty: spot.y + m + jy, k: word.k, n: word.n, text: word.w });
+    // point d'ancrage SVG = ligne de base, début du texte
+    placed.push({
+      ...spot, size,
+      bx: spot.x + m + mt.left * k, by: spot.y + m + mt.asc * k,
+      k: word.k, n: word.n, text: word.w,
+    });
   }
   return placed;
 }
@@ -146,23 +168,31 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, onWordClick 
   return (
     <div ref={ref} className="relative w-full h-full overflow-hidden select-none">
       <style>{`@keyframes nuage-pop{0%{opacity:0;transform:scale(.2)}70%{opacity:1;transform:scale(1.12)}100%{transform:scale(1)}}`}</style>
-      {colored.map((p) => (
-        <span
-          key={p.k}
-          onClick={onWordClick ? () => onWordClick(p) : undefined}
-          title={onWordClick ? `${p.text} — ${p.n} envoi${p.n > 1 ? "s" : ""} (cliquer pour masquer)` : undefined}
-          style={{
-            position: "absolute", left: 0, top: 0,
-            transform: `translate(${p.tx}px, ${p.ty}px)`,
-            fontSize: p.size, lineHeight: LINE, fontWeight: WEIGHT, fontFamily: FONT,
-            whiteSpace: "nowrap", color: colors[p.color],
-            transition: "transform .8s cubic-bezier(.2,.8,.2,1), font-size .8s cubic-bezier(.2,.8,.2,1), color .6s",
-            cursor: onWordClick ? "pointer" : "default",
-          }}
-        >
-          <span style={{ display: "inline-block", animation: "nuage-pop .6s ease-out" }}>{p.text}</span>
-        </span>
-      ))}
+      <svg width={size.w} height={size.h} className="absolute inset-0" style={{ overflow: "visible" }}>
+        {colored.map((p) => (
+          <g
+            key={p.k}
+            onClick={onWordClick ? () => onWordClick(p) : undefined}
+            style={{
+              transform: `translate(${p.bx}px, ${p.by}px)`,
+              transition: "transform .8s cubic-bezier(.2,.8,.2,1)",
+              cursor: onWordClick ? "pointer" : "default",
+            }}
+          >
+            {onWordClick && <title>{`${p.text} — ${p.n} envoi${p.n > 1 ? "s" : ""} (cliquer pour masquer)`}</title>}
+            <g style={{ animation: "nuage-pop .6s ease-out", transformBox: "fill-box", transformOrigin: "center" }}>
+              <text
+                style={{
+                  fontSize: p.size, fontWeight: WEIGHT, fontFamily: FONT, fill: colors[p.color],
+                  transition: "font-size .8s cubic-bezier(.2,.8,.2,1), fill .6s",
+                }}
+              >
+                {p.text}
+              </text>
+            </g>
+          </g>
+        ))}
+      </svg>
     </div>
   );
 }
