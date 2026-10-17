@@ -19,6 +19,14 @@ const apps = [
     gradient: "from-indigo-500 to-purple-500",
     badge: "Gratuit",
   },
+  {
+    href: "/nuage",
+    emoji: "☁️",
+    title: "Nuage de mots",
+    desc: "Posez une question, le public répond depuis son téléphone : les mots les plus cités grossissent en direct.",
+    gradient: "from-cyan-500 to-violet-500",
+    badge: "Gratuit",
+  },
   // Ajoutez vos prochaines apps ici
 ];
 
