@@ -51,14 +51,14 @@ const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h
 /* Deux mots côte à côte (même hauteur, proches horizontalement) dont la ligne
  * de base ou le centre vertical coïncident donnent un effet « lignes de texte ».
  * On veut au contraire un décalage vertical franc entre voisins. */
-const ALIGN_TOL = 0.28; // fraction de la plus petite taille de police
+const ALIGN_TOL = 0.45; // décalage minimal, en fraction de la plus petite taille de police
 function alignedWith(box, by, size, others) {
   const cy = box.y + box.h / 2;
   return others.some((q) => {
     if (box.y >= q.y + q.h || q.y >= box.y + box.h) return false; // pas à la même hauteur
     const s = Math.min(size, q.size);
     const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
-    if (hg > s * 0.8) return false; // pas voisins
+    if (hg > s * 2) return false; // trop loin pour former une « ligne »
     const tol = s * ALIGN_TOL;
     return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
   });
