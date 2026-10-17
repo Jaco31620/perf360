@@ -1,0 +1,81 @@
+/* Karaoké Laure 50 ans — styles (tous préfixés .l50 pour ne rien impacter ailleurs). */
+
+.l50-root {
+  position: fixed; inset: 0; overflow: hidden;
+  background: #261408; color: #f4e7c7;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-weight: 800;
+}
+.l50-halo {
+  position: absolute; left: 50%; bottom: -25vh; width: 160vw; height: 75vh; transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(240, 148, 58, .45) 0%, rgba(240, 148, 58, .18) 38%, rgba(240, 148, 58, 0) 70%);
+  pointer-events: none;
+}
+.l50-skyline { position: absolute; left: 0; bottom: 0; width: 100%; height: max(30vh, 23vw); pointer-events: none; }
+.l50-stripes { position: absolute; top: 0; right: 0; width: min(38vw, 260px); height: auto; pointer-events: none; }
+.l50-corner-logo { position: absolute; top: 12px; left: 12px; width: min(28vw, 130px); height: auto; z-index: 2; }
+.l50-content { position: relative; z-index: 1; height: 100%; }
+
+.l50-center {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 16px 16px 26vh;
+}
+.l50-logo-big { width: min(78vw, 420px); height: auto; filter: drop-shadow(0 0 18px rgba(240, 148, 58, .35)); }
+.l50-logo-qr { width: min(60vw, 260px); height: auto; margin-bottom: 20px; }
+.l50-wait { margin-top: 24px; font-size: 18px; opacity: .8; }
+.l50-title { margin-top: 22px; font-size: clamp(22px, 6vw, 40px); }
+.l50-subtitle { margin-top: 8px; font-size: clamp(14px, 3.6vw, 20px); opacity: .8; font-weight: 600; }
+.l50-outro { margin-top: 24px; font-size: clamp(30px, 9vw, 64px); color: #f0943a; }
+
+.l50-dots { display: flex; gap: 14px; margin-top: 26px; }
+.l50-dot { width: 16px; height: 16px; border-radius: 50%; background: #f0943a; box-shadow: 0 0 12px #f0943a; transition: opacity .2s, box-shadow .2s; }
+.l50-dot.off { opacity: .15; box-shadow: none; }
+
+.l50-lyrics {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .45em; padding: 70px 12px 26vh; line-height: 1.15;
+}
+.l50-item { display: flex; flex-direction: column; align-items: center; animation: l50-fade .25s ease-out; }
+.l50-line {
+  white-space: nowrap; color: transparent;
+  -webkit-background-clip: text; background-clip: text;
+}
+@keyframes l50-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.l50-qr { padding: 14px; background: #f4e7c7; border-radius: 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
+.l50-qr canvas { display: block; width: min(70vw, 300px) !important; height: auto !important; }
+.l50-url { margin-top: 16px; font-size: clamp(16px, 4.5vw, 24px); color: #f0943a; }
+
+/* Régie */
+.l50-regie { position: fixed; inset: 0; background: #000; }
+.l50-regie.l50-nocursor { cursor: none; }
+.l50-regie video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.l50-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 14px 18px; background: linear-gradient(transparent, rgba(0, 0, 0, .85) 35%);
+  color: #f4e7c7; font: 600 14px Inter, ui-sans-serif, system-ui, sans-serif; transition: opacity .4s;
+}
+.l50-bar.hidden { opacity: 0; pointer-events: none; }
+.l50-bar button {
+  background: rgba(244, 231, 199, .12); color: #f4e7c7; border: 1px solid rgba(244, 231, 199, .25);
+  border-radius: 999px; padding: 8px 14px; font: inherit; cursor: pointer;
+}
+.l50-bar button:hover { background: rgba(240, 148, 58, .35); }
+.l50-time { font-variant-numeric: tabular-nums; opacity: .8; }
+.l50-shift { display: flex; align-items: center; gap: 8px; }
+.l50-shift input { accent-color: #f0943a; width: 140px; }
+.l50-shift b { font-variant-numeric: tabular-nums; min-width: 58px; }
+.l50-phones { margin-left: auto; }
+.l50-pub { opacity: .7; font-size: 12px; }
+.l50-pub.err { color: #ff8a6b; opacity: 1; }
+
+.l50-regie-login {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #261408;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #f4e7c7;
+}
+.l50-regie-login form { display: flex; flex-direction: column; gap: 12px; width: min(90vw, 320px); text-align: center; }
+.l50-regie-login img { width: 220px; height: auto; margin: 0 auto 8px; }
+.l50-regie-login h1 { font-size: 22px; font-weight: 800; }
+.l50-regie-login input { padding: 12px 14px; border-radius: 12px; border: 2px solid #8b3f12; background: #1a0d05; color: #f4e7c7; font-size: 16px; }
+.l50-regie-login button { padding: 12px; border-radius: 999px; border: 0; background: #f0943a; color: #261408; font-weight: 800; font-size: 16px; cursor: pointer; }
+.l50-error { color: #ff8a6b; font-size: 14px; }

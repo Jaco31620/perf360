@@ -90,5 +90,5 @@ export function publicConfig(cfg) {
 export const RESERVED_SLUGS = [
   "admin", "api", "c", "ffbb-test", "respiration", "soutenir",
   "connexion", "auth", "ami-invisible", "accueil", "_next", "favicon.ico",
-  "robots.txt", "sitemap.xml", "www", "nuage",
+  "robots.txt", "sitemap.xml", "www", "nuage", "laure50",
 ];
