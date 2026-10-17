@@ -11,7 +11,7 @@
   background: radial-gradient(ellipse at center, rgba(240, 148, 58, .45) 0%, rgba(240, 148, 58, .18) 38%, rgba(240, 148, 58, 0) 70%);
   pointer-events: none;
 }
-.l50-skyline { position: absolute; left: 0; bottom: 0; width: 100%; height: max(30vh, 23vw); pointer-events: none; }
+.l50-skyline { position: absolute; left: 0; bottom: 0; width: 100%; height: max(24vh, 13vw); pointer-events: none; }
 .l50-stripes { position: absolute; top: 0; right: 0; width: min(38vw, 260px); height: auto; pointer-events: none; }
 .l50-corner-logo { position: absolute; top: 12px; left: 12px; width: min(28vw, 130px); height: auto; z-index: 2; }
 .l50-content { position: relative; z-index: 1; height: 100%; }
@@ -44,6 +44,17 @@
 
 .l50-qr { padding: 14px; background: #f4e7c7; border-radius: 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, .4); }
 .l50-qr canvas { display: block; width: min(70vw, 300px) !important; height: auto !important; }
+.l50-welcome-layer { position: absolute; inset: 0; z-index: 5; }
+.l50-welcome-layer .l50-root { position: absolute; }
+.l50-center.l50-welcome { padding: 3vh 16px 20vh; }
+.l50-welcome .l50-logo-qr { width: auto; height: 19vh; margin-bottom: 2.5vh; }
+.l50-welcome .l50-qr { padding: 1.4vh; }
+.l50-welcome .l50-qr canvas { width: 38vh !important; }
+.l50-welcome .l50-url { margin-top: 2vh; font-size: 3.4vh; }
+.l50-welcome .l50-subtitle { margin-top: .6vh; font-size: 2.4vh; }
+.l50-phones-big { margin-top: 1.2vh; font-size: 2.4vh; color: #f2e26b; }
+.l50-bar { z-index: 10; }
+.l50-bar button.on { background: rgba(240, 148, 58, .55); }
 .l50-url { margin-top: 16px; font-size: clamp(16px, 4.5vw, 24px); color: #f0943a; }
 
 /* Régie */

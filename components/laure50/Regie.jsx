@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { startClock } from "./clock";
+import QrWelcome from "./QrWelcome";
 
 const SHIFT_MIN = -0.6, SHIFT_MAX = 0.6, SHIFT_STEP = 0.05;
 
@@ -27,6 +28,7 @@ export default function Regie() {
   const [pub, setPub] = useState({ ok: null, text: "Rien publié" });
   const [barVisible, setBarVisible] = useState(true);
   const [time, setTime] = useState(0);
+  const [welcome, setWelcome] = useState(true); // pré-accueil QR (avant lancement)
   const videoRef = useRef(null);
   const clockRef = useRef(null);
   const shiftRef = useRef(0);
@@ -98,6 +100,7 @@ export default function Regie() {
     if (!v) return;
     v.pause();
     v.currentTime = 0;
+    setWelcome(true);
   }, []);
   const fullscreen = useCallback(() => {
     if (document.fullscreenElement) document.exitFullscreen?.();
@@ -136,6 +139,7 @@ export default function Regie() {
       if (e.code === "Space") { e.preventDefault(); togglePlay(); }
       else if (e.key === "Home") { e.preventDefault(); toStart(); }
       else if (e.key === "f" || e.key === "F") fullscreen();
+      else if (e.key === "q" || e.key === "Q") setWelcome((w) => !w);
       else if (e.key === "ArrowLeft") changeShift(shiftRef.current - SHIFT_STEP);
       else if (e.key === "ArrowRight") changeShift(shiftRef.current + SHIFT_STEP);
       else return;
@@ -170,17 +174,19 @@ export default function Regie() {
     <div className={`l50-regie ${barVisible ? "" : "l50-nocursor"}`}>
       <video
         ref={videoRef} src="/laure50/karaoke.mp4" playsInline preload="auto"
-        onPlay={() => { setPlaying(true); publish(); }}
+        onPlay={() => { setPlaying(true); setWelcome(false); publish(); }}
         onPause={() => { setPlaying(false); publish(); }}
         onSeeked={publish} onEnded={() => { setPlaying(false); publish(); }}
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onClick={togglePlay}
       />
+      {welcome && <div className="l50-welcome-layer"><QrWelcome phones={phones} big /></div>}
       <div className={`l50-bar ${barVisible ? "" : "hidden"}`}>
         <button onClick={togglePlay}>{playing ? "⏸ Pause" : "▶ Lecture"}</button>
         <button onClick={toStart}>⏮ Début</button>
         <button onClick={fullscreen}>⛶ Plein écran</button>
         <button onClick={testPhones}>📱 Test téléphones</button>
+        <button onClick={() => setWelcome((w) => !w)} className={welcome ? "on" : ""}>🔳 Accueil QR</button>
         <span className="l50-time">{fmt(time)}</span>
         <label className="l50-shift">
           Décalage téléphones

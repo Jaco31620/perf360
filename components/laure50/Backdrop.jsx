@@ -15,7 +15,7 @@ function rng(seed) {
 
 function buildSkyline() {
   const rand = rng(1976);
-  const W = 1200, H = 260;
+  const W = 2000, H = 260; // très large : peu haute sur écran 16:9, recadrée au centre sur téléphone
   const buildings = [], windows = [], spires = [];
   let x = -10;
   while (x < W) {
@@ -30,12 +30,13 @@ function buildSkyline() {
   }
   // deux tours à flèche (Empire State)
   // proches du centre pour rester visibles sur un téléphone (cadrage centré)
-  for (const cx of [470, 735]) {
-    const base = H - 205, bw = 70;
-    buildings.push({ x: cx - bw / 2, y: base, w: bw, h: 205 });
-    buildings.push({ x: cx - 24, y: base - 28, w: 48, h: 30 });
-    buildings.push({ x: cx - 13, y: base - 52, w: 26, h: 26 });
-    spires.push(`${cx - 6},${base - 52} ${cx},${base - 110} ${cx + 6},${base - 52}`);
+  for (const cx of [865, 1130]) {
+    // corps + 2 gradins + flèche ; la pointe reste dans le cadre (y ≥ 0)
+    const base = H - 150, bw = 70;
+    buildings.push({ x: cx - bw / 2, y: base, w: bw, h: 150 });
+    buildings.push({ x: cx - 24, y: base - 24, w: 48, h: 26 });
+    buildings.push({ x: cx - 13, y: base - 44, w: 26, h: 22 });
+    spires.push(`${cx - 5},${base - 44} ${cx},${base - 106} ${cx + 5},${base - 44}`);
     for (let wy = base + 10; wy < H - 10; wy += 13)
       for (let wx = cx - bw / 2 + 7; wx < cx + bw / 2 - 8; wx += 11)
         if (rand() < 0.4) windows.push({ x: wx, y: wy });
