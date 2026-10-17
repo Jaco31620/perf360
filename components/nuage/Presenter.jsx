@@ -13,7 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
-import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
+import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
   const router = useRouter();
@@ -130,7 +130,7 @@ export default function Presenter({ code }) {
       {/* Nuage */}
       <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
         {data && data.words.length > 0 ? (
-          <WordCloud words={data.words} colors={t.colors} weight={t.weight} arrangement={t.arrangement} onWordClick={isAdmin ? hideWord : undefined} />
+          <WordCloud words={data.words} colors={t.colors} weight={t.weight} arrangement={t.arrangement} effect={t.effect} onWordClick={isAdmin ? hideWord : undefined} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3" style={{ color: t.sub }}>
             <p className="text-xl">En attente des premiers mots…</p>
@@ -229,6 +229,20 @@ function StylePanel({ style, onChange, onClose }) {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-600">Effet nuage</h3>
+          <input type="range" min={0} max={EFFECTS.length - 1} step={1}
+            value={Math.max(0, EFFECTS.findIndex((e) => e.value === style.effect))}
+            onChange={(e) => onChange({ effect: EFFECTS[Number(e.target.value)].value })}
+            className="w-full accent-violet-600 cursor-pointer" />
+          <div className="flex justify-between text-xs text-gray-500 -mt-1">
+            {EFFECTS.map((e) => (
+              <span key={e.value} className={style.effect === e.value ? "font-bold text-violet-700" : ""}>{e.label}</span>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">{EFFECTS.find((e) => e.value === style.effect)?.hint}</p>
         </section>
 
         <section className="space-y-2">

@@ -54,9 +54,17 @@ const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h
  * - Empilés (même zone horizontale, proches verticalement) : bord gauche, bord
  *   droit ou centre identiques → effet « colonne ».
  * Les bords sont ceux des lettres (marges exclues). */
-const ALIGN_TOL = 0.45; // décalage vertical minimal, en fraction de la plus petite taille
-const COLUMN_TOL = 0.6; // décalage horizontal minimal, en fraction de la plus petite taille
-function alignedWith(box, by, size, others) {
+/* Intensité de l'« effet nuage » (réglage Style) :
+ *   row / col   : décalage minimal (vertical / horizontal), en fraction de la plus petite taille
+ *   rowReach / colReach : distance jusqu'à laquelle deux mots comptent comme voisins
+ *   budget      : jusqu'où chercher une place décalée avant d'accepter une place alignée */
+const EFFECTS = {
+  low: { row: 0.2, rowReach: 0.8, col: 0.3, colReach: 0.8, budget: [1.1, 16] },
+  medium: { row: 0.45, rowReach: 2, col: 0.6, colReach: 1.2, budget: [1.3, 40] },
+  high: { row: 0.6, rowReach: 2.5, col: 0.8, colReach: 1.6, budget: [2, 120] },
+};
+
+function alignedWith(box, by, size, others, fx) {
   const cy = box.y + box.h / 2;
   const mb = marginFor(size);
   const l = box.x + mb, r = box.x + box.w - mb;
@@ -66,16 +74,16 @@ function alignedWith(box, by, size, others) {
     const sameCol = !(box.x >= q.x + q.w || q.x >= box.x + box.w);
     if (sameRow) {
       const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
-      if (hg > s * 2) return false; // trop loin pour former une « ligne »
-      const tol = s * ALIGN_TOL;
+      if (hg > s * fx.rowReach) return false; // trop loin pour former une « ligne »
+      const tol = s * fx.row;
       return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
     }
     if (sameCol) {
       const vg = Math.max(0, q.y - (box.y + box.h), box.y - (q.y + q.h));
-      if (vg > s * 1.2) return false; // trop loin pour former une « colonne »
+      if (vg > s * fx.colReach) return false; // trop loin pour former une « colonne »
       const mq = marginFor(q.size);
       const ql = q.x + mq, qr = q.x + q.w - mq;
-      const tol = s * COLUMN_TOL;
+      const tol = s * fx.col;
       return Math.abs(l - ql) < tol || Math.abs(r - qr) < tol || Math.abs((l + r) - (ql + qr)) / 2 < tol;
     }
     return false;
@@ -89,7 +97,7 @@ const gap = (a, b) => Math.hypot(
 );
 
 /* Place les mots (triés par fréquence décroissante) ; renvoie null si l'un ne rentre pas. */
-function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread }) {
+function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread, fx }) {
   const placed = [];
   const cx = W / 2, cy = H / 2;
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
@@ -140,7 +148,7 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
       if (last && overlaps(box, last)) return false;
       last = placed.find((p) => overlaps(box, p)) || null;
       if (last) return false;
-      if (!alignedWith(box, y + m + mt.asc * k, size, placed)) { spot = box; return true; }
+      if (!alignedWith(box, y + m + mt.asc * k, size, placed, fx)) { spot = box; return true; }
       if (!fallback) { fallback = box; fallbackR = r; }
       return false;
     };
@@ -149,7 +157,7 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     // nuage prend ainsi la forme de l'écran (coins compris) au lieu d'une ellipse.
     const phase = start / 6.28;
     search: for (let r = 0; r < rMax; r += 8) {
-      if (fallback && r > fallbackR * 1.3 + 40) break;
+      if (fallback && r > fallbackR * fx.budget[0] + fx.budget[1]) break;
       const hw = r * sa, hh = r / sa;
       const per = 4 * (hw + hh);
       const n = Math.max(1, Math.floor(per / 6));
@@ -218,7 +226,7 @@ function placeAll(list, W, H, opts) {
 /* Tassement : chaque mot glisse par petits pas vers le centre tant qu'il ne
  * touche aucun autre mot (essai en diagonale, puis horizontal, puis vertical).
  * Les espaces vides se referment ; l'agrandissement (fit) en profite ensuite. */
-function compact(placed, W, H) {
+function compact(placed, W, H, fx) {
   const ps = placed.map((p) => ({ ...p }));
   const cx = W / 2, cy = H / 2;
   for (let iter = 0; iter < 40; iter++) {
@@ -236,7 +244,7 @@ function compact(placed, W, H) {
         const others = ps.filter((q) => q !== p);
         if (others.some((q) => overlaps(box, q))) continue;
         // ne pas recréer d'alignement en tassant
-        if (alignedWith(box, p.by + dy, p.size, others) && !alignedWith(p, p.by, p.size, others)) continue;
+        if (alignedWith(box, p.by + dy, p.size, others, fx) && !alignedWith(p, p.by, p.size, others, fx)) continue;
         p.x += dx; p.y += dy; p.bx += dx; p.by += dy;
         moved = true;
         break;
@@ -271,25 +279,26 @@ function fit(placed, W, H) {
   };
 }
 
-function layout(words, W, H, weight, spread) {
+function layout(words, W, H, weight, spread, effect) {
+  const fx = EFFECTS[effect] || EFFECTS.medium;
   if (!words.length || W < 50 || H < 50) return [];
   const list = words.slice(0, MAX_WORDS);
   // 1er essai : spirale aux proportions de l'écran. Puis on corrige l'ellipse
   // d'après la forme obtenue (trop large / trop haute) et on garde le meilleur
   // remplissage (= le plus gros mot après agrandissement).
-  const a = placeAll(list, W, H, { weight, stretch: 1, spread });
+  const a = placeAll(list, W, H, { weight, stretch: 1, spread, fx });
   if (!a.length) return [];
   const b0 = bounds(a);
   const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
-  const fa = fit(compact(a, W, H), W, H);
+  const fa = fit(compact(a, W, H, fx), W, H);
   if (Math.abs(stretch - 1) < 0.05) return fa.placed;
-  const fb = fit(compact(placeAll(list, W, H, { weight, stretch, spread }), W, H), W, H);
+  const fb = fit(compact(placeAll(list, W, H, { weight, stretch, spread, fx }), W, H, fx), W, H);
   return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
 }
 
 const DEFAULT_COLORS = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#818cf8", "#e879f9", "#f472b6"];
 
-export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, arrangement = "center", onWordClick }) {
+export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", onWordClick }) {
   const spread = arrangement === "spread";
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -307,7 +316,7 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEF
 
   const signature = words.map((w) => `${w.k}:${w.n}:${w.w}`).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const placed = useMemo(() => layout(words, size.w, size.h, weight, spread), [signature, size.w, size.h, weight, spread]);
+  const placed = useMemo(() => layout(words, size.w, size.h, weight, spread, effect), [signature, size.w, size.h, weight, spread, effect]);
   const colored = useMemo(() => colorize(placed, colors.length), [placed, colors.length]);
 
   return (
