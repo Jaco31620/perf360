@@ -90,7 +90,8 @@ export default function Participant({ code }) {
     );
   }
 
-  const remaining = Math.max(0, session.maxPerParticipant - sent);
+  const unlimited = session.maxPerParticipant === 0;
+  const remaining = unlimited ? Infinity : Math.max(0, session.maxPerParticipant - sent);
   const open = session.status === "open";
   const theme = resolveTheme(session.style);
 
@@ -115,7 +116,11 @@ export default function Participant({ code }) {
               className="w-full text-xl border-2 border-gray-200 rounded-2xl px-4 py-3.5 focus:border-sky-500 outline-none"
             />
             <div className="flex items-center justify-between text-xs text-gray-400 px-1">
-              <span>{remaining} mot{remaining > 1 ? "s" : ""} restant{remaining > 1 ? "s" : ""}</span>
+              <span>
+                {unlimited
+                  ? `Autant de mots que vous voulez${sent ? ` · ${sent} envoyé${sent > 1 ? "s" : ""}` : ""}`
+                  : `${remaining} mot${remaining > 1 ? "s" : ""} restant${remaining > 1 ? "s" : ""}`}
+              </span>
               <span>{word.length}/{MAX_WORD_LEN}</span>
             </div>
             <button disabled={busy || !word.trim()}

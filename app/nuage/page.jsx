@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { myClouds, rememberCloud, setAdminToken, forgetCloud, formatCode } from "@/components/nuage/storage";
-import { DEFAULT_MAX_PER_PARTICIPANT, MAX_QUESTION_LEN } from "@/lib/nuage";
+import { DEFAULT_MAX_PER_PARTICIPANT, MAX_QUESTION_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
 
 export default function NuageHome() {
   const router = useRouter();
@@ -93,7 +93,7 @@ export default function NuageHome() {
               Mots par participant
               <select value={max} onChange={(e) => setMax(Number(e.target.value))}
                 className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
-                {[1, 2, 3, 4, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+                {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
               </select>
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}

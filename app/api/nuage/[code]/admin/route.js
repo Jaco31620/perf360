@@ -3,15 +3,17 @@
  * Body : { action, ... }
  *   open | close            → ouvrir / fermer les envois
  *   question { question }   → modifier la question
- *   max { max }             → nombre de mots par participant
+ *   max { max }             → nombre de mots par participant (0 = illimité)
  *   style { style }         → palette de couleurs + fond { palette, bg }
  *   hide | unhide { key }   → masquer / ré-afficher un mot
+ *   remove { key }          → supprimer toutes les occurrences d'un mot
+ *   rename { key, word }    → corriger un mot (fusionne s'il existe déjà)
  *   reset                   → effacer tous les mots
  *   delete                  → supprimer le nuage
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, checkToken } from "@/lib/nuageServer";
-import { MAX_QUESTION_LEN } from "@/lib/nuage";
+import { MAX_QUESTION_LEN, normalizeMax, cleanWord, wordKey } from "@/lib/nuage";
 import { normalizeStyle } from "@/lib/nuageThemes";
 
 export const runtime = "nodejs";
@@ -43,7 +45,7 @@ export async function POST(req, { params }) {
         break;
       }
       case "max":
-        res = await update({ max_per_participant: Math.min(10, Math.max(1, parseInt(body.max, 10) || 1)) });
+        res = await update({ max_per_participant: normalizeMax(body.max) });
         break;
       case "style":
         res = await update({ style: normalizeStyle(body.style) });
@@ -54,6 +56,21 @@ export async function POST(req, { params }) {
         const set = new Set(s.hidden || []);
         body.action === "hide" ? set.add(key) : set.delete(key);
         res = await update({ hidden: [...set] });
+        break;
+      }
+      case "remove":
+        res = await sb.from("nuage_words").delete().eq("session_id", s.id).eq("word_key", String(body.key || ""));
+        break;
+      case "rename": {
+        const key = String(body.key || "");
+        const word = cleanWord(body.word);
+        const newKey = wordKey(word);
+        if (!newKey) return Response.json({ error: "Mot vide." }, { status: 400 });
+        res = await sb.from("nuage_words").update({ word, word_key: newKey })
+          .eq("session_id", s.id).eq("word_key", key);
+        // un mot corrigé redevient visible
+        if (!res.error && (s.hidden || []).includes(key))
+          res = await update({ hidden: (s.hidden || []).filter((k) => k !== key) });
         break;
       }
       case "reset":

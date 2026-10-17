@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
-import { MAX_QUESTION_LEN } from "@/lib/nuage";
+import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
 import { PALETTES, BACKGROUNDS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
@@ -170,7 +170,7 @@ export default function Presenter({ code }) {
 
       {settings && isAdmin && s && (
         <Settings
-          session={s} hidden={data.hidden || []} code={code} token={token.current} origin={origin}
+          session={s} words={data.words} hidden={data.hidden || []} code={code} token={token.current} origin={origin}
           onClose={() => setSettings(false)} act={act}
           onDeleted={() => { forgetCloud(code); router.push("/nuage"); }}
         />
@@ -228,7 +228,63 @@ function StylePanel({ style, onChange, onClose }) {
   );
 }
 
-function Settings({ session, hidden, code, token, origin, onClose, act, onDeleted }) {
+/* Liste des mots publiés : corriger (orthographe), masquer, supprimer. */
+function WordList({ words, hidden, act }) {
+  const [filter, setFilter] = useState("");
+  const [editing, setEditing] = useState(null); // clé du mot en cours de correction
+  const [draft, setDraft] = useState("");
+
+  const all = [...words.map((w) => ({ ...w, hidden: false })), ...hidden.map((w) => ({ ...w, hidden: true }))]
+    .sort((a, b) => b.n - a.n || a.w.localeCompare(b.w));
+  const f = filter.trim().toLowerCase();
+  const list = f ? all.filter((w) => w.w.toLowerCase().includes(f)) : all;
+
+  const save = async (w) => {
+    const next = draft.trim();
+    if (next && next !== w.w) await act("rename", { key: w.k, word: next });
+    setEditing(null);
+  };
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-semibold text-gray-600">Mots publiés ({all.length})</h3>
+      <p className="text-xs text-gray-400">Corrigez une faute (✏️) : si le mot corrigé existe déjà, les deux sont fusionnés. Astuce : un clic sur un mot du nuage le masque.</p>
+      {all.length > 8 && (
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher…"
+          className="w-full border-2 border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:border-violet-500 outline-none" />
+      )}
+      {list.length === 0 && <p className="text-sm text-gray-400">Aucun mot.</p>}
+      <ul className="space-y-1.5">
+        {list.map((w) => (
+          <li key={w.k} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${w.hidden ? "bg-gray-100 text-gray-400" : "bg-gray-50"}`}>
+            {editing === w.k ? (
+              <form className="flex-1 flex gap-2" onSubmit={(e) => { e.preventDefault(); save(w); }}>
+                <input autoFocus value={draft} maxLength={MAX_WORD_LEN} onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setEditing(null)}
+                  className="flex-1 min-w-0 border-2 border-violet-400 rounded-lg px-2 py-1 outline-none" />
+                <button className="text-violet-600 font-bold">OK</button>
+                <button type="button" onClick={() => setEditing(null)} className="text-gray-400">✕</button>
+              </form>
+            ) : (
+              <>
+                <span className={`flex-1 min-w-0 truncate ${w.hidden ? "line-through" : ""}`}>
+                  {w.w} <span className="text-gray-400">×{w.n}</span>
+                </span>
+                <button title="Corriger" onClick={() => { setEditing(w.k); setDraft(w.w); }} className="hover:scale-110">✏️</button>
+                <button title={w.hidden ? "Réafficher" : "Masquer"} onClick={() => act(w.hidden ? "unhide" : "hide", { key: w.k })}
+                  className="text-xs font-semibold text-sky-600 w-16 text-right">{w.hidden ? "Réafficher" : "Masquer"}</button>
+                <button title="Supprimer" onClick={() => confirm(`Supprimer définitivement « ${w.w} » (${w.n} envoi${w.n > 1 ? "s" : ""}) ?`) && act("remove", { key: w.k })}
+                  className="hover:scale-110">🗑️</button>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Settings({ session, words, hidden, code, token, origin, onClose, act, onDeleted }) {
   const [question, setQuestion] = useState(session.question);
   const [copied, setCopied] = useState(false);
 
@@ -260,20 +316,11 @@ function Settings({ session, hidden, code, token, origin, onClose, act, onDelete
           <label className="text-sm font-semibold text-gray-600">Mots par participant</label>
           <select value={session.maxPerParticipant} onChange={(e) => act("max", { max: e.target.value })}
             className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
-            {[1, 2, 3, 4, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+            {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
           </select>
         </section>
 
-        <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-600">Mots masqués ({hidden.length})</h3>
-          <p className="text-xs text-gray-400">Astuce : cliquez sur un mot du nuage pour le masquer.</p>
-          {hidden.map((w) => (
-            <div key={w.k} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 text-sm">
-              <span>{w.w} <span className="text-gray-400">×{w.n}</span></span>
-              <button onClick={() => act("unhide", { key: w.k })} className="text-sky-600 font-semibold">Réafficher</button>
-            </div>
-          ))}
-        </section>
+        <WordList words={words} hidden={hidden} act={act} />
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-600">Présenter depuis un autre appareil</h3>

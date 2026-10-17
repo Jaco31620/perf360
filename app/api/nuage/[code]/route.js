@@ -8,7 +8,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, checkToken } from "@/lib/nuageServer";
-import { cleanWord, wordKey } from "@/lib/nuage";
+import { cleanWord, wordKey, UNLIMITED_CAP } from "@/lib/nuage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,7 +80,8 @@ export async function POST(req, { params }) {
 
     const sb = getSupabaseAdmin();
     const already = await sentBy(sb, s.id, pid);
-    if (already >= s.max_per_participant)
+    const limit = s.max_per_participant > 0 ? s.max_per_participant : UNLIMITED_CAP;
+    if (already >= limit)
       return Response.json({ error: "Vous avez atteint le nombre maximum de mots.", sent: already }, { status: 429 });
 
     const { error } = await sb.from("nuage_words").insert({ session_id: s.id, word_key: key, word, participant_id: pid });

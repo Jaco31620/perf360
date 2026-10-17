@@ -5,7 +5,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { newAdminToken, hashToken } from "@/lib/nuageServer";
-import { MAX_QUESTION_LEN, DEFAULT_MAX_PER_PARTICIPANT } from "@/lib/nuage";
+import { MAX_QUESTION_LEN, normalizeMax } from "@/lib/nuage";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ export async function POST(req) {
 
   const question = String(body?.question || "").trim().slice(0, MAX_QUESTION_LEN);
   if (!question) return Response.json({ error: "Merci d'indiquer une question." }, { status: 400 });
-  const max = Math.min(10, Math.max(1, parseInt(body?.maxPerParticipant, 10) || DEFAULT_MAX_PER_PARTICIPANT));
+  const max = normalizeMax(body?.maxPerParticipant);
 
   const token = newAdminToken();
   try {
