@@ -55,31 +55,52 @@ const gap = (a, b) => Math.hypot(
 );
 
 /* Place les mots (triés par fréquence décroissante) ; renvoie null si l'un ne rentre pas. */
-function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, weight, stretch) {
+function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread }) {
   const placed = [];
   const cx = W / 2, cy = H / 2;
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
-  const rMax = (Math.hypot(W, H) / 2) * Math.max(sa, 1 / sa);
-  for (const word of words) {
+  const rMax = Math.hypot(W, H) * Math.max(sa, 1 / sa);
+  let failed = false;
+
+  /* Point de départ de la spirale d'un mot.
+   * - « centre » : tous autour du centre (léger décentrage stable) → les plus
+   *   cités au milieu.
+   * - « réparti » : les 6 plus cités sont disposés en couronne (angle d'or) loin
+   *   les uns des autres, les autres partent d'un point stable au hasard ; les
+   *   petits mots viennent combler les espaces entre les gros. */
+  function anchor(word, rank, hk) {
+    const u = ((hk >>> 8) % 1000) / 1000, v = ((hk >>> 18) % 1000) / 1000;
+    if (!spread) return [cx + (u - 0.5) * W * 0.06, cy + (v - 0.5) * H * 0.06];
+    if (rank < 6) {
+      const a = 0.6 + rank * 2.39996;
+      const rad = rank === 0 ? 0.18 : 0.3;
+      return [cx + Math.cos(a) * rad * W, cy + Math.sin(a) * rad * H];
+    }
+    return [W * (0.08 + 0.84 * u), H * (0.1 + 0.8 * v)];
+  }
+  words.forEach((word, rank) => tryPlace(word, rank));
+  return failed ? null : placed;
+
+  function tryPlace(word, rank) {
+    if (failed) return;
     const size = minFont + (maxFont - minFont) * (word.n / maxN);
     const m = marginFor(size);
     const k = size / REF;
     const mt = metrics(word.w, weight);
     const w = mt.w * k + 2 * m, h = (mt.asc + mt.desc) * k + 2 * m;
-    if (w > W || h > H) { if (allowDrop) continue; return null; }
+    if (w > W || h > H) { if (!allowDrop) failed = true; return; }
 
     // Spirale propre à chaque mot (stable) : angle de départ, sens de rotation et
     // léger décentrage → placement moins « en lignes », plus organique.
     const hk = hash(word.k);
     const start = (hk % 628) / 100;
     const dir = hk & 1 ? 1 : -1;
-    const ox = (((hk >>> 8) % 1000) / 1000 - 0.5) * W * 0.06;
-    const oy = (((hk >>> 18) % 1000) / 1000 - 0.5) * H * 0.06;
+    const [ax, ay] = anchor(word, rank, hk);
     let spot = null;
     let last = null; // dernier obstacle rencontré : souvent le même au pas suivant
     for (let t = 0, r = 0; r < rMax; ) {
-      const x = cx + ox + r * Math.cos(dir * t + start) * sa - w / 2;
-      const y = cy + oy + r * Math.sin(dir * t + start) / sa - h / 2;
+      const x = ax + r * Math.cos(dir * t + start) * sa - w / 2;
+      const y = ay + r * Math.sin(dir * t + start) / sa - h / 2;
       if (x >= 0 && y >= 0 && x + w <= W && y + h <= H) {
         const box = { x, y, w, h };
         if (!(last && overlaps(box, last))) {
@@ -91,7 +112,7 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, weight, stret
       t += 5 / Math.max(r, 8);
       r = 2.2 * t;
     }
-    if (!spot) { if (allowDrop) continue; return null; }
+    if (!spot) { if (!allowDrop) failed = true; return; }
     // point d'ancrage SVG = ligne de base, début du texte
     placed.push({
       ...spot, size,
@@ -99,8 +120,8 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, weight, stret
       k: word.k, n: word.n, text: word.w,
     });
   }
-  return placed;
 }
+
 
 /* Attribue les couleurs : chaque mot garde sa couleur « naturelle » (stable)
  * sauf si un voisin proche l'a déjà ; on prend alors la première couleur libre,
@@ -125,7 +146,7 @@ function colorize(placed, nColors) {
   return out;
 }
 
-function placeAll(list, W, H, weight, stretch) {
+function placeAll(list, W, H, opts) {
   const maxN = Math.max(...list.map((w) => w.n));
   let maxFont = Math.min(H * 0.3, W * 0.18, 160);
   // Taille plancher : en dessous, on préfère laisser de côté les mots les moins
@@ -135,7 +156,7 @@ function placeAll(list, W, H, weight, stretch) {
     const atFloor = maxFont <= floor || i === 9;
     if (atFloor) maxFont = Math.max(maxFont, floor);
     const minFont = Math.max(12, maxFont * 0.2);
-    const res = tryLayout(list, W, H, maxFont, minFont, maxN, atFloor, weight, stretch);
+    const res = tryLayout(list, W, H, maxFont, minFont, maxN, atFloor, opts);
     if (res) return res;
     maxFont *= 0.86;
   }
@@ -166,25 +187,26 @@ function fit(placed, W, H) {
   };
 }
 
-function layout(words, W, H, weight) {
+function layout(words, W, H, weight, spread) {
   if (!words.length || W < 50 || H < 50) return [];
   const list = words.slice(0, MAX_WORDS);
   // 1er essai : spirale aux proportions de l'écran. Puis on corrige l'ellipse
   // d'après la forme obtenue (trop large / trop haute) et on garde le meilleur
   // remplissage (= le plus gros mot après agrandissement).
-  const a = placeAll(list, W, H, weight, 1);
+  const a = placeAll(list, W, H, { weight, stretch: 1, spread });
   if (!a.length) return [];
   const b0 = bounds(a);
   const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
   const fa = fit(a, W, H);
   if (Math.abs(stretch - 1) < 0.05) return fa.placed;
-  const fb = fit(placeAll(list, W, H, weight, stretch), W, H);
+  const fb = fit(placeAll(list, W, H, { weight, stretch, spread }), W, H);
   return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
 }
 
 const DEFAULT_COLORS = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#818cf8", "#e879f9", "#f472b6"];
 
-export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, onWordClick }) {
+export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, arrangement = "center", onWordClick }) {
+  const spread = arrangement === "spread";
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -201,7 +223,7 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEF
 
   const signature = words.map((w) => `${w.k}:${w.n}:${w.w}`).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const placed = useMemo(() => layout(words, size.w, size.h, weight), [signature, size.w, size.h, weight]);
+  const placed = useMemo(() => layout(words, size.w, size.h, weight, spread), [signature, size.w, size.h, weight, spread]);
   const colored = useMemo(() => colorize(placed, colors.length), [placed, colors.length]);
 
   return (

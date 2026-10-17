@@ -13,7 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
-import { PALETTES, BACKGROUNDS, WEIGHTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
+import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
   const router = useRouter();
@@ -130,7 +130,7 @@ export default function Presenter({ code }) {
       {/* Nuage */}
       <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
         {data && data.words.length > 0 ? (
-          <WordCloud words={data.words} colors={t.colors} weight={t.weight} onWordClick={isAdmin ? hideWord : undefined} />
+          <WordCloud words={data.words} colors={t.colors} weight={t.weight} arrangement={t.arrangement} onWordClick={isAdmin ? hideWord : undefined} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3" style={{ color: t.sub }}>
             <p className="text-xl">En attente des premiers mots…</p>
@@ -179,6 +179,18 @@ export default function Presenter({ code }) {
   );
 }
 
+/* Mini-schéma : gros mots (barres épaisses) au centre ou répartis. */
+function ArrangementIcon({ kind }) {
+  const bars = kind === "center"
+    ? [[22, 16, 20, 7], [14, 9, 10, 3], [36, 10, 10, 3], [12, 27, 12, 3], [34, 27, 14, 3]]
+    : [[6, 6, 16, 6], [36, 24, 16, 6], [26, 8, 10, 3], [8, 24, 12, 3], [24, 30, 10, 3], [40, 12, 10, 3]];
+  return (
+    <svg width="60" height="38" viewBox="0 0 60 38" className="text-gray-500">
+      {bars.map(([x, y, w, h], i) => <rect key={i} x={x} y={y} width={w} height={h} rx="1.5" fill="currentColor" />)}
+    </svg>
+  );
+}
+
 function StylePanel({ style, onChange, onClose }) {
   const isPreset = BACKGROUNDS.some((b) => b.value === style.bg);
   return (
@@ -204,6 +216,19 @@ function StylePanel({ style, onChange, onClose }) {
               className="w-10 h-10 rounded-lg border-2 border-gray-200 cursor-pointer" />
             <span>Couleur personnalisée{!isPreset && <b className="ml-1 font-mono">{style.bg}</b>}</span>
           </label>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-600">Disposition</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {ARRANGEMENTS.map((a) => (
+              <button key={a.value} onClick={() => onChange({ arrangement: a.value })}
+                className={`rounded-xl border-2 px-2 py-2 text-xs font-semibold flex flex-col items-center gap-1 ${style.arrangement === a.value ? "border-violet-600 bg-violet-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <ArrangementIcon kind={a.value} />
+                {a.label}
+              </button>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-2">
