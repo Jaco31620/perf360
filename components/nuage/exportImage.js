@@ -1,6 +1,6 @@
 "use client";
 /*
- * Export du nuage en image PNG (partage) : 1920×1080, fond et couleurs du
+ * Export du nuage en image PNG (téléchargement ou envoi par e-mail) : 1920×1080, fond et couleurs du
  * style choisi, question en titre — sans QR code ni boutons. Le nuage est
  * recalculé pour ce format (et non copié de l'écran).
  */
@@ -23,7 +23,8 @@ function wrap(ctx, text, maxWidth) {
   return lines;
 }
 
-export async function exportCloudImage({ words, theme, question, filename }) {
+/* Dessine le nuage dans un PNG (Blob). */
+export async function renderCloudBlob({ words, theme, question }) {
   const canvas = document.createElement("canvas");
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -56,7 +57,12 @@ export async function exportCloudImage({ words, theme, question, filename }) {
     ctx.fillText(p.text, PAD + p.bx, top + p.by);
   }
 
-  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  return new Promise((res) => canvas.toBlob(res, "image/png"));
+}
+
+/* Télécharge le PNG. */
+export async function exportCloudImage({ words, theme, question, filename }) {
+  const blob = await renderCloudBlob({ words, theme, question });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -65,4 +71,12 @@ export async function exportCloudImage({ words, theme, question, filename }) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* PNG → base64 (sans l'en-tête data:), pour l'envoi par e-mail. */
+export async function blobToBase64(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return btoa(bin);
 }

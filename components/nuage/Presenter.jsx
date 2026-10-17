@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
-import { exportCloudImage } from "./exportImage";
+import { exportCloudImage, renderCloudBlob, blobToBase64 } from "./exportImage";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
 import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
@@ -22,6 +22,7 @@ export default function Presenter({ code }) {
   const [missing, setMissing] = useState(false);
   const [styleOverride, setStyleOverride] = useState(null); // choix local en attente / non enregistré
   const [stylePanel, setStylePanel] = useState(false);
+  const [mailOpen, setMailOpen] = useState(false);
   const [bigQr, setBigQr] = useState(false);
   const [settings, setSettings] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -157,6 +158,11 @@ export default function Presenter({ code }) {
             ⬇ Image
           </button>
         )}
+        {isAdmin && data?.words.length > 0 && (
+          <button onClick={() => setMailOpen(true)} className={btn} style={{ background: t.panel }} title="Envoyer l'image du nuage par e-mail">
+            ✉️ Envoyer
+          </button>
+        )}
         <button onClick={() => setBigQr(true)} className={btn} style={{ background: t.panel }}>QR code</button>
         {isAdmin && <button onClick={() => setStylePanel(true)} className={btn} style={{ background: t.panel }}>🎨 Style</button>}
         <button onClick={toggleFullscreen} className={btn} style={{ background: t.panel }}>⛶</button>
@@ -171,6 +177,10 @@ export default function Presenter({ code }) {
         </div>
       )}
 
+      {mailOpen && isAdmin && s && (
+        <MailDialog code={code} token={token.current} words={data.words} theme={t} question={s.question} onClose={() => setMailOpen(false)} />
+      )}
+
       {stylePanel && isAdmin && (
         <StylePanel style={style} onChange={changeStyle} onClose={() => setStylePanel(false)} />
       )}
@@ -182,6 +192,89 @@ export default function Presenter({ code }) {
           onDeleted={() => { forgetCloud(code); router.push("/nuage"); }}
         />
       )}
+    </div>
+  );
+}
+
+/* Envoi de l'image du nuage par e-mail (jusqu'à 10 destinataires). */
+function MailDialog({ code, token, words, theme, question, onClose }) {
+  const [to, setTo] = useState("");
+  const [message, setMessage] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [status, setStatus] = useState(null); // { ok, text }
+  const [busy, setBusy] = useState(false);
+  const blobRef = useRef(null);
+
+  useEffect(() => {
+    try { setReplyTo(localStorage.getItem("nuage_reply_to") || ""); } catch (e) { /* ignoré */ }
+    let url;
+    renderCloudBlob({ words, theme, question }).then((b) => {
+      blobRef.current = b;
+      url = URL.createObjectURL(b);
+      setPreview(url);
+    });
+    return () => url && URL.revokeObjectURL(url);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const recipients = to.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!recipients.length || !blobRef.current) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      try { localStorage.setItem("nuage_reply_to", replyTo.trim()); } catch (err) { /* ignoré */ }
+      const res = await fetch(`/api/nuage/${code}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-nuage-admin": token || "" },
+        body: JSON.stringify({ to: recipients, message, replyTo, image: await blobToBase64(blobRef.current) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Envoi impossible.");
+      setStatus({ ok: true, text: `✓ Envoyé à ${d.sent} destinataire${d.sent > 1 ? "s" : ""}.` });
+      setTo("");
+    } catch (err) {
+      setStatus({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <form onSubmit={send} onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg bg-white text-gray-900 rounded-3xl p-6 space-y-4 shadow-2xl max-h-full overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Envoyer le nuage par e-mail</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+        </div>
+        <div className="rounded-xl overflow-hidden border border-gray-200 bg-gray-50 aspect-video flex items-center justify-center">
+          {preview ? <img src={preview} alt="Aperçu du nuage" className="w-full" /> : <span className="text-sm text-gray-400">Préparation de l'image…</span>}
+        </div>
+        <label className="block space-y-1">
+          <span className="text-sm font-semibold text-gray-600">Destinataires</span>
+          <textarea rows={2} value={to} onChange={(e) => setTo(e.target.value)} placeholder="adresse@exemple.fr, autre@exemple.fr"
+            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-violet-500 outline-none resize-none" />
+          <span className="text-xs text-gray-400">Séparez les adresses par une virgule ou un retour à la ligne (10 maximum).</span>
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-semibold text-gray-600">Message <span className="font-normal text-gray-400">(facultatif)</span></span>
+          <textarea rows={3} maxLength={1000} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Merci à tous pour votre participation !"
+            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-violet-500 outline-none resize-none" />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-semibold text-gray-600">Votre e-mail pour les réponses <span className="font-normal text-gray-400">(facultatif)</span></span>
+          <input type="email" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} placeholder="vous@exemple.fr"
+            className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-violet-500 outline-none" />
+        </label>
+        {status && <p className={`text-sm font-semibold ${status.ok ? "text-green-600" : "text-red-600"}`}>{status.text}</p>}
+        <button disabled={busy || !recipients.length || !preview}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold py-3 rounded-full transition-colors">
+          {busy ? "Envoi…" : `Envoyer${recipients.length ? ` à ${recipients.length} destinataire${recipients.length > 1 ? "s" : ""}` : ""}`}
+        </button>
+      </form>
     </div>
   );
 }
