@@ -143,7 +143,7 @@ export default function Participant({ code }) {
       {showCloud && (
         <div className="mt-5 rounded-3xl p-3 shadow-xl h-[60vh]" style={{ background: theme.bg }}>
           {words.length
-            ? <WordCloud words={words} colors={theme.colors} />
+            ? <WordCloud words={words} colors={theme.colors} weight={theme.weight} />
             : <p className="text-center pt-10" style={{ color: theme.sub }}>Aucun mot pour l'instant.</p>}
         </div>
       )}

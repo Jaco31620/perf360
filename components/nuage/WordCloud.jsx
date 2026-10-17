@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-const WEIGHT = 800;
+const DEFAULT_WEIGHT = 800;
 const MAX_WORDS = 120;
 const REF = 100; // taille de référence pour la mesure (les métriques sont proportionnelles)
 
@@ -27,11 +27,12 @@ function hash(str) {
  * hauteur au-dessus (ascent) et en dessous (descent) de la ligne de base. */
 let _ctx = null;
 const _metrics = new Map();
-function metrics(text) {
-  let m = _metrics.get(text);
+function metrics(text, weight) {
+  const key = `${weight}|${text}`;
+  let m = _metrics.get(key);
   if (m) return m;
   if (!_ctx) _ctx = document.createElement("canvas").getContext("2d");
-  _ctx.font = `${WEIGHT} ${REF}px ${FONT}`;
+  _ctx.font = `${weight} ${REF}px ${FONT}`;
   const t = _ctx.measureText(text);
   const left = Number.isFinite(t.actualBoundingBoxLeft) ? t.actualBoundingBoxLeft : 0;
   const right = Number.isFinite(t.actualBoundingBoxRight) ? t.actualBoundingBoxRight : t.width;
@@ -41,7 +42,7 @@ function metrics(text) {
     asc: Number.isFinite(t.actualBoundingBoxAscent) ? t.actualBoundingBoxAscent : REF * 0.75,
     desc: Number.isFinite(t.actualBoundingBoxDescent) ? t.actualBoundingBoxDescent : REF * 0.22,
   };
-  _metrics.set(text, m);
+  _metrics.set(key, m);
   return m;
 }
 
@@ -54,16 +55,16 @@ const gap = (a, b) => Math.hypot(
 );
 
 /* Place les mots (triés par fréquence décroissante) ; renvoie null si l'un ne rentre pas. */
-function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop) {
+function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, weight, stretch) {
   const placed = [];
   const cx = W / 2, cy = H / 2;
-  const sa = Math.sqrt(W / H);
+  const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
   const rMax = (Math.hypot(W, H) / 2) * Math.max(sa, 1 / sa);
   for (const word of words) {
     const size = minFont + (maxFont - minFont) * (word.n / maxN);
     const m = marginFor(size);
     const k = size / REF;
-    const mt = metrics(word.w);
+    const mt = metrics(word.w, weight);
     const w = mt.w * k + 2 * m, h = (mt.asc + mt.desc) * k + 2 * m;
     if (w > W || h > H) { if (allowDrop) continue; return null; }
 
@@ -124,9 +125,7 @@ function colorize(placed, nColors) {
   return out;
 }
 
-function layout(words, W, H) {
-  if (!words.length || W < 50 || H < 50) return [];
-  const list = words.slice(0, MAX_WORDS);
+function placeAll(list, W, H, weight, stretch) {
   const maxN = Math.max(...list.map((w) => w.n));
   let maxFont = Math.min(H * 0.3, W * 0.18, 160);
   // Taille plancher : en dessous, on préfère laisser de côté les mots les moins
@@ -136,16 +135,56 @@ function layout(words, W, H) {
     const atFloor = maxFont <= floor || i === 9;
     if (atFloor) maxFont = Math.max(maxFont, floor);
     const minFont = Math.max(12, maxFont * 0.2);
-    const res = tryLayout(list, W, H, maxFont, minFont, maxN, atFloor);
+    const res = tryLayout(list, W, H, maxFont, minFont, maxN, atFloor, weight, stretch);
     if (res) return res;
     maxFont *= 0.86;
   }
   return [];
 }
 
+const bounds = (placed) => {
+  const x0 = Math.min(...placed.map((p) => p.x)), y0 = Math.min(...placed.map((p) => p.y));
+  const x1 = Math.max(...placed.map((p) => p.x + p.w)), y1 = Math.max(...placed.map((p) => p.y + p.h));
+  return { x0, y0, w: x1 - x0, h: y1 - y0 };
+};
+
+/* Agrandit uniformément le nuage pour qu'il remplisse l'écran (les proportions
+ * et les écarts sont conservés, donc aucun chevauchement). Le plus gros mot ne
+ * dépasse pas 45 % de la hauteur, pour ne pas écraser un nuage de 1–2 mots. */
+function fit(placed, W, H) {
+  if (!placed.length) return { placed, scale: 1 };
+  const b = bounds(placed);
+  const biggest = Math.max(...placed.map((p) => p.size));
+  const s = Math.max(1, Math.min(W / b.w, H / b.h, (H * 0.45) / biggest));
+  const dx = (W - b.w * s) / 2 - b.x0 * s, dy = (H - b.h * s) / 2 - b.y0 * s;
+  return {
+    scale: s * biggest,
+    placed: placed.map((p) => ({
+      ...p, x: p.x * s + dx, y: p.y * s + dy, w: p.w * s, h: p.h * s, size: p.size * s,
+      bx: p.bx * s + dx, by: p.by * s + dy,
+    })),
+  };
+}
+
+function layout(words, W, H, weight) {
+  if (!words.length || W < 50 || H < 50) return [];
+  const list = words.slice(0, MAX_WORDS);
+  // 1er essai : spirale aux proportions de l'écran. Puis on corrige l'ellipse
+  // d'après la forme obtenue (trop large / trop haute) et on garde le meilleur
+  // remplissage (= le plus gros mot après agrandissement).
+  const a = placeAll(list, W, H, weight, 1);
+  if (!a.length) return [];
+  const b0 = bounds(a);
+  const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
+  const fa = fit(a, W, H);
+  if (Math.abs(stretch - 1) < 0.05) return fa.placed;
+  const fb = fit(placeAll(list, W, H, weight, stretch), W, H);
+  return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
+}
+
 const DEFAULT_COLORS = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#818cf8", "#e879f9", "#f472b6"];
 
-export default function WordCloud({ words, colors = DEFAULT_COLORS, onWordClick }) {
+export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, onWordClick }) {
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -162,7 +201,7 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, onWordClick 
 
   const signature = words.map((w) => `${w.k}:${w.n}:${w.w}`).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const placed = useMemo(() => layout(words, size.w, size.h), [signature, size.w, size.h]);
+  const placed = useMemo(() => layout(words, size.w, size.h, weight), [signature, size.w, size.h, weight]);
   const colored = useMemo(() => colorize(placed, colors.length), [placed, colors.length]);
 
   return (
@@ -183,7 +222,7 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, onWordClick 
             <g style={{ animation: "nuage-pop .6s ease-out", transformBox: "fill-box", transformOrigin: "center" }}>
               <text
                 style={{
-                  fontSize: p.size, fontWeight: WEIGHT, fontFamily: FONT, fill: colors[p.color],
+                  fontSize: p.size, fontWeight: weight, fontFamily: FONT, fill: colors[p.color],
                   transition: "font-size .8s cubic-bezier(.2,.8,.2,1), fill .6s",
                 }}
               >

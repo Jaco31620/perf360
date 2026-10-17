@@ -13,7 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
-import { PALETTES, BACKGROUNDS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
+import { PALETTES, BACKGROUNDS, WEIGHTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
   const router = useRouter();
@@ -130,7 +130,7 @@ export default function Presenter({ code }) {
       {/* Nuage */}
       <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
         {data && data.words.length > 0 ? (
-          <WordCloud words={data.words} colors={t.colors} onWordClick={isAdmin ? hideWord : undefined} />
+          <WordCloud words={data.words} colors={t.colors} weight={t.weight} onWordClick={isAdmin ? hideWord : undefined} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3" style={{ color: t.sub }}>
             <p className="text-xl">En attente des premiers mots…</p>
@@ -204,6 +204,19 @@ function StylePanel({ style, onChange, onClose }) {
               className="w-10 h-10 rounded-lg border-2 border-gray-200 cursor-pointer" />
             <span>Couleur personnalisée{!isPreset && <b className="ml-1 font-mono">{style.bg}</b>}</span>
           </label>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-600">Épaisseur de la police</h3>
+          <div className="grid grid-cols-5 gap-2">
+            {WEIGHTS.map((w) => (
+              <button key={w.value} onClick={() => onChange({ weight: w.value })} title={w.label}
+                className={`rounded-xl border-2 py-1.5 flex flex-col items-center ${style.weight === w.value ? "border-violet-600 bg-violet-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <span className="text-xl leading-none" style={{ fontWeight: w.value }}>Aa</span>
+                <span className="text-[10px] text-gray-500 mt-1">{w.label}</span>
+              </button>
+            ))}
+          </div>
         </section>
 
         <section className="space-y-2">
