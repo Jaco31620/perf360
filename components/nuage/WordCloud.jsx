@@ -48,6 +48,22 @@ function metrics(text, weight) {
 
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
+/* Deux mots côte à côte (même hauteur, proches horizontalement) dont la ligne
+ * de base ou le centre vertical coïncident donnent un effet « lignes de texte ».
+ * On veut au contraire un décalage vertical franc entre voisins. */
+const ALIGN_TOL = 0.28; // fraction de la plus petite taille de police
+function alignedWith(box, by, size, others) {
+  const cy = box.y + box.h / 2;
+  return others.some((q) => {
+    if (box.y >= q.y + q.h || q.y >= box.y + box.h) return false; // pas à la même hauteur
+    const s = Math.min(size, q.size);
+    const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
+    if (hg > s * 0.8) return false; // pas voisins
+    const tol = s * ALIGN_TOL;
+    return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
+  });
+}
+
 /* Distance entre deux rectangles (0 s'ils se touchent). */
 const gap = (a, b) => Math.hypot(
   Math.max(0, b.x - (a.x + a.w), a.x - (b.x + b.w)),
@@ -97,20 +113,25 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     const [ax, ay] = anchor(word, rank, hk);
     let spot = null;
     let last = null; // dernier obstacle rencontré : souvent le même au pas suivant
-    const test = (x, y) => {
+    // 1re place libre mais « alignée » sur un voisin : gardée en secours si
+    // aucune place décalée n'est trouvée un peu plus loin.
+    let fallback = null, fallbackR = 0;
+    const test = (x, y, r) => {
       if (x < 0 || y < 0 || x + w > W || y + h > H) return false;
       const box = { x, y, w, h };
       if (last && overlaps(box, last)) return false;
       last = placed.find((p) => overlaps(box, p)) || null;
       if (last) return false;
-      spot = box;
-      return true;
+      if (!alignedWith(box, y + m + mt.asc * k, size, placed)) { spot = box; return true; }
+      if (!fallback) { fallback = box; fallbackR = r; }
+      return false;
     };
     // Spirale RECTANGULAIRE aux proportions de l'écran : anneaux rectangulaires
     // de plus en plus grands, parcourus à partir d'un point propre au mot. Le
     // nuage prend ainsi la forme de l'écran (coins compris) au lieu d'une ellipse.
     const phase = start / 6.28;
     search: for (let r = 0; r < rMax; r += 8) {
+      if (fallback && r > fallbackR * 1.3 + 40) break;
       const hw = r * sa, hh = r / sa;
       const per = 4 * (hw + hh);
       const n = Math.max(1, Math.floor(per / 6));
@@ -121,9 +142,10 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
         else if ((d -= 2 * hw) < 2 * hh) { px = hw; py = -hh + d; }
         else if ((d -= 2 * hh) < 2 * hw) { px = hw - d; py = hh; }
         else { d -= 2 * hw; px = -hw; py = hh - d; }
-        if (test(ax + dir * px - w / 2, ay + py - h / 2)) break search;
+        if (test(ax + dir * px - w / 2, ay + py - h / 2, r)) break search;
       }
     }
+    if (!spot) spot = fallback;
     if (!spot) { if (!allowDrop) failed = true; return; }
     // point d'ancrage SVG = ligne de base, début du texte
     placed.push({
@@ -193,7 +215,10 @@ function compact(placed, W, H) {
       for (const [dx, dy] of [[ux, uy], [ux, 0], [0, uy]]) {
         if (Math.abs(dx) + Math.abs(dy) < 0.5) continue;
         const box = { x: p.x + dx, y: p.y + dy, w: p.w, h: p.h };
-        if (ps.some((q) => q !== p && overlaps(box, q))) continue;
+        const others = ps.filter((q) => q !== p);
+        if (others.some((q) => overlaps(box, q))) continue;
+        // ne pas recréer d'alignement en tassant
+        if (alignedWith(box, p.by + dy, p.size, others) && !alignedWith(p, p.by, p.size, others)) continue;
         p.x += dx; p.y += dy; p.bx += dx; p.by += dy;
         moved = true;
         break;
