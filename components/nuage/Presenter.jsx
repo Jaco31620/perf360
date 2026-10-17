@@ -29,6 +29,31 @@ export default function Presenter({ code }) {
   const [viewOnly, setViewOnly] = useState(false);
   const [qrBoxH, setQrBoxH] = useState(0); // hauteur du cadre QR → hauteur de l'image de titre
   const qrBoxRef = useRef(null);
+  const titleRef = useRef(null);
+  const mainRef = useRef(null);
+  const [obstacles, setObstacles] = useState([]);
+
+  // Le nuage occupe tout l'écran : l'en-tête (image/question à gauche, cadre QR
+  // à droite) est transmis comme zones interdites, en coordonnées du nuage.
+  useEffect(() => {
+    const measure = () => {
+      const area = mainRef.current?.firstElementChild;
+      if (!area) return;
+      const o = area.getBoundingClientRect();
+      const M = 14; // marge autour des obstacles
+      const rects = [titleRef.current, qrBoxRef.current]
+        .filter((el) => el && el.offsetWidth > 0 && el.offsetHeight > 0)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: Math.round(r.left - o.left - M), y: Math.round(r.top - o.top - M), w: Math.round(r.width + 2 * M), h: Math.round(r.height + 2 * M) };
+        });
+      setObstacles((prev) => (JSON.stringify(prev) === JSON.stringify(rects) ? prev : rects));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    [titleRef.current, qrBoxRef.current, mainRef.current].forEach((el) => el && ro.observe(el));
+    return () => ro.disconnect();
+  });
 
   useEffect(() => {
     const el = qrBoxRef.current;
@@ -131,9 +156,10 @@ export default function Presenter({ code }) {
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden" style={{ background: t.bg, color: t.fg }}>
-      {/* En-tête : question + comment rejoindre */}
-      <header className="flex items-start gap-6 px-6 sm:px-10 pt-6">
-        <div className="flex-1 min-w-0">
+      <div className="relative flex-1 min-h-0">
+      {/* En-tête (par-dessus le nuage) : question/image + comment rejoindre */}
+      <header className="absolute top-0 left-0 right-0 z-10 flex items-start gap-6 px-6 sm:px-10 pt-6 pointer-events-none">
+        <div ref={titleRef} className="min-w-0 pointer-events-auto">
           {t.image
             ? <img src={t.image} alt={s?.question || ""} className="block max-w-full object-contain object-left"
                 style={(() => {
@@ -146,7 +172,8 @@ export default function Presenter({ code }) {
             : <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>}
           {s && s.status !== "open" && <p className="mt-2 text-sm font-semibold" style={{ color: t.sub }}>🔒 Envois fermés</p>}
         </div>
-        <button ref={qrBoxRef} onClick={() => setBigQr(true)} className="hidden sm:flex items-center gap-4 rounded-2xl p-3 shrink-0 text-left" style={{ background: t.panel }}>
+        <div className="flex-1" />
+        <button ref={qrBoxRef} onClick={() => setBigQr(true)} className="pointer-events-auto hidden sm:flex items-center gap-4 rounded-2xl p-3 shrink-0 text-left" style={{ background: t.panel }}>
           <div className="text-sm leading-snug">
             <div style={{ color: t.sub }}>Rendez-vous sur</div>
             <div className="font-bold">{host}/nuage</div>
@@ -157,10 +184,11 @@ export default function Presenter({ code }) {
         </button>
       </header>
 
-      {/* Nuage */}
-      <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
+      {/* Nuage : tout l'écran, en contournant l'en-tête */}
+      <main ref={mainRef} className="absolute inset-0 px-4 sm:px-8 py-4">
         {data && data.words.length > 0 ? (
-          <WordCloud words={data.words} colors={t.colors} weight={t.weight} arrangement={t.arrangement} effect={t.effect} onWordClick={isAdmin ? hideWord : undefined} />
+          <WordCloud words={data.words} colors={t.colors} weight={t.weight} arrangement={t.arrangement} effect={t.effect}
+            obstacles={obstacles} onWordClick={isAdmin ? hideWord : undefined} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3" style={{ color: t.sub }}>
             <p className="text-xl">En attente des premiers mots…</p>
@@ -168,6 +196,7 @@ export default function Presenter({ code }) {
           </div>
         )}
       </main>
+      </div>
 
       {/* Barre du bas */}
       <footer className="flex flex-wrap items-center gap-2 px-6 sm:px-10 pb-5 text-sm">

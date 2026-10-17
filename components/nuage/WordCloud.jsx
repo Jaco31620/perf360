@@ -162,7 +162,7 @@ const gap = (a, b) => Math.hypot(
 );
 
 /* Place les mots (triés par fréquence décroissante) ; renvoie null si l'un ne rentre pas. */
-function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread, fx }) {
+function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, stretch, spread, fx, obstacles = [] }) {
   const placed = [];
   const cx = W / 2, cy = H / 2;
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
@@ -171,6 +171,12 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
   // grille d'occupation de l'écran (encre des mots déjà placés)
   const GW = Math.floor(W / CELL), GH = Math.floor(H / CELL);
   const board = new Uint8Array(GW * GH);
+  // zones interdites (image de titre, cadre QR…) : cases occupées d'emblée
+  for (const o of obstacles) {
+    const x0 = Math.max(0, Math.floor(o.x / CELL)), x1 = Math.min(GW, Math.ceil((o.x + o.w) / CELL));
+    const y0 = Math.max(0, Math.floor(o.y / CELL)), y1 = Math.min(GH, Math.ceil((o.y + o.h) / CELL));
+    for (let y = y0; y < y1; y++) board.fill(1, y * GW + x0, y * GW + x1);
+  }
   const collides = (mask, gx, gy) => {
     const r = mask.runs;
     for (let i = 0; i < r.length; i += 3) {
@@ -223,7 +229,7 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
       if (gx < 0 || gy < 0 || gx + mask.cw > GW || gy + mask.ch > GH) return false;
       const box = { x: gx * CELL, y: gy * CELL, w, h };
       // rectangle libre → pas besoin du masque ; sinon test lettre à lettre
-      if (placed.some((p) => overlaps(box, p)) && collides(mask, gx, gy)) return false;
+      if ((placed.some((p) => overlaps(box, p)) || obstacles.some((o) => overlaps(box, o))) && collides(mask, gx, gy)) return false;
       const score = alignment(box, box.y + m + mt.asc * k, size, placed, fx);
       if (score >= 1) { spot = box; return true; }
       if (!fallback) fallbackR = r;
@@ -302,13 +308,26 @@ function placeAll(list, W, H, opts) {
   // Taille plancher : en dessous, on préfère laisser de côté les mots les moins
   // cités plutôt que de rendre tout le nuage illisible.
   const floor = Math.max(24, Math.min(W, H) * 0.09);
-  let maxFont = Math.max(floor, Math.min(H * 0.3, W * 0.18, 160, Math.sqrt((0.45 * W * H) / area)));
+  const free = W * H - (opts.obstacles || []).reduce((sum, o) => sum + o.w * o.h, 0);
+  let maxFont = Math.max(floor, Math.min(H * 0.3, W * 0.18, 160, Math.sqrt((0.45 * free) / area)));
   for (let i = 0; i < 10; i++) {
     const atFloor = maxFont <= floor || i === 9;
     if (atFloor) maxFont = Math.max(maxFont, floor);
     const minFont = Math.max(12, maxFont * 0.2);
     const res = tryLayout(list, W, H, maxFont, minFont, maxN, atFloor, opts);
-    if (res) return res;
+    if (res) {
+      if (!opts.grow || atFloor) return res;
+      // Avec obstacles, pas d'agrandissement final (il les chevaucherait) : on
+      // agrandit plutôt la police tant que tous les mots trouvent leur place.
+      let best = res;
+      for (let g = 0; g < 6 && maxFont < Math.min(H * 0.4, W * 0.25, 300); g++) {
+        maxFont *= 1.18;
+        const next = tryLayout(list, W, H, maxFont, Math.max(12, maxFont * 0.2), maxN, false, opts);
+        if (!next) break;
+        best = next;
+      }
+      return best;
+    }
     maxFont *= 0.86;
   }
   return [];
@@ -338,10 +357,11 @@ function fit(placed, W, H) {
   };
 }
 
-function layout(words, W, H, weight, spread, effect) {
+function layout(words, W, H, weight, spread, effect, obstacles = []) {
   const fx = EFFECTS[effect] || EFFECTS.medium;
   if (!words.length || W < 50 || H < 50) return [];
   const list = words.slice(0, MAX_WORDS);
+  if (obstacles.length) return placeAll(list, W, H, { weight, stretch: 1, spread, fx, obstacles, grow: true });
   // 1er essai : spirale aux proportions de l'écran. Puis on corrige l'ellipse
   // d'après la forme obtenue (trop large / trop haute) et on garde le meilleur
   // remplissage (= le plus gros mot après agrandissement).
@@ -364,7 +384,7 @@ export const CLOUD_FONT = FONT;
 
 const DEFAULT_COLORS = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#818cf8", "#e879f9", "#f472b6"];
 
-export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", onWordClick }) {
+export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", obstacles = [], onWordClick }) {
   const spread = arrangement === "spread";
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -381,8 +401,9 @@ export default function WordCloud({ words, colors = DEFAULT_COLORS, weight = DEF
   }, []);
 
   const signature = words.map((w) => `${w.k}:${w.n}:${w.w}`).join("|");
+  const obsKey = obstacles.map((o) => `${o.x},${o.y},${o.w},${o.h}`).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const placed = useMemo(() => layout(words, size.w, size.h, weight, spread, effect), [signature, size.w, size.h, weight, spread, effect]);
+  const placed = useMemo(() => layout(words, size.w, size.h, weight, spread, effect, obstacles), [signature, size.w, size.h, weight, spread, effect, obsKey]);
   const colored = useMemo(() => colorize(placed, colors.length), [placed, colors.length]);
 
   return (
