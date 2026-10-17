@@ -47,7 +47,8 @@ export async function renderCloudBlob({ words, theme, question }) {
   let top = PAD;
   const logo = theme.image ? await loadImage(theme.image) : null;
   if (logo) {
-    const h = Math.min(170, logo.height * ((WIDTH * 0.5) / logo.width));
+    const maxH = { s: 130, m: 170, l: 220 }[theme.imageSize] || 170; // suit le réglage « Taille »
+    const h = Math.min(maxH, logo.height * ((WIDTH * 0.5) / logo.width));
     const w = (logo.width * h) / logo.height;
     ctx.drawImage(logo, PAD, top, w, h);
     top += h + 28;

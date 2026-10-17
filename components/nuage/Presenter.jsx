@@ -14,7 +14,7 @@ import WordCloud from "./WordCloud";
 import { exportCloudImage, renderCloudBlob, blobToBase64 } from "./exportImage";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
-import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
+import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, IMAGE_SIZES, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
   const router = useRouter();
@@ -136,10 +136,13 @@ export default function Presenter({ code }) {
         <div className="flex-1 min-w-0">
           {t.image
             ? <img src={t.image} alt={s?.question || ""} className="block max-w-full object-contain object-left"
-                style={qrBoxH
-                  // ~1,3× le cadre QR, plafonné (hauteur 22 % de l'écran, largeur 45 %)
-                  ? { height: Math.round(qrBoxH * 1.3), maxHeight: "22vh", maxWidth: "45vw" }
-                  : { maxHeight: "16vh" }} />
+                style={(() => {
+                  // taille choisie (Style) : multiple du cadre QR, plafonné en hauteur et largeur
+                  const z = IMAGE_SIZES.find((x) => x.value === t.imageSize) || IMAGE_SIZES[1];
+                  return qrBoxH
+                    ? { height: Math.round(qrBoxH * z.factor), maxHeight: z.maxH, maxWidth: z.maxW }
+                    : { maxHeight: z.maxH };
+                })()} />
             : <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>}
           {s && s.status !== "open" && <p className="mt-2 text-sm font-semibold" style={{ color: t.sub }}>🔒 Envois fermés</p>}
         </div>
@@ -318,7 +321,7 @@ function ArrangementIcon({ kind }) {
 }
 
 /* Image affichée à la place de la question (logo, visuel…). */
-function TitleImage({ image, code, token, onChange }) {
+function TitleImage({ image, code, token, onChange, size, onSize }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const input = useRef(null);
@@ -379,6 +382,22 @@ function TitleImage({ image, code, token, onChange }) {
           </button>
         )}
       </div>
+      {image && (
+        <div className="pt-1">
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <span>Taille</span>
+          </div>
+          <input type="range" min={0} max={IMAGE_SIZES.length - 1} step={1}
+            value={Math.max(0, IMAGE_SIZES.findIndex((z) => z.value === size))}
+            onChange={(e) => onSize(IMAGE_SIZES[Number(e.target.value)].value)}
+            className="w-full accent-violet-600 cursor-pointer" />
+          <div className="flex justify-between text-xs text-gray-500 -mt-1">
+            {IMAGE_SIZES.map((z) => (
+              <span key={z.value} className={size === z.value ? "font-bold text-violet-700" : ""}>{z.label}</span>
+            ))}
+          </div>
+        </div>
+      )}
       {error && <p className="text-sm text-red-600">{error}</p>}
     </section>
   );
@@ -395,7 +414,8 @@ function StylePanel({ style, onChange, onClose, image, code, token, onImageChang
         </div>
         <p className="text-xs text-gray-400 -mt-4">Les changements s'appliquent en direct. Les couleurs des mots s'adaptent au fond pour rester lisibles.</p>
 
-        <TitleImage image={image} code={code} token={token} onChange={onImageChange} />
+        <TitleImage image={image} code={code} token={token} onChange={onImageChange}
+          size={style.imageSize} onSize={(v) => onChange({ imageSize: v })} />
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-600">Fond</h3>
