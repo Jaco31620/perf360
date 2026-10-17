@@ -48,7 +48,8 @@ export async function POST(req, { params }) {
         res = await update({ max_per_participant: normalizeMax(body.max) });
         break;
       case "style":
-        res = await update({ style: normalizeStyle(body.style) });
+        // l'image de titre ne se change que via /image (jamais écrasée ici)
+        res = await update({ style: { ...normalizeStyle(body.style), image: normalizeStyle(s.style).image } });
         break;
       case "hide":
       case "unhide": {
@@ -77,9 +78,13 @@ export async function POST(req, { params }) {
         res = await sb.from("nuage_words").delete().eq("session_id", s.id);
         if (!res.error) res = await update({ hidden: [] });
         break;
-      case "delete":
+      case "delete": {
         res = await sb.from("nuage_sessions").delete().eq("id", s.id);
+        // images de titre du nuage
+        const { data: files } = await sb.storage.from("nuage-assets").list(s.code);
+        if (files?.length) await sb.storage.from("nuage-assets").remove(files.map((f) => `${s.code}/${f.name}`));
         break;
+      }
       default:
         return Response.json({ error: "Action inconnue." }, { status: 400 });
     }

@@ -8,6 +8,17 @@ import { computeCloud, CLOUD_FONT } from "./WordCloud";
 
 const WIDTH = 1920, HEIGHT = 1080, PAD = 60;
 
+/* Charge une image distante utilisable dans le canevas (CORS), ou null. */
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
 /* Coupe la question en 2 lignes max à la largeur donnée. */
 function wrap(ctx, text, maxWidth) {
   const words = text.split(/\s+/);
@@ -32,9 +43,15 @@ export async function renderCloudBlob({ words, theme, question }) {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  // Titre
+  // Titre : image (logo) si définie, sinon la question
   let top = PAD;
-  if (question) {
+  const logo = theme.image ? await loadImage(theme.image) : null;
+  if (logo) {
+    const h = Math.min(170, logo.height * ((WIDTH * 0.5) / logo.width));
+    const w = (logo.width * h) / logo.height;
+    ctx.drawImage(logo, PAD, top, w, h);
+    top += h + 28;
+  } else if (question) {
     ctx.font = `800 52px ${CLOUD_FONT}`;
     ctx.fillStyle = theme.fg;
     ctx.textBaseline = "top";

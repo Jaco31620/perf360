@@ -112,7 +112,8 @@ export default function Presenter({ code }) {
 
   const s = data?.session;
   const style = normalizeStyle(styleOverride || s?.style);
-  const t = resolveTheme(style);
+  // l'image de titre vient toujours du serveur (jamais du choix de style local)
+  const t = { ...resolveTheme(style), image: normalizeStyle(s?.style).image };
   const isAdmin = !!data?.admin;
   const joinUrl = `${origin}/nuage/${code}`;
   const host = origin.replace(/^https?:\/\//, "");
@@ -123,7 +124,9 @@ export default function Presenter({ code }) {
       {/* En-tête : question + comment rejoindre */}
       <header className="flex items-start gap-6 px-6 sm:px-10 pt-6">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>
+          {t.image
+            ? <img src={t.image} alt={s?.question || ""} className="block max-h-[16vh] max-w-full object-contain object-left" />
+            : <h1 className="text-2xl sm:text-4xl font-extrabold leading-tight">{s?.question || "…"}</h1>}
           {s && s.status !== "open" && <p className="mt-2 text-sm font-semibold" style={{ color: t.sub }}>🔒 Envois fermés</p>}
         </div>
         <button onClick={() => setBigQr(true)} className="hidden sm:flex items-center gap-4 rounded-2xl p-3 shrink-0 text-left" style={{ background: t.panel }}>
@@ -190,7 +193,8 @@ export default function Presenter({ code }) {
       )}
 
       {stylePanel && isAdmin && (
-        <StylePanel style={style} onChange={changeStyle} onClose={() => setStylePanel(false)} />
+        <StylePanel style={style} onChange={changeStyle} onClose={() => setStylePanel(false)}
+          image={t.image} code={code} token={token.current} onImageChange={refresh} />
       )}
 
       {settings && isAdmin && s && (
@@ -299,7 +303,74 @@ function ArrangementIcon({ kind }) {
   );
 }
 
-function StylePanel({ style, onChange, onClose }) {
+/* Image affichée à la place de la question (logo, visuel…). */
+function TitleImage({ image, code, token, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const input = useRef(null);
+
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/nuage/${code}/image`, { method: "POST", headers: { "x-nuage-admin": token || "" }, body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Envoi impossible.");
+      await onChange();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/nuage/${code}/image`, { method: "DELETE", headers: { "x-nuage-admin": token || "" } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Suppression impossible.");
+      await onChange();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-semibold text-gray-600">Image à la place de la question</h3>
+      <p className="text-xs text-gray-400">Logo ou visuel affiché en haut à gauche de l'écran (PNG, JPEG, WebP ou GIF, 3 Mo max). Les participants voient toujours la question.</p>
+      {image && (
+        <div className="rounded-xl border border-gray-200 bg-gray-100 p-2 flex items-center justify-center">
+          <img src={image} alt="" className="max-h-24 max-w-full object-contain" />
+        </div>
+      )}
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden"
+        onChange={(e) => upload(e.target.files?.[0])} />
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => input.current?.click()}
+          className="flex-1 border-2 border-gray-200 rounded-full py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-40">
+          {busy ? "Envoi…" : image ? "Changer l'image" : "Choisir une image"}
+        </button>
+        {image && (
+          <button type="button" disabled={busy} onClick={remove}
+            className="border-2 border-red-200 text-red-600 rounded-full px-4 py-2 text-sm font-semibold hover:bg-red-50 disabled:opacity-40">
+            Retirer
+          </button>
+        )}
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+function StylePanel({ style, onChange, onClose, image, code, token, onImageChange }) {
   const isPreset = BACKGROUNDS.some((b) => b.value === style.bg);
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
@@ -309,6 +380,8 @@ function StylePanel({ style, onChange, onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
         </div>
         <p className="text-xs text-gray-400 -mt-4">Les changements s'appliquent en direct. Les couleurs des mots s'adaptent au fond pour rester lisibles.</p>
+
+        <TitleImage image={image} code={code} token={token} onChange={onImageChange} />
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-600">Fond</h3>
