@@ -9,6 +9,7 @@ import Link from "next/link";
 import WordCloud from "./WordCloud";
 import { participantId, formatCode } from "./storage";
 import { MAX_WORD_LEN } from "@/lib/nuage";
+import { resolveTheme } from "@/lib/nuageThemes";
 
 export default function Participant({ code }) {
   const [session, setSession] = useState(undefined); // undefined = chargement, null = introuvable
@@ -91,6 +92,7 @@ export default function Participant({ code }) {
 
   const remaining = Math.max(0, session.maxPerParticipant - sent);
   const open = session.status === "open";
+  const theme = resolveTheme(session.style);
 
   return (
     <Shell>
@@ -134,8 +136,10 @@ export default function Participant({ code }) {
       </div>
 
       {showCloud && (
-        <div className="mt-5 bg-slate-900 rounded-3xl p-3 shadow-xl h-[60vh]">
-          {words.length ? <WordCloud words={words} theme="dark" /> : <p className="text-center text-white/50 pt-10">Aucun mot pour l'instant.</p>}
+        <div className="mt-5 rounded-3xl p-3 shadow-xl h-[60vh]" style={{ background: theme.bg }}>
+          {words.length
+            ? <WordCloud words={words} colors={theme.colors} />
+            : <p className="text-center pt-10" style={{ color: theme.sub }}>Aucun mot pour l'instant.</p>}
         </div>
       )}
     </Shell>

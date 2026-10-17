@@ -4,6 +4,7 @@
  *   open | close            → ouvrir / fermer les envois
  *   question { question }   → modifier la question
  *   max { max }             → nombre de mots par participant
+ *   style { style }         → palette de couleurs + fond { palette, bg }
  *   hide | unhide { key }   → masquer / ré-afficher un mot
  *   reset                   → effacer tous les mots
  *   delete                  → supprimer le nuage
@@ -11,6 +12,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, checkToken } from "@/lib/nuageServer";
 import { MAX_QUESTION_LEN } from "@/lib/nuage";
+import { normalizeStyle } from "@/lib/nuageThemes";
 
 export const runtime = "nodejs";
 
@@ -42,6 +44,9 @@ export async function POST(req, { params }) {
       }
       case "max":
         res = await update({ max_per_participant: Math.min(10, Math.max(1, parseInt(body.max, 10) || 1)) });
+        break;
+      case "style":
+        res = await update({ style: normalizeStyle(body.style) });
         break;
       case "hide":
       case "unhide": {

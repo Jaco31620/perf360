@@ -53,3 +53,6 @@ $$;
 
 revoke execute on function public.nuage_stats(uuid) from public, anon, authenticated;
 grant execute on function public.nuage_stats(uuid) to service_role;
+
+-- v2 (17/10/2026) : style d'affichage (palette + fond) choisi par le présentateur.
+alter table public.nuage_sessions add column if not exists style jsonb not null default '{}'::jsonb;

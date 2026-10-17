@@ -3,7 +3,8 @@
  * Nuage de mots — écran présentateur (à projeter). Rafraîchit le nuage toutes
  * les 2 s. Avec le jeton présentateur (localStorage, ou #t=… dans l'URL pour
  * ouvrir la session sur un autre appareil) : ouvrir/fermer les envois, masquer
- * un mot d'un clic, modifier la question, réinitialiser, supprimer.
+ * un mot d'un clic, choisir le style (palette + fond), modifier la question,
+ * réinitialiser, supprimer.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -12,17 +13,14 @@ import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN } from "@/lib/nuage";
-
-const THEMES = {
-  dark: { bg: "#0f172a", fg: "#f8fafc", sub: "rgba(248,250,252,.6)", panel: "rgba(255,255,255,.08)", qrFg: "#0f172a" },
-  light: { bg: "#ffffff", fg: "#0f172a", sub: "rgba(15,23,42,.55)", panel: "rgba(15,23,42,.06)", qrFg: "#0f172a" },
-};
+import { PALETTES, BACKGROUNDS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
 
 export default function Presenter({ code }) {
   const router = useRouter();
   const [data, setData] = useState(null);
   const [missing, setMissing] = useState(false);
-  const [theme, setTheme] = useState("dark");
+  const [styleOverride, setStyleOverride] = useState(null); // choix local en attente / non enregistré
+  const [stylePanel, setStylePanel] = useState(false);
   const [bigQr, setBigQr] = useState(false);
   const [settings, setSettings] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -36,7 +34,10 @@ export default function Presenter({ code }) {
     }
     token.current = getAdminToken(code);
     setOrigin(window.location.origin);
-    try { setTheme(localStorage.getItem("nuage_theme") || "dark"); } catch (e) { /* ignoré */ }
+    try {
+      const saved = localStorage.getItem(`nuage_style_${code}`);
+      if (saved) setStyleOverride(normalizeStyle(JSON.parse(saved)));
+    } catch (e) { /* ignoré */ }
   }, [code]);
 
   const refresh = useCallback(async () => {
@@ -60,22 +61,25 @@ export default function Presenter({ code }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const act = async (action, extra = {}) => {
+  const act = async (action, extra = {}, silent = false) => {
     const res = await fetch(`/api/nuage/${code}/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-nuage-admin": token.current || "" },
       body: JSON.stringify({ action, ...extra }),
     });
     const d = await res.json().catch(() => ({}));
-    if (!res.ok) { alert(d.error || "Action impossible."); return false; }
+    if (!res.ok) { if (!silent) alert(d.error || "Action impossible."); return false; }
     await refresh();
     return true;
   };
 
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    try { localStorage.setItem("nuage_theme", next); } catch (e) { /* ignoré */ }
+  // Appliqué tout de suite à l'écran, gardé en local, et enregistré sur le nuage
+  // (pour la vue « nuage en direct » des participants et les autres appareils).
+  const changeStyle = (patch) => {
+    const next = normalizeStyle({ ...style, ...patch });
+    setStyleOverride(next);
+    try { localStorage.setItem(`nuage_style_${code}`, JSON.stringify(next)); } catch (e) { /* ignoré */ }
+    act("style", { style: next }, true);
   };
 
   const toggleFullscreen = () => {
@@ -96,8 +100,9 @@ export default function Presenter({ code }) {
     );
   }
 
-  const t = THEMES[theme] || THEMES.dark;
   const s = data?.session;
+  const style = normalizeStyle(styleOverride || s?.style);
+  const t = resolveTheme(style);
   const isAdmin = !!data?.admin;
   const joinUrl = `${origin}/nuage/${code}`;
   const host = origin.replace(/^https?:\/\//, "");
@@ -118,14 +123,14 @@ export default function Presenter({ code }) {
             <div className="mt-1" style={{ color: t.sub }}>avec le code</div>
             <div className="text-2xl font-black tracking-wider">{formatCode(code)}</div>
           </div>
-          {origin && <div className="bg-white p-1.5 rounded-lg"><QRCodeSVG value={joinUrl} size={96} fgColor={t.qrFg} /></div>}
+          {origin && <div className="bg-white p-1.5 rounded-lg"><QRCodeSVG value={joinUrl} size={96} fgColor="#0f172a" /></div>}
         </button>
       </header>
 
       {/* Nuage */}
       <main className="flex-1 min-h-0 px-4 sm:px-8 py-4">
         {data && data.words.length > 0 ? (
-          <WordCloud words={data.words} theme={theme} onWordClick={isAdmin ? hideWord : undefined} />
+          <WordCloud words={data.words} colors={t.colors} onWordClick={isAdmin ? hideWord : undefined} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-center gap-3" style={{ color: t.sub }}>
             <p className="text-xl">En attente des premiers mots…</p>
@@ -146,7 +151,7 @@ export default function Presenter({ code }) {
           </button>
         )}
         <button onClick={() => setBigQr(true)} className={btn} style={{ background: t.panel }}>QR code</button>
-        <button onClick={toggleTheme} className={btn} style={{ background: t.panel }}>{theme === "dark" ? "☀️" : "🌙"}</button>
+        {isAdmin && <button onClick={() => setStylePanel(true)} className={btn} style={{ background: t.panel }}>🎨 Style</button>}
         <button onClick={toggleFullscreen} className={btn} style={{ background: t.panel }}>⛶</button>
         {isAdmin && <button onClick={() => setSettings(true)} className={btn} style={{ background: t.panel }}>⚙️</button>}
       </footer>
@@ -159,6 +164,10 @@ export default function Presenter({ code }) {
         </div>
       )}
 
+      {stylePanel && isAdmin && (
+        <StylePanel style={style} onChange={changeStyle} onClose={() => setStylePanel(false)} />
+      )}
+
       {settings && isAdmin && s && (
         <Settings
           session={s} hidden={data.hidden || []} code={code} token={token.current} origin={origin}
@@ -166,6 +175,55 @@ export default function Presenter({ code }) {
           onDeleted={() => { forgetCloud(code); router.push("/nuage"); }}
         />
       )}
+    </div>
+  );
+}
+
+function StylePanel({ style, onChange, onClose }) {
+  const isPreset = BACKGROUNDS.some((b) => b.value === style.bg);
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="w-full max-w-sm h-full bg-white text-gray-900 overflow-y-auto p-6 space-y-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Style</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+        </div>
+        <p className="text-xs text-gray-400 -mt-4">Les changements s'appliquent en direct. Les couleurs des mots s'adaptent au fond pour rester lisibles.</p>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-600">Fond</h3>
+          <div className="grid grid-cols-6 gap-2">
+            {BACKGROUNDS.map((b) => (
+              <button key={b.value} title={b.label} onClick={() => onChange({ bg: b.value })}
+                className={`aspect-square rounded-xl border-2 ${style.bg === b.value ? "border-violet-600 ring-2 ring-violet-300" : "border-gray-200"}`}
+                style={{ background: b.value }} />
+            ))}
+          </div>
+          <label className="flex items-center gap-3 text-sm text-gray-600 pt-1">
+            <input type="color" value={style.bg} onChange={(e) => onChange({ bg: e.target.value })}
+              className="w-10 h-10 rounded-lg border-2 border-gray-200 cursor-pointer" />
+            <span>Couleur personnalisée{!isPreset && <b className="ml-1 font-mono">{style.bg}</b>}</span>
+          </label>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-600">Couleurs des mots</h3>
+          {Object.entries(PALETTES).map(([key, p]) => {
+            const preview = resolveTheme({ palette: key, bg: style.bg });
+            const active = style.palette === key;
+            return (
+              <button key={key} onClick={() => onChange({ palette: key })}
+                className={`w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 border-2 text-left ${active ? "border-violet-600" : "border-transparent hover:border-gray-200"}`}
+                style={{ background: preview.bg }}>
+                <span className="flex-1 font-extrabold truncate" style={{ color: preview.fg }}>{p.label}</span>
+                <span className="flex gap-1">
+                  {preview.colors.map((c, i) => <span key={i} className="w-4 h-4 rounded-full" style={{ background: c }} />)}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+      </div>
     </div>
   );
 }
