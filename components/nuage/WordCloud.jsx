@@ -48,19 +48,37 @@ function metrics(text, weight) {
 
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-/* Deux mots côte à côte (même hauteur, proches horizontalement) dont la ligne
- * de base ou le centre vertical coïncident donnent un effet « lignes de texte ».
- * On veut au contraire un décalage vertical franc entre voisins. */
-const ALIGN_TOL = 0.45; // décalage minimal, en fraction de la plus petite taille de police
+/* Effet « nuage » : on interdit les alignements entre voisins.
+ * - Côte à côte (même hauteur, proches horizontalement) : ligne de base ou
+ *   centre vertical identiques → effet « lignes de texte ».
+ * - Empilés (même zone horizontale, proches verticalement) : bord gauche, bord
+ *   droit ou centre identiques → effet « colonne ».
+ * Les bords sont ceux des lettres (marges exclues). */
+const ALIGN_TOL = 0.45; // décalage vertical minimal, en fraction de la plus petite taille
+const COLUMN_TOL = 0.6; // décalage horizontal minimal, en fraction de la plus petite taille
 function alignedWith(box, by, size, others) {
   const cy = box.y + box.h / 2;
+  const mb = marginFor(size);
+  const l = box.x + mb, r = box.x + box.w - mb;
   return others.some((q) => {
-    if (box.y >= q.y + q.h || q.y >= box.y + box.h) return false; // pas à la même hauteur
     const s = Math.min(size, q.size);
-    const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
-    if (hg > s * 2) return false; // trop loin pour former une « ligne »
-    const tol = s * ALIGN_TOL;
-    return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
+    const sameRow = !(box.y >= q.y + q.h || q.y >= box.y + box.h);
+    const sameCol = !(box.x >= q.x + q.w || q.x >= box.x + box.w);
+    if (sameRow) {
+      const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
+      if (hg > s * 2) return false; // trop loin pour former une « ligne »
+      const tol = s * ALIGN_TOL;
+      return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
+    }
+    if (sameCol) {
+      const vg = Math.max(0, q.y - (box.y + box.h), box.y - (q.y + q.h));
+      if (vg > s * 1.2) return false; // trop loin pour former une « colonne »
+      const mq = marginFor(q.size);
+      const ql = q.x + mq, qr = q.x + q.w - mq;
+      const tol = s * COLUMN_TOL;
+      return Math.abs(l - ql) < tol || Math.abs(r - qr) < tol || Math.abs((l + r) - (ql + qr)) / 2 < tol;
+    }
+    return false;
   });
 }
 
