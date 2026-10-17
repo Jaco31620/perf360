@@ -1,9 +1,10 @@
 "use client";
 /*
  * Nuage de mots dynamique — placement maison en spirale (aucune dépendance).
- * Les mots les plus envoyés sont les plus gros et placés au centre. Chaque mot
- * occupe la boîte RÉELLE de ses lettres (pas la hauteur de ligne), ce qui évite
- * les grands vides autour des gros mots. Rendu en SVG (positionnement exact sur
+ * Les mots les plus envoyés sont les plus gros et placés au centre. Les
+ * collisions sont testées sur la FORME des lettres (grille de 4 px), pas sur un
+ * rectangle : un petit mot peut se loger au-dessus de « pero » à côté du grand
+ * « A » d'« Apero », sous un jambage, etc. Rendu en SVG (positionnement exact sur
  * la ligne de base) ; tailles et positions sont animées en CSS.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,7 +16,7 @@ const REF = 100; // taille de référence pour la mesure (les métriques sont pr
 
 /* Marge autour de chaque mot : de l'air entre les mots, sans gaspiller de place
  * autour des très gros mots. */
-const marginFor = (size) => 4 + size * 0.05;
+const marginFor = (size) => 4 + size * 0.07;
 
 function hash(str) {
   let h = 2166136261;
@@ -46,6 +47,59 @@ function metrics(text, weight) {
   return m;
 }
 
+/* ── Masques de lettres ────────────────────────────────────────────
+ * Chaque mot est dessiné dans un canevas puis réduit en une grille de cases
+ * de CELL px : case pleine = de l'encre. Le masque est ensuite « dilaté » de
+ * la marge du mot, ce qui garantit l'espace minimal entre deux mots. */
+const CELL = 4;
+let _rctx = null;
+const _masks = new Map();
+function wordMask(text, size, weight, mt, m) {
+  const key = `${weight}|${size.toFixed(2)}|${text}`;
+  let mask = _masks.get(key);
+  if (mask) return mask;
+  const k = size / REF;
+  const cw = Math.ceil((mt.w * k + 2 * m) / CELL), ch = Math.ceil(((mt.asc + mt.desc) * k + 2 * m) / CELL);
+  const pw = cw * CELL, ph = ch * CELL;
+  if (!_rctx) _rctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  const cv = _rctx.canvas;
+  if (cv.width < pw) cv.width = pw;
+  if (cv.height < ph) cv.height = ph;
+  _rctx.clearRect(0, 0, pw, ph);
+  _rctx.font = `${weight} ${size}px ${FONT}`;
+  _rctx.fillStyle = "#000";
+  _rctx.textBaseline = "alphabetic";
+  _rctx.fillText(text, m + mt.left * k, m + mt.asc * k);
+  const data = _rctx.getImageData(0, 0, pw, ph).data;
+  const ink = new Uint8Array(cw * ch);
+  for (let y = 0; y < ph; y++) {
+    const row = ((y / CELL) | 0) * cw;
+    for (let x = 0; x < pw; x++) if (data[(y * pw + x) * 4 + 3] > 40) ink[row + ((x / CELL) | 0)] = 1;
+  }
+  // dilatation (séparable) de mc cases = la marge
+  const mc = Math.max(1, Math.round(m / CELL));
+  const tmp = new Uint8Array(cw * ch), dil = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (ink[y * cw + x])
+    for (let d = Math.max(0, x - mc); d <= Math.min(cw - 1, x + mc); d++) tmp[y * cw + d] = 1;
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (tmp[y * cw + x])
+    for (let d = Math.max(0, y - mc); d <= Math.min(ch - 1, y + mc); d++) dil[d * cw + x] = 1;
+  // segments horizontaux du masque dilaté (test de collision rapide)
+  const runs = [];
+  for (let y = 0; y < ch; y++) {
+    let x = 0;
+    while (x < cw) {
+      if (!dil[y * cw + x]) { x++; continue; }
+      const x0 = x;
+      while (x < cw && dil[y * cw + x]) x++;
+      runs.push(y, x0, x - 1);
+    }
+  }
+  mask = { cw, ch, ink, runs };
+  if (_masks.size > 3000) _masks.clear();
+  _masks.set(key, mask);
+  return mask;
+}
+
 const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /* Effet « nuage » : on interdit les alignements entre voisins.
@@ -64,31 +118,42 @@ const EFFECTS = {
   high: { row: 0.6, rowReach: 2.5, col: 0.8, colReach: 1.6, budget: [2, 120] },
 };
 
-function alignedWith(box, by, size, others, fx) {
+/* Écart d'alignement avec le voisin le plus « aligné », en fraction du
+ * décalage minimal exigé : ≥ 1 = bien décalé, 0 = parfaitement aligné. */
+function alignment(box, by, size, others, fx) {
   const cy = box.y + box.h / 2;
   const mb = marginFor(size);
   const l = box.x + mb, r = box.x + box.w - mb;
-  return others.some((q) => {
+  let worst = Infinity;
+  for (const q of others) {
+    const v = pairAlignment(q);
+    if (v < worst) worst = v;
+    if (worst === 0) break;
+  }
+  return worst;
+
+  function pairAlignment(q) {
     const s = Math.min(size, q.size);
     const sameRow = !(box.y >= q.y + q.h || q.y >= box.y + box.h);
     const sameCol = !(box.x >= q.x + q.w || q.x >= box.x + box.w);
     if (sameRow) {
       const hg = Math.max(0, q.x - (box.x + box.w), box.x - (q.x + q.w));
-      if (hg > s * fx.rowReach) return false; // trop loin pour former une « ligne »
+      if (hg > s * fx.rowReach) return Infinity; // trop loin pour former une « ligne »
       const tol = s * fx.row;
-      return Math.abs(by - q.by) < tol || Math.abs(cy - (q.y + q.h / 2)) < tol;
+      return Math.min(Math.abs(by - q.by), Math.abs(cy - (q.y + q.h / 2))) / tol;
     }
     if (sameCol) {
       const vg = Math.max(0, q.y - (box.y + box.h), box.y - (q.y + q.h));
-      if (vg > s * fx.colReach) return false; // trop loin pour former une « colonne »
+      if (vg > s * fx.colReach) return Infinity; // trop loin pour former une « colonne »
       const mq = marginFor(q.size);
       const ql = q.x + mq, qr = q.x + q.w - mq;
       const tol = s * fx.col;
-      return Math.abs(l - ql) < tol || Math.abs(r - qr) < tol || Math.abs((l + r) - (ql + qr)) / 2 < tol;
+      return Math.min(Math.abs(l - ql), Math.abs(r - qr), Math.abs((l + r) - (ql + qr)) / 2) / tol;
     }
-    return false;
-  });
+    return Infinity;
+  }
 }
+
 
 /* Distance entre deux rectangles (0 s'ils se touchent). */
 const gap = (a, b) => Math.hypot(
@@ -103,6 +168,17 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
   const sa = Math.sqrt((W / H) * stretch); // ellipse de la spirale
   const rMax = Math.max(W / sa, H * sa) * 1.05;
   let failed = false;
+  // grille d'occupation de l'écran (encre des mots déjà placés)
+  const GW = Math.floor(W / CELL), GH = Math.floor(H / CELL);
+  const board = new Uint8Array(GW * GH);
+  const collides = (mask, gx, gy) => {
+    const r = mask.runs;
+    for (let i = 0; i < r.length; i += 3) {
+      const base = (gy + r[i]) * GW + gx;
+      for (let x = r[i + 1]; x <= r[i + 2]; x++) if (board[base + x]) return true;
+    }
+    return false;
+  };
 
   /* Point de départ de la spirale d'un mot.
    * - « centre » : tous autour du centre (léger décentrage stable) → les plus
@@ -128,8 +204,9 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     const m = marginFor(size);
     const k = size / REF;
     const mt = metrics(word.w, weight);
-    const w = mt.w * k + 2 * m, h = (mt.asc + mt.desc) * k + 2 * m;
-    if (w > W || h > H) { if (!allowDrop) failed = true; return; }
+    const mask = wordMask(word.w, size, weight, mt, m);
+    const w = mask.cw * CELL, h = mask.ch * CELL;
+    if (mask.cw > GW || mask.ch > GH) { if (!allowDrop) failed = true; return; }
 
     // Spirale propre à chaque mot (stable) : angle de départ, sens de rotation et
     // léger décentrage → placement moins « en lignes », plus organique.
@@ -138,29 +215,30 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     const dir = hk & 1 ? 1 : -1;
     const [ax, ay] = anchor(word, rank, hk);
     let spot = null;
-    let last = null; // dernier obstacle rencontré : souvent le même au pas suivant
-    // 1re place libre mais « alignée » sur un voisin : gardée en secours si
-    // aucune place décalée n'est trouvée un peu plus loin.
-    let fallback = null, fallbackR = 0;
+    // Places libres mais « alignées » sur un voisin : on garde la MOINS alignée
+    // en secours, si aucune place bien décalée n'est trouvée un peu plus loin.
+    let fallback = null, fallbackR = 0, fallbackScore = -1;
     const test = (x, y, r) => {
-      if (x < 0 || y < 0 || x + w > W || y + h > H) return false;
-      const box = { x, y, w, h };
-      if (last && overlaps(box, last)) return false;
-      last = placed.find((p) => overlaps(box, p)) || null;
-      if (last) return false;
-      if (!alignedWith(box, y + m + mt.asc * k, size, placed, fx)) { spot = box; return true; }
-      if (!fallback) { fallback = box; fallbackR = r; }
+      const gx = Math.round(x / CELL), gy = Math.round(y / CELL);
+      if (gx < 0 || gy < 0 || gx + mask.cw > GW || gy + mask.ch > GH) return false;
+      const box = { x: gx * CELL, y: gy * CELL, w, h };
+      // rectangle libre → pas besoin du masque ; sinon test lettre à lettre
+      if (placed.some((p) => overlaps(box, p)) && collides(mask, gx, gy)) return false;
+      const score = alignment(box, box.y + m + mt.asc * k, size, placed, fx);
+      if (score >= 1) { spot = box; return true; }
+      if (!fallback) fallbackR = r;
+      if (score > fallbackScore) { fallback = box; fallbackScore = score; }
       return false;
     };
     // Spirale RECTANGULAIRE aux proportions de l'écran : anneaux rectangulaires
     // de plus en plus grands, parcourus à partir d'un point propre au mot. Le
     // nuage prend ainsi la forme de l'écran (coins compris) au lieu d'une ellipse.
     const phase = start / 6.28;
-    search: for (let r = 0; r < rMax; r += 8) {
+    search: for (let r = 0; r < rMax; r += 2 * CELL) {
       if (fallback && r > fallbackR * fx.budget[0] + fx.budget[1]) break;
       const hw = r * sa, hh = r / sa;
       const per = 4 * (hw + hh);
-      const n = Math.max(1, Math.floor(per / 6));
+      const n = Math.max(1, Math.floor(per / (2 * CELL)));
       for (let i = 0; i < n; i++) {
         let d = ((i / n + phase) % 1) * per;
         let px, py;
@@ -173,6 +251,12 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
     }
     if (!spot) spot = fallback;
     if (!spot) { if (!allowDrop) failed = true; return; }
+    // inscrit l'encre (non dilatée) du mot dans la grille
+    const gx = spot.x / CELL, gy = spot.y / CELL;
+    for (let y = 0; y < mask.ch; y++) {
+      const base = (gy + y) * GW + gx;
+      for (let x = 0; x < mask.cw; x++) if (mask.ink[y * mask.cw + x]) board[base + x] = 1;
+    }
     // point d'ancrage SVG = ligne de base, début du texte
     placed.push({
       ...spot, size,
@@ -208,10 +292,17 @@ function colorize(placed, nColors) {
 
 function placeAll(list, W, H, opts) {
   const maxN = Math.max(...list.map((w) => w.n));
-  let maxFont = Math.min(H * 0.3, W * 0.18, 160);
+  // Taille de départ estimée d'après la surface totale des mots (≈ 45 % de
+  // l'écran) : le 1er essai réussit presque toujours, et l'agrandissement final
+  // (fit) ramène de toute façon le nuage aux dimensions de l'écran.
+  const area = list.reduce((sum, w) => {
+    const f = 0.2 + 0.8 * (w.n / maxN), mt = metrics(w.w, opts.weight);
+    return sum + f * f * ((mt.w + 10) * (mt.asc + mt.desc + 10)) / (REF * REF);
+  }, 0);
   // Taille plancher : en dessous, on préfère laisser de côté les mots les moins
   // cités plutôt que de rendre tout le nuage illisible.
   const floor = Math.max(24, Math.min(W, H) * 0.09);
+  let maxFont = Math.max(floor, Math.min(H * 0.3, W * 0.18, 160, Math.sqrt((0.45 * W * H) / area)));
   for (let i = 0; i < 10; i++) {
     const atFloor = maxFont <= floor || i === 9;
     if (atFloor) maxFont = Math.max(maxFont, floor);
@@ -221,38 +312,6 @@ function placeAll(list, W, H, opts) {
     maxFont *= 0.86;
   }
   return [];
-}
-
-/* Tassement : chaque mot glisse par petits pas vers le centre tant qu'il ne
- * touche aucun autre mot (essai en diagonale, puis horizontal, puis vertical).
- * Les espaces vides se referment ; l'agrandissement (fit) en profite ensuite. */
-function compact(placed, W, H, fx) {
-  const ps = placed.map((p) => ({ ...p }));
-  const cx = W / 2, cy = H / 2;
-  for (let iter = 0; iter < 40; iter++) {
-    let moved = false;
-    for (const p of ps) {
-      // direction vers le centre mesurée en proportion de l'écran : le nuage
-      // se resserre en gardant une forme rectangulaire (coins remplis)
-      const vx = (cx - (p.x + p.w / 2)) / W, vy = (cy - (p.y + p.h / 2)) / H;
-      const len = Math.hypot(vx, vy);
-      if (len < 0.002) continue;
-      const ux = (vx / len) * 6 * Math.sqrt(W / H), uy = (vy / len) * 6 / Math.sqrt(W / H);
-      for (const [dx, dy] of [[ux, uy], [ux, 0], [0, uy]]) {
-        if (Math.abs(dx) + Math.abs(dy) < 0.5) continue;
-        const box = { x: p.x + dx, y: p.y + dy, w: p.w, h: p.h };
-        const others = ps.filter((q) => q !== p);
-        if (others.some((q) => overlaps(box, q))) continue;
-        // ne pas recréer d'alignement en tassant
-        if (alignedWith(box, p.by + dy, p.size, others, fx) && !alignedWith(p, p.by, p.size, others, fx)) continue;
-        p.x += dx; p.y += dy; p.bx += dx; p.by += dy;
-        moved = true;
-        break;
-      }
-    }
-    if (!moved) break;
-  }
-  return ps;
 }
 
 const bounds = (placed) => {
@@ -290,11 +349,18 @@ function layout(words, W, H, weight, spread, effect) {
   if (!a.length) return [];
   const b0 = bounds(a);
   const stretch = Math.min(3, Math.max(0.4, (W / H) / (b0.w / b0.h)));
-  const fa = fit(compact(a, W, H, fx), W, H);
-  if (Math.abs(stretch - 1) < 0.05) return fa.placed;
-  const fb = fit(compact(placeAll(list, W, H, { weight, stretch, spread, fx }), W, H, fx), W, H);
+  const fa = fit(a, W, H);
+  if (Math.abs(stretch - 1) < 0.25) return fa.placed; // forme déjà adaptée : pas de 2e passe
+  const fb = fit(placeAll(list, W, H, { weight, stretch, spread, fx }), W, H);
   return fb.placed.length >= fa.placed.length && fb.scale > fa.scale ? fb.placed : fa.placed;
 }
+
+/* Calcul complet (placement + couleurs), réutilisé pour l'export en image. */
+export function computeCloud(words, W, H, { weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", nColors }) {
+  return colorize(layout(words, W, H, weight, arrangement === "spread", effect), nColors);
+}
+
+export const CLOUD_FONT = FONT;
 
 const DEFAULT_COLORS = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee", "#818cf8", "#e879f9", "#f472b6"];
 

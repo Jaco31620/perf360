@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import WordCloud from "./WordCloud";
+import { exportCloudImage } from "./exportImage";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
 import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
@@ -148,6 +149,12 @@ export default function Presenter({ code }) {
         {isAdmin && s && (
           <button onClick={() => act(s.status === "open" ? "close" : "open")} className={btn} style={{ background: t.panel }}>
             {s.status === "open" ? "⏸ Fermer les envois" : "▶ Ouvrir les envois"}
+          </button>
+        )}
+        {data?.words.length > 0 && (
+          <button onClick={() => exportCloudImage({ words: data.words, theme: t, question: s?.question, filename: `nuage-${code}.png` })}
+            className={btn} style={{ background: t.panel }} title="Enregistrer le nuage en image (sans QR code ni boutons)">
+            ⬇ Image
           </button>
         )}
         <button onClick={() => setBigQr(true)} className={btn} style={{ background: t.panel }}>QR code</button>
