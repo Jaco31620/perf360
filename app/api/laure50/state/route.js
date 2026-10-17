@@ -4,18 +4,18 @@
  *          la chanson à l'instant `at` (ms, horloge serveur). ?id=<téléphone>
  *          le compte comme « vu » ; ?phones=1 ajoute le nombre de téléphones vus
  *          dans les 5 dernières secondes (affiché par la régie).
- * - POST : { key, playing, pos, shift, at } — réservé à la régie (REGIE_KEY).
+ * - POST : { key, playing, pos, shift, at } — réservé à la régie (clé : variable
+ *          REGIE_KEY ou colonne laure50_state.regie_key).
  *          `at` = heure (déjà corrigée vers l'horloge serveur) à laquelle la
  *          régie a lu la position de la vidéo : le délai réseau ne fausse pas la
  *          synchro. Ignoré s'il s'écarte de plus de 10 s de l'heure serveur.
  */
-import { getState, setState, seePhone, countPhones } from "@/lib/laure50Store";
+import { getState, setState, seePhone, countPhones, getRegieKey } from "@/lib/laure50Store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store" };
-const regieKey = () => process.env.REGIE_KEY || (process.env.NODE_ENV !== "production" ? "laure" : null);
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 export async function GET(req) {
@@ -37,8 +37,9 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400, headers: NO_STORE }); }
 
-  const key = regieKey();
-  if (!key) return Response.json({ error: "REGIE_KEY non configurée." }, { status: 503, headers: NO_STORE });
+  let key;
+  try { key = await getRegieKey(); } catch (e) { return Response.json({ error: "Indisponible." }, { status: 502, headers: NO_STORE }); }
+  if (!key) return Response.json({ error: "Clé régie non configurée." }, { status: 503, headers: NO_STORE });
   if (body?.key !== key) return Response.json({ error: "Clé régie incorrecte." }, { status: 403, headers: NO_STORE });
 
   const now = Date.now();

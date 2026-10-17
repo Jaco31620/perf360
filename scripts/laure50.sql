@@ -9,6 +9,7 @@ create table if not exists public.laure50_state (
   at bigint not null default 0,
   shift double precision not null default 0,
   rev int not null default 0,
+  regie_key text, -- clé de la régie (jamais renvoyée aux téléphones)
   constraint laure50_state_single check (id = 1)
 );
 insert into public.laure50_state (id) values (1) on conflict (id) do nothing;
