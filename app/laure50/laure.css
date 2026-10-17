@@ -20,14 +20,15 @@
   height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; padding: 16px 16px 26vh;
 }
-.l50-logo-big { width: min(78vw, 420px); height: auto; filter: drop-shadow(0 0 18px rgba(240, 148, 58, .35)); }
+/* logo limité en largeur ET en hauteur : jamais rogné, même en paysage */
+.l50-logo-big { width: auto; height: auto; max-width: min(78vw, 420px); max-height: 36vh; filter: drop-shadow(0 0 18px rgba(240, 148, 58, .35)); }
 .l50-logo-qr { width: min(60vw, 260px); height: auto; margin-bottom: 20px; }
-.l50-wait { margin-top: 24px; font-size: 18px; opacity: .8; }
-.l50-title { margin-top: 22px; font-size: clamp(22px, 6vw, 40px); }
-.l50-subtitle { margin-top: 8px; font-size: clamp(14px, 3.6vw, 20px); opacity: .8; font-weight: 600; }
-.l50-outro { margin-top: 24px; font-size: clamp(30px, 9vw, 64px); color: #f0943a; }
+.l50-wait { margin-top: min(24px, 4vh); font-size: clamp(14px, 4.5vh, 18px); opacity: .8; }
+.l50-title { margin-top: min(22px, 3.5vh); font-size: clamp(18px, min(6vw, 7.5vh), 40px); }
+.l50-subtitle { margin-top: min(8px, 1.5vh); font-size: clamp(12px, min(3.6vw, 4.5vh), 20px); opacity: .8; font-weight: 600; }
+.l50-outro { margin-top: min(24px, 4vh); font-size: clamp(24px, min(9vw, 12vh), 64px); color: #f0943a; }
 
-.l50-dots { display: flex; gap: 14px; margin-top: 26px; }
+.l50-dots { display: flex; gap: 14px; margin-top: min(26px, 4vh); }
 .l50-dot { width: 16px; height: 16px; border-radius: 50%; background: #f0943a; box-shadow: 0 0 12px #f0943a; transition: opacity .2s, box-shadow .2s; }
 .l50-dot.off { opacity: .15; box-shadow: none; }
 
@@ -56,6 +57,13 @@
 .l50-bar { z-index: 10; }
 .l50-bar button.on { background: rgba(240, 148, 58, .55); }
 .l50-url { margin-top: 16px; font-size: clamp(16px, 4.5vw, 24px); color: #f0943a; }
+
+/* Écrans bas (téléphone en paysage) : moins de marges */
+@media (max-height: 500px) {
+  .l50-center { padding: 8px 16px 25vh; }
+  .l50-lyrics { padding: 8px 12px 25vh; gap: .3em; }
+  .l50-corner-logo { width: min(18vw, 110px); }
+}
 
 /* Plein écran (téléphones) */
 .l50-fs {

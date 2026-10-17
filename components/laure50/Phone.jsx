@@ -81,7 +81,14 @@ function PhoneContent() {
   }, []);
   useEffect(() => {
     if (!lyrics) return;
-    const update = () => setFit(layoutLyrics(lyrics.items, Math.min(360, window.innerWidth - 24)));
+    const update = () => {
+      const W = window.innerWidth, H = window.innerHeight;
+      // paysage : plus large, mais en laissant libre le coin du logo
+      const width = W > H ? Math.min(720, W - 2 * Math.min(0.18 * W, 130) - 24) : Math.min(360, W - 24);
+      const f = layoutLyrics(lyrics.items, width);
+      // hauteur : 4 lignes simultanées au maximum doivent tenir
+      setFit({ ...f, fontSize: Math.min(f.fontSize, Math.floor(H * 0.075)) });
+    };
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
