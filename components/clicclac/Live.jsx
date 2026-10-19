@@ -163,7 +163,7 @@ export default function Live({ code }) {
       ) : cfg.layout === "mosaic" ? (
         <Mosaic photos={history} current={current} captions={cfg.captions} qr={cfg.qr} />
       ) : cfg.layout === "wall" ? (
-        <Wall photos={history} captions={cfg.captions} qr={cfg.qr} />
+        <Wall photos={history} captions={cfg.captions} qr={cfg.qr} screen={screen} qrBox={qrBox} />
       ) : (
         <div key={current.id} className="absolute inset-0" style={{ animation: `${cfg.transition === "slide" ? "ccslide" : "ccfade"} .9s ease-out` }}>
           <img src={current.full} alt="" className="absolute inset-0 w-full h-full object-cover blur-3xl opacity-40 scale-110" />
@@ -306,32 +306,67 @@ function Mosaic({ photos, current, captions, qr }) {
   );
 }
 
-/* Mur de polaroïds : chaque photo « tombe » sur le tas, légèrement inclinée. */
-function Wall({ photos, captions, qr }) {
-  const cards = photos.slice(0, 7).reverse();
-  const place = (id) => {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-    // zone de dépôt : cartes entièrement visibles, à gauche de la pastille QR si elle est affichée
-    const xMax = qr ? 46 : 62, yMax = 24;
-    return { x: 4 + (h % (xMax - 4)), y: 11 + ((h >> 8) % (yMax - 9)), r: ((h >> 16) % 16) - 8 };
-  };
+/* Mur de polaroïds : l'écran est découpé en emplacements (3×3, 4×3 sur écran
+ * large, 2×4 en portrait) ; chaque photo en occupe un, avec un léger désordre
+ * (position, inclinaison). La plus récente est plus grande, au premier plan.
+ * Les cartes restent dans l'écran et ne recouvrent jamais la pastille QR. */
+function Wall({ photos, captions, qr, screen, qrBox }) {
+  const W = screen.w, H = screen.h, m = 20;
+  const cols = W / H > 1.5 ? 4 : W / H > 0.9 ? 3 : 2, rows = W / H > 0.9 ? 3 : 4;
+  const sw = (W - 2 * m) / cols, sh = (H - 2 * m) / rows;
+  // emplacements (sauf celui de la pastille QR, en bas à droite)
+  const slots = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (qr && r === rows - 1 && c === cols - 1) continue;
+    slots.push({ cx: m + (c + 0.5) * sw, cy: m + (r + 0.5) * sh });
+  }
+  const hash = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
+  // les plus récentes d'abord ; chacune garde son emplacement tant qu'elle reste affichée
+  const shown = photos.slice(0, slots.length);
+  const used = new Set();
+  const placed = shown.map((p) => {
+    let k = hash(p.id) % slots.length;
+    while (used.has(k)) k = (k + 1) % slots.length;
+    used.add(k);
+    return { p, slot: slots[k] };
+  }).reverse(); // la plus récente dessinée en dernier (au-dessus)
+
+  const qrRect = qr && qrBox.w ? { x: W - 24 - qrBox.w, y: H - 24 - qrBox.h, w: qrBox.w, h: qrBox.h } : null;
   return (
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#3a2a22,#120d0b)]">
-      {cards.map((p, i) => {
-        const { x, y, r } = place(p.id);
-        const top = i === cards.length - 1;
+      {placed.map(({ p, slot }, i) => {
+        const top = i === placed.length - 1;
+        const h = hash(p.id);
+        // taille maximale de la carte (photo + bord blanc ~ 24 px de côté, 52 px en bas)
+        const k = top ? 1.6 : 1.28;
+        const maxW = Math.min(sw * k, W * 0.45), maxH = Math.min(sh * k, H * 0.62);
+        const cardW = maxW, cardH = maxH;
+        let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.25;
+        let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.25;
+        // rester dans l'écran
+        cx = Math.max(m + cardW / 2, Math.min(W - m - cardW / 2, cx));
+        cy = Math.max(m + cardH / 2, Math.min(H - m - cardH / 2, cy));
+        // ne pas recouvrir la pastille QR : on décale vers le haut ou la gauche (le moins coûteux)
+        if (qrRect && cx + cardW / 2 > qrRect.x - 12 && cy + cardH / 2 > qrRect.y - 12) {
+          const up = cy + cardH / 2 - (qrRect.y - 12), left = cx + cardW / 2 - (qrRect.x - 12);
+          if (up <= left) cy -= up; else cx -= left;
+        }
+        const r = (h % 14) - 7;
         return (
-          <div key={p.id} className="absolute bg-[#fbfaf5] p-3 pb-12 shadow-2xl"
-            style={{ left: `${x}%`, top: `${y}%`, "--r": `rotate(${r}deg)`, transform: `rotate(${r}deg)`, zIndex: i, animation: top ? "ccfall .8s ease-out" : undefined }}>
-            {/* photo entière, aux proportions d'origine (orientation, cadre) */}
-            <img src={top ? p.full : p.thumb} alt="" className="block w-auto h-auto"
-              style={{ maxWidth: top ? "30vw" : "22vw", maxHeight: top ? "52vh" : "40vh" }} />
-            {captions && (p.name || p.caption) && (
-              <p className="absolute bottom-2 left-0 right-0 text-center text-gray-800 truncate px-3" style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: top ? "1.6vw" : "1.2vw" }}>
-                {p.caption || p.name}
-              </p>
-            )}
+          <div key={p.id} className="absolute flex items-center justify-center"
+            style={{ left: cx - cardW / 2, top: cy - cardH / 2, width: cardW, height: cardH, zIndex: i }}>
+            <div className="relative bg-[#fbfaf5] p-3 pb-12 shadow-2xl"
+              style={{ "--r": `rotate(${r}deg)`, transform: `rotate(${r}deg)`, animation: top ? "ccfall .8s ease-out" : undefined }}>
+              {/* photo entière, aux proportions d'origine (orientation, cadre) */}
+              <img src={top ? p.full : p.thumb} alt="" className="block w-auto h-auto"
+                style={{ maxWidth: cardW - 24, maxHeight: cardH - 64 }} />
+              {captions && (p.name || p.caption) && (
+                <p className="absolute bottom-2 left-0 right-0 text-center text-gray-800 truncate px-3"
+                  style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: top ? Math.max(16, sh * 0.075) : Math.max(13, sh * 0.06) }}>
+                  {p.caption || p.name}
+                </p>
+              )}
+            </div>
           </div>
         );
       })}
