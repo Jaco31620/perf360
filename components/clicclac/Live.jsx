@@ -117,7 +117,7 @@ export default function Live({ code }) {
     if (!r.back) shownRef.current = [...shownRef.current.slice(-30), r.p];
     currentRef.current = r.p;
     setCurrent(r.p);
-    setHistory((h) => [r.p, ...h.filter((x) => x.id !== r.p.id)].slice(0, MOSAIC));
+    setHistory((h) => [r.p, ...h.filter((x) => x.id !== r.p.id)].slice(0, 48)); // mosaïque : 12 ; pêle-mêle : jusqu'à ~33
     if (r.fresh) { setBanner(r.p); setTimeout(() => setBanner((b) => (b?.id === r.p.id ? null : b)), 4500); }
   }, [pick]);
 
@@ -189,7 +189,7 @@ export default function Live({ code }) {
         </div>
       )}
 
-      {banner && (
+      {banner && cfg.layout !== "wall" && cfg.layout !== "collage" && ( // en pêle-mêle, l'arrivée en grand suffit
         <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-[#ff5a5f] text-white text-2xl font-black px-8 py-3 rounded-full shadow-2xl" style={{ animation: "ccdrop .5s ease-out" }}>
           📸 Nouvelle photo{banner.name ? ` de ${banner.name}` : ""} !
         </div>
@@ -324,14 +324,34 @@ function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true })
     slots.push({ cx: m + (c + 0.5) * sw, cy: m + (r + 0.5) * sh });
   }
   const hash = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
-  const shown = photos.slice(0, slots.length);
-  const used = new Set();
-  const placed = shown.map((p) => {
-    let k = hash(p.id) % slots.length;
-    while (used.has(k)) k = (k + 1) % slots.length;
-    used.add(k);
-    return { p, slot: slots[k] };
-  }).reverse(); // la plus récente dessinée en dernier
+
+  // Placement PERSISTANT : une photo garde son emplacement (et donc sa position)
+  // dès qu'elle a été posée. Jusqu'à 3 photos par emplacement (le tas s'épaissit) ;
+  // une nouvelle photo va sur l'emplacement le moins chargé. Au-delà, les plus
+  // anciennes disparaissent. Une photo remontrée en vedette revient au-dessus du tas.
+  const store = useRef({ map: new Map(), z: 0, hero: null });
+  const st = store.current;
+  const maxCards = slots.length * 3;
+  const inHistory = new Set(photos.map((p) => p.id));
+  for (const id of [...st.map.keys()]) if (!inHistory.has(id)) st.map.delete(id);
+  for (const p of [...photos].reverse()) { // de la plus ancienne à la plus récente
+    if (st.map.has(p.id)) continue;
+    const load = new Array(slots.length).fill(0);
+    for (const v of st.map.values()) load[v.slot % slots.length]++;
+    const min = Math.min(...load);
+    const free = load.map((n, k) => (n === min ? k : -1)).filter((k) => k >= 0);
+    st.map.set(p.id, { slot: free[hash(p.id) % free.length], z: ++st.z });
+  }
+  if (current && current.id !== st.hero && st.map.has(current.id)) { st.hero = current.id; st.map.get(current.id).z = ++st.z; }
+  while (st.map.size > maxCards) {
+    let oldest = null;
+    for (const [id, v] of st.map) if (id !== current?.id && (!oldest || v.z < st.map.get(oldest).z)) oldest = id;
+    st.map.delete(oldest);
+  }
+  const byId = new Map(photos.map((p) => [p.id, p]));
+  const placed = [...st.map.entries()].filter(([id]) => byId.has(id))
+    .sort((a, b) => a[1].z - b[1].z) // la plus récente dessinée en dernier
+    .map(([id, v]) => ({ p: byId.get(id), slot: slots[v.slot % slots.length] }));
   const qrRect = qr && qrBox.w ? { x: W - 24 - qrBox.w, y: H - 24 - qrBox.h } : null;
   // décale un rectangle (centre cx, cy ; taille w×h) hors de la pastille QR
   const avoidQr = (cx, cy, w, h) => {
@@ -350,8 +370,8 @@ function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true })
         const h = hash(p.id);
         // place « au repos » dans le tas
         const cardW = Math.min(sw * 1.28, W * 0.45), cardH = Math.min(sh * 1.28, H * 0.62);
-        let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.25;
-        let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.25;
+        let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.4;
+        let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.4;
         const r = (h % 14) - 7;
         // marge supplémentaire due à l'inclinaison (coins qui dépassent)
         const tilt = Math.abs(Math.sin((r * Math.PI) / 180)) * Math.max(cardW, cardH) / 2;
@@ -386,9 +406,6 @@ function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true })
                   style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: Math.max(13, sh * 0.06) }}>
                   {p.caption || p.name}
                 </p>
-              )}
-              {captions && !polaroid && p.name && (
-                <span className="absolute bottom-2 left-2 bg-black/60 text-white rounded-full px-2.5 py-0.5" style={{ fontSize: Math.max(11, sh * 0.045) }}>📸 {p.name}</span>
               )}
             </div>
           </div>
