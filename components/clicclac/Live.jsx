@@ -372,7 +372,7 @@ function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true })
         const cardW = Math.min(sw * 1.28, W * 0.45), cardH = Math.min(sh * 1.28, H * 0.62);
         let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.4;
         let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.4;
-        const r = (h % 14) - 7;
+        const r = ((h % 321) / 10) - 16; // inclinaison de -16° à +16°
         // marge supplémentaire due à l'inclinaison (coins qui dépassent)
         const tilt = Math.abs(Math.sin((r * Math.PI) / 180)) * Math.max(cardW, cardH) / 2;
         cx = Math.max(m + tilt + cardW / 2, Math.min(W - m - tilt - cardW / 2, cx));
