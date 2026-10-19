@@ -117,7 +117,7 @@ export default function Live({ code }) {
     if (!r.back) shownRef.current = [...shownRef.current.slice(-30), r.p];
     currentRef.current = r.p;
     setCurrent(r.p);
-    setHistory((h) => [r.p, ...h.filter((x) => x.id !== r.p.id)].slice(0, 48)); // mosaïque : 12 ; pêle-mêle : jusqu'à ~33
+    setHistory((h) => [r.p, ...h.filter((x) => x.id !== r.p.id)].slice(0, 64)); // mosaïque : 12 ; pêle-mêle : jusqu'à 60
     if (r.fresh) { setBanner(r.p); setTimeout(() => setBanner((b) => (b?.id === r.p.id ? null : b)), 4500); }
   }, [pick]);
 
@@ -316,13 +316,13 @@ function Mosaic({ photos, current, captions, qr }) {
  * Cartes toujours dans l'écran, jamais sur la pastille QR. */
 function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true }) {
   const W = screen.w, H = screen.h, m = 20;
-  const cols = W / H > 1.5 ? 4 : W / H > 0.9 ? 3 : 2, rows = W / H > 0.9 ? 3 : 4;
-  const sw = (W - 2 * m) / cols, sh = (H - 2 * m) / rows;
+  // grille d'emplacements qui DÉBORDE légèrement de l'écran (6 % de chaque côté) :
+  // le tas remplit tout l'écran, les cartes du bord sont coupées comme sur une table.
+  // La pastille QR reste au-dessus (z-index), la zone sous elle est un emplacement normal.
+  const cols = W / H > 1.5 ? 5 : W / H > 0.9 ? 4 : 3, rows = W / H > 0.9 ? 4 : 5;
+  const ox = -0.06 * W, oy = -0.06 * H, sw = (W * 1.12) / cols, sh = (H * 1.12) / rows;
   const slots = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    if (qr && r === rows - 1 && c === cols - 1) continue;
-    slots.push({ cx: m + (c + 0.5) * sw, cy: m + (r + 0.5) * sh });
-  }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) slots.push({ cx: ox + (c + 0.5) * sw, cy: oy + (r + 0.5) * sh });
   const hash = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
 
   // Placement PERSISTANT : une photo garde son emplacement (et donc sa position)
@@ -368,16 +368,12 @@ function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true })
       {placed.map(({ p, slot }, i) => {
         const hero = current && p.id === current.id;
         const h = hash(p.id);
-        // place « au repos » dans le tas
-        const cardW = Math.min(sw * 1.28, W * 0.45), cardH = Math.min(sh * 1.28, H * 0.62);
+        // place « au repos » dans le tas (cartes larges : elles se chevauchent et débordent)
+        const cardW = Math.min(sw * 1.5, W * 0.42), cardH = Math.min(sh * 1.5, H * 0.6);
         let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.4;
         let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.4;
         const r = ((h % 321) / 10) - 16; // inclinaison de -16° à +16°
-        // marge supplémentaire due à l'inclinaison (coins qui dépassent)
-        const tilt = Math.abs(Math.sin((r * Math.PI) / 180)) * Math.max(cardW, cardH) / 2;
-        cx = Math.max(m + tilt + cardW / 2, Math.min(W - m - tilt - cardW / 2, cx));
-        cy = Math.max(m + tilt + cardH / 2, Math.min(H - m - tilt - cardH / 2, cy));
-        [cx, cy] = avoidQr(cx, cy, cardW + 2 * tilt, cardH + 2 * tilt);
+        // au repos, une carte peut déborder de l'écran ou passer sous le QR
         // en vedette : agrandie au centre de l'écran (hors QR), redressée
         let t = `rotate(${r}deg)`;
         if (hero) {
