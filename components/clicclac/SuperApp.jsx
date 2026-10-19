@@ -3,7 +3,8 @@
  * Clic-Clac — super-admin (/clic-clac/super) : création des albums et de leurs
  * quotas, suivi du stockage, prolongation, nouveau code organisateur, suppression.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
 import { api, superToken, storage, formatBytes, formatDate } from "./client";
 import { DEFAULT_SETTINGS } from "@/lib/clicclac/settings";
@@ -72,7 +73,7 @@ export default function SuperApp() {
       )}
 
       {creating && <CreateForm token={token} onCancel={() => setCreating(false)} onCreated={(r) => { setCreating(false); setCreated(r); load(); }} />}
-      {created && <Credentials origin={origin} {...created} onClose={() => setCreated(null)} />}
+      {created && <Credentials origin={origin} token={token} {...created} onClose={() => setCreated(null)} />}
 
       <div className="space-y-3">
         {data?.albums.length === 0 && <p className="text-gray-400 text-center py-10">Aucun album.</p>}
@@ -118,7 +119,7 @@ function CreateForm({ token, onCancel, onCreated }) {
     try {
       const { maxPhotos, guestQuota, retentionDays, keepHd } = v;
       const r = await api("/super/albums", { method: "POST", token, body: { name: v.name, eventDate: v.eventDate, adminEmail: v.adminEmail, settings: { maxPhotos, guestQuota, retentionDays, keepHd } } });
-      onCreated({ ...r, name: v.name });
+      onCreated({ ...r, name: v.name, adminEmail: v.adminEmail });
     } catch (e2) { setErr(e2.message); }
   };
   return (
@@ -139,8 +140,51 @@ function CreateForm({ token, onCancel, onCreated }) {
   );
 }
 
+/* Envoi du récapitulatif à l'organisateur (QR invités joint).
+ * pin connu (création / nouveau code) → inclus ; sinon choix : nouveau code ou sans code. */
+function RecapForm({ token, albumId, code, origin, pin, defaultEmail, onSent, onCancel }) {
+  const [to, setTo] = useState(defaultEmail || "");
+  const [message, setMessage] = useState("");
+  const [regen, setRegen] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const qrRef = useRef(null);
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true); setStatus(null);
+    try {
+      const qr = qrRef.current?.querySelector("canvas")?.toDataURL("image/png").split(",")[1];
+      const r = await api(`/super/albums/${albumId}/recap`, { method: "POST", token, body: { to, message, qr, ...(pin ? { pin } : regen ? { regenPin: true } : {}) } });
+      setStatus({ ok: true, text: `✓ Récapitulatif envoyé à ${r.to}${r.pin ? ` (nouveau code organisateur : ${r.pin})` : ""}.` });
+      onSent?.(r);
+    } catch (err) { setStatus({ ok: false, text: err.message }); } finally { setBusy(false); }
+  };
+  return (
+    <form onSubmit={send} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3 mt-3">
+      <div ref={qrRef} className="hidden">{origin && <QRCodeCanvas value={`${origin}/clic-clac/${code}`} size={512} marginSize={2} />}</div>
+      <p className="font-bold text-gray-900">✉️ Envoyer le récapitulatif à l'organisateur</p>
+      <input required type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="E-mail de l'organisateur" className={input} />
+      <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Message personnel (facultatif)" className={`${input} resize-none`} />
+      {pin ? (
+        <p className="text-xs text-gray-500">Le code organisateur <b>{pin}</b> sera inclus.</p>
+      ) : (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={regen} onChange={(e) => setRegen(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#ff5a5f]" />
+          <span>Inclure un <b>nouveau</b> code organisateur <span className="text-gray-400">(l'ancien ne fonctionnera plus — sinon le récap est envoyé sans code)</span></span>
+        </label>
+      )}
+      <p className="text-xs text-gray-400">Contenu : liens et code invités, QR code joint, espace organisateur, écran live, quotas et date de suppression.</p>
+      {status && <p className={`text-sm font-semibold ${status.ok ? "text-green-600" : "text-red-600"}`}>{status.text}</p>}
+      <div className="flex gap-2">
+        <button disabled={busy} className="bg-[#ff5a5f] text-white font-bold px-5 py-2 rounded-full disabled:opacity-50">{busy ? "Envoi…" : "Envoyer"}</button>
+        {onCancel && <button type="button" onClick={onCancel} className="px-5 py-2 rounded-full bg-gray-100 font-semibold">Fermer</button>}
+      </div>
+    </form>
+  );
+}
+
 /* Codes à transmettre à l'organisateur (le code organisateur n'est affiché qu'une fois). */
-function Credentials({ origin, code, pin, name, onClose }) {
+function Credentials({ origin, token, id, code, pin, name, adminEmail, onClose }) {
   const text = `Clic-Clac — ${name}\nAlbum invités : ${origin}/clic-clac/${code} (code ${code})\nEspace organisateur : ${origin}/clic-clac/${code}/admin\nCode organisateur : ${pin}`;
   const [copied, setCopied] = useState(false);
   return (
@@ -152,17 +196,19 @@ function Credentials({ origin, code, pin, name, onClose }) {
         <button onClick={async () => { await navigator.clipboard.writeText(text); setCopied(true); }} className="bg-green-600 text-white font-bold px-5 py-2 rounded-full">{copied ? "✓ Copié" : "Copier"}</button>
         <button onClick={onClose} className="px-5 py-2 rounded-full bg-white font-semibold">Fermer</button>
       </div>
+      {id && <RecapForm token={token} albumId={id} code={code} origin={origin} pin={pin} defaultEmail={adminEmail} />}
     </div>
   );
 }
 
 function AlbumRow({ a, token, origin, reload, onPin }) {
   const [edit, setEdit] = useState(false);
+  const [recap, setRecap] = useState(false);
   const [v, setV] = useState(null);
   const s = a.settings;
   const expired = a.expires_at && new Date(a.expires_at) < new Date(Date.now() + 3 * 864e5);
   const patch = async (body) => {
-    try { const r = await api(`/super/albums/${a.id}`, { method: "PATCH", token, body }); if (r.pin) onPin({ code: a.code, pin: r.pin, name: a.name }); reload(); return true; }
+    try { const r = await api(`/super/albums/${a.id}`, { method: "PATCH", token, body }); if (r.pin) onPin({ id: a.id, code: a.code, pin: r.pin, name: a.name, adminEmail: a.admin_email }); reload(); return true; }
     catch (e) { alert(e.message); return false; }
   };
 
@@ -185,6 +231,7 @@ function AlbumRow({ a, token, origin, reload, onPin }) {
         <Link href={`/clic-clac/${a.code}/admin`} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-900 text-white">Ouvrir (organisateur)</Link>
         <a href={`/clic-clac/${a.code}/live`} target="_blank" className="px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100">Live</a>
         <button onClick={() => { setEdit((x) => !x); setV({ name: a.name, eventDate: a.event_date || "", adminEmail: a.admin_email || "", ...s }); }} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100">Quotas & infos</button>
+        <button onClick={() => setRecap((x) => !x)} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-[#ff5a5f] text-white">✉️ Envoyer le récap</button>
         <button onClick={() => patch({ extendDays: 30 })} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100">+30 jours</button>
         <button onClick={() => confirm("Générer un nouveau code organisateur ? L'ancien ne fonctionnera plus.") && patch({ regenPin: true })} className="px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100">Nouveau code orga</button>
         <button onClick={async () => {
@@ -192,6 +239,7 @@ function AlbumRow({ a, token, origin, reload, onPin }) {
           try { await api(`/super/albums/${a.id}`, { method: "DELETE", token }); reload(); } catch (e) { alert(e.message); }
         }} className="px-3 py-1.5 rounded-full text-sm font-semibold text-red-600 bg-red-50">Supprimer</button>
       </div>
+      {recap && <RecapForm token={token} albumId={a.id} code={a.code} origin={origin} defaultEmail={a.admin_email} onSent={reload} onCancel={() => setRecap(false)} />}
       {edit && v && (
         <form onSubmit={async (e) => {
           e.preventDefault();
