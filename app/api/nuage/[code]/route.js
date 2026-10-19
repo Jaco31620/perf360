@@ -48,6 +48,12 @@ export async function GET(req, { params }) {
       total: stats?.total || 0,
       participants: stats?.participants || 0,
     };
+    // les envois ajoutés par l'admin (participant « admin ») ne comptent pas comme un participant
+    if (out.participants) {
+      const { count } = await sb.from("nuage_words").select("id", { count: "exact", head: true })
+        .eq("session_id", s.id).eq("participant_id", "admin");
+      if (count) out.participants -= 1;
+    }
 
     if (validPid(pid)) out.sent = await sentBy(sb, s.id, pid);
 

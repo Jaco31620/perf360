@@ -529,6 +529,8 @@ function WordList({ words, hidden, act }) {
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState(null); // clé du mot en cours de correction
   const [draft, setDraft] = useState("");
+  const [countEdit, setCountEdit] = useState(null); // clé du mot dont on modifie le nombre
+  const [countDraft, setCountDraft] = useState("");
   const [sort, setSort] = useState("count"); // "count" | "alpha"
 
   useEffect(() => {
@@ -544,6 +546,15 @@ function WordList({ words, hidden, act }) {
     .sort(sort === "alpha" ? alpha : (a, b) => b.n - a.n || alpha(a, b));
   const f = filter.trim().toLowerCase();
   const list = f ? all.filter((w) => w.w.toLowerCase().includes(f)) : all;
+
+  const saveCount = async (w) => {
+    const n = parseInt(countDraft, 10);
+    if (Number.isFinite(n) && n !== w.n) {
+      if (n === 0 && !confirm(`Mettre « ${w.w} » à 0 le supprime du nuage. Continuer ?`)) return;
+      await act("count", { key: w.k, n: Math.max(0, Math.min(999, n)) });
+    }
+    setCountEdit(null);
+  };
 
   const save = async (w) => {
     const next = draft.trim();
@@ -564,7 +575,7 @@ function WordList({ words, hidden, act }) {
           ))}
         </div>
       </div>
-      <p className="text-xs text-gray-400">Corrigez une faute (✏️) : si le mot corrigé existe déjà, les deux sont fusionnés. Astuce : un clic sur un mot du nuage le masque.</p>
+      <p className="text-xs text-gray-400">Corrigez une faute (✏️) : si le mot corrigé existe déjà, les deux sont fusionnés. Cliquez sur « ×n » pour modifier le nombre d'occurrences. Astuce : un clic sur un mot du nuage le masque.</p>
       {all.length > 8 && (
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher…"
           className="w-full border-2 border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:border-violet-500 outline-none" />
@@ -583,9 +594,21 @@ function WordList({ words, hidden, act }) {
               </form>
             ) : (
               <>
-                <span className={`flex-1 min-w-0 truncate ${w.hidden ? "line-through" : ""}`}>
-                  {w.w} <span className="text-gray-400">×{w.n}</span>
-                </span>
+                <span className={`flex-1 min-w-0 truncate ${w.hidden ? "line-through" : ""}`}>{w.w}</span>
+                {countEdit === w.k ? (
+                  <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); saveCount(w); }}>
+                    <span className="text-gray-400">×</span>
+                    <input autoFocus type="number" min={0} max={999} value={countDraft} onChange={(e) => setCountDraft(e.target.value)}
+                      onKeyDown={(e) => e.key === "Escape" && setCountEdit(null)}
+                      className="w-16 border-2 border-violet-400 rounded-lg px-1.5 py-0.5 outline-none text-right" />
+                    <button className="text-violet-600 font-bold text-xs">OK</button>
+                  </form>
+                ) : (
+                  <button title="Modifier le nombre d'occurrences" onClick={() => { setCountEdit(w.k); setCountDraft(String(w.n)); }}
+                    className="text-gray-500 hover:text-violet-700 font-semibold tabular-nums underline decoration-dotted underline-offset-2">
+                    ×{w.n}
+                  </button>
+                )}
                 <button title="Corriger" onClick={() => { setEditing(w.k); setDraft(w.w); }} className="hover:scale-110">✏️</button>
                 <button title={w.hidden ? "Réafficher" : "Masquer"} onClick={() => act(w.hidden ? "unhide" : "hide", { key: w.k })}
                   className="text-xs font-semibold text-sky-600 w-16 text-right">{w.hidden ? "Réafficher" : "Masquer"}</button>

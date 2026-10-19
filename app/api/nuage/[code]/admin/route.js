@@ -8,6 +8,9 @@
  *   hide | unhide { key }   → masquer / ré-afficher un mot
  *   remove { key }          → supprimer toutes les occurrences d'un mot
  *   rename { key, word }    → corriger un mot (fusionne s'il existe déjà)
+ *   count { key, n }        → fixer le nombre d'occurrences d'un mot (0 → supprimé) :
+ *                             ajout d'envois « admin », retrait des envois admin
+ *                             puis des plus récents
  *   reset                   → effacer tous les mots
  *   delete                  → supprimer le nuage
  */
@@ -57,6 +60,33 @@ export async function POST(req, { params }) {
         const set = new Set(s.hidden || []);
         body.action === "hide" ? set.add(key) : set.delete(key);
         res = await update({ hidden: [...set] });
+        break;
+      }
+      case "count": {
+        const key = String(body.key || "");
+        const target = parseInt(body.n, 10);
+        if (!Number.isFinite(target) || target < 0 || target > 999)
+          return Response.json({ error: "Nombre invalide (0 à 999)." }, { status: 400 });
+        const { data: rows, error } = await sb.from("nuage_words")
+          .select("id,word,participant_id,created_at").eq("session_id", s.id).eq("word_key", key);
+        if (error) throw error;
+        const cur = rows.length;
+        if (!cur) return Response.json({ error: "Mot introuvable." }, { status: 404 });
+        if (target > cur) {
+          // même graphie que la forme la plus fréquente (l'affichage ne change pas)
+          const freq = {};
+          for (const r of rows) freq[r.word] = (freq[r.word] || 0) + 1;
+          const word = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+          res = await sb.from("nuage_words").insert(
+            Array.from({ length: target - cur }, () => ({ session_id: s.id, word_key: key, word, participant_id: "admin" }))
+          );
+        } else if (target < cur) {
+          const order = [...rows].sort((a, b) =>
+            (b.participant_id === "admin") - (a.participant_id === "admin") || new Date(b.created_at) - new Date(a.created_at));
+          res = await sb.from("nuage_words").delete().in("id", order.slice(0, cur - target).map((r) => r.id));
+        } else {
+          res = { error: null };
+        }
         break;
       }
       case "remove":
