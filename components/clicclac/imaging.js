@@ -319,6 +319,26 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); ctx.fill();
 }
 
+/* ── Recadrage ─────────────────────────────────────────────────── */
+/* Zone de recadrage (en pixels de la source) : format ratio (null = celui de la
+ * photo), zoom ≥ 1, centre (cx, cy) en fraction — bornée à la photo. */
+export function cropRect(W, H, ratio, zoom = 1, cx = 0.5, cy = 0.5) {
+  const r = ratio || W / H;
+  let bw = W, bh = W / r;
+  if (bh > H) { bh = H; bw = H * r; }
+  const w = bw / zoom, h = bh / zoom;
+  const x = Math.max(0, Math.min(W - w, cx * W - w / 2)), y = Math.max(0, Math.min(H - h, cy * H - h / 2));
+  return { x, y, w, h };
+}
+
+export function cropCanvas(src, crop) {
+  if (!crop || (!crop.ratio && (crop.zoom || 1) === 1)) return src;
+  const r = cropRect(src.width, src.height, crop.ratio, crop.zoom, crop.cx, crop.cy);
+  const c = makeCanvas(r.w, r.h);
+  c.getContext("2d").drawImage(src, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
+  return c;
+}
+
 /* ── Bande « cabine » : 4 photos (filtrées) → bande verticale ─────── */
 export function composeStrip(shots, info = {}) {
   const cw = 900, ch = 675, gap = 22, pad = 34, band = 170;

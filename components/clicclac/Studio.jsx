@@ -6,8 +6,8 @@
  * Repli si la caméra est indisponible : appareil photo du téléphone (input file).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FRAMES, FILTERS, MAX_CAPTION } from "@/lib/clicclac/settings";
-import { applyFilter, applyFrame, composeStrip, exportForUpload, imageToCanvas, loadImage, scaled, makeCanvas } from "./imaging";
+import { FRAMES, FILTERS, CROPS, MAX_CAPTION } from "@/lib/clicclac/settings";
+import { applyFilter, applyFrame, composeStrip, exportForUpload, imageToCanvas, loadImage, scaled, makeCanvas, cropCanvas, cropRect } from "./imaging";
 import { api } from "./client";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -40,6 +40,11 @@ export default function Studio({ album, code, booth = false, token, guest, onDon
   const [caption, setCaption] = useState("");
   const [preview, setPreview] = useState(null);
   const [customImg, setCustomImg] = useState(null);
+  // recadrage : format imposé par l'album, ou libre (choix de l'invité), ou désactivé
+  const imposedRatio = s.crop && s.crop !== "free" && s.crop !== "off" ? CROPS.find((c) => c.id === s.crop)?.ratio || null : null;
+  const cropAllowed = s.crop !== "off";
+  const [crop, setCrop] = useState({ ratio: imposedRatio, zoom: 1, cx: 0.5, cy: 0.5 });
+  const [cropOpen, setCropOpen] = useState(false);
 
   useEffect(() => {
     if (album.customFrameUrl) loadImage(album.customFrameUrl).then(setCustomImg).catch(() => {});
@@ -125,9 +130,13 @@ export default function Studio({ album, code, booth = false, token, guest, onDon
   const render = useCallback((maxSide) => {
     if (!shots) return null;
     const info = { title: album.name, date: album.eventDate, customImg };
-    const filtered = shots.map((c) => applyFilter(scaled(c, maxSide), filter));
+    const src = shots.length > 1 ? shots : [cropCanvas(shots[0], cropAllowed ? crop : null)];
+    const filtered = src.map((c) => applyFilter(scaled(c, maxSide), filter));
     return shots.length > 1 ? composeStrip(filtered, info) : applyFrame(filtered[0], frame, info);
-  }, [shots, filter, frame, customImg, album.name, album.eventDate]);
+  }, [shots, filter, frame, customImg, album.name, album.eventDate, crop, cropAllowed]);
+
+  // nouvelle prise : recadrage remis à zéro (format imposé conservé)
+  useEffect(() => { setCrop({ ratio: imposedRatio, zoom: 1, cx: 0.5, cy: 0.5 }); setCropOpen(false); }, [shots]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!shots) { setPreview(null); return; }
@@ -211,9 +220,36 @@ export default function Studio({ album, code, booth = false, token, guest, onDon
       ) : (
         <>
           <div className="flex-1 min-h-0 flex items-center justify-center p-3">
-            {preview && <img src={preview} alt="Aperçu" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />}
+            {cropOpen
+              ? <CropEditor shot={shots[0]} crop={crop} setCrop={setCrop} />
+              : preview && <img src={preview} alt="Aperçu" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />}
           </div>
+          {cropOpen ? (
+            <div className="shrink-0 px-4 pb-5 space-y-3">
+              {!imposedRatio && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {CROPS.map((c) => (
+                    <button key={c.id} onClick={() => setCrop((x) => ({ ...x, ratio: c.ratio }))} className={chip(crop.ratio === c.ratio)}>{c.label}</button>
+                  ))}
+                </div>
+              )}
+              <label className="flex items-center gap-3 text-sm text-white/80">
+                Zoom
+                <input type="range" min={1} max={3} step={0.05} value={crop.zoom} onChange={(e) => setCrop((x) => ({ ...x, zoom: +e.target.value }))} className="flex-1 accent-[#ff5a5f]" />
+              </label>
+              <p className="text-xs text-white/50 text-center">Faites glisser la zone pour choisir le cadrage.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setCrop({ ratio: imposedRatio, zoom: 1, cx: 0.5, cy: 0.5 })} className="flex-1 bg-white/10 border border-white/20 font-bold py-3 rounded-full">Réinitialiser</button>
+                <button onClick={() => setCropOpen(false)} className="flex-[2] bg-white text-gray-900 font-bold py-3 rounded-full">✓ Valider le cadrage</button>
+              </div>
+            </div>
+          ) : (
           <div className="shrink-0 px-4 pb-5 space-y-3">
+            {cropAllowed && shots.length === 1 && (
+              <button onClick={() => setCropOpen(true)} className={chip(false)}>
+                ✂️ Recadrer{imposedRatio ? ` (${CROPS.find((c) => c.ratio === imposedRatio)?.label})` : crop.ratio || crop.zoom > 1 ? " ✓" : ""}
+              </button>
+            )}
             {filterOpt.list.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {filterOpt.list.map((f) => <button key={f.id} onClick={() => setFilter(f.id)} className={chip(filter === f.id)}>{f.label}</button>)}
@@ -234,8 +270,66 @@ export default function Studio({ album, code, booth = false, token, guest, onDon
               </button>
             </div>
           </div>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+/* Éditeur de recadrage : photo entière, zone claire déplaçable (doigt / souris),
+ * le reste assombri. Le format et le zoom se règlent sous l'image. */
+function CropEditor({ shot, crop, setCrop }) {
+  const [src, setSrc] = useState(null);
+  const [size, setSize] = useState(null); // taille d'affichage exacte de la photo
+  const outerRef = useRef(null);
+  const imgRef = useRef(null);
+  const drag = useRef(null);
+  useEffect(() => { setSrc(scaled(shot, 1000).toDataURL("image/jpeg", 0.85)); }, [shot]);
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return undefined;
+    const fit = () => {
+      const k = Math.min(el.clientWidth / shot.width, el.clientHeight / shot.height);
+      setSize({ w: shot.width * k, h: shot.height * k });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [shot]);
+  const W = shot.width, H = shot.height;
+  const r = cropRect(W, H, crop.ratio, crop.zoom, crop.cx, crop.cy);
+  const pct = { left: `${(r.x / W) * 100}%`, top: `${(r.y / H) * 100}%`, width: `${(r.w / W) * 100}%`, height: `${(r.h / H) * 100}%` };
+
+  const onDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, cx: (r.x + r.w / 2) / W, cy: (r.y + r.h / 2) / H };
+  };
+  const onMove = (e) => {
+    if (!drag.current || !imgRef.current) return;
+    const box = imgRef.current.getBoundingClientRect();
+    const cx = drag.current.cx + (e.clientX - drag.current.x) / box.width;
+    const cy = drag.current.cy + (e.clientY - drag.current.y) / box.height;
+    // centre borné pour que la zone reste dans la photo
+    const n = cropRect(W, H, crop.ratio, crop.zoom, cx, cy);
+    setCrop((x) => ({ ...x, cx: (n.x + n.w / 2) / W, cy: (n.y + n.h / 2) / H }));
+  };
+  const onUp = () => { drag.current = null; };
+
+  return (
+    <div ref={outerRef} className="w-full h-full flex items-center justify-center">
+    {src && size && (
+    <div className="relative select-none touch-none overflow-hidden rounded-lg" style={{ width: size.w, height: size.h }}>
+      <img ref={imgRef} src={src} alt="" className="w-full h-full rounded-lg" draggable={false} />
+      <div className="absolute border-2 border-white cursor-move rounded-sm" style={{ ...pct, boxShadow: "0 0 0 9999px rgba(0,0,0,.6)" }}
+        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+        <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
+          {Array.from({ length: 9 }).map((_, i) => <div key={i} className="border border-white/25" />)}
+        </div>
+      </div>
+    </div>
+    )}
     </div>
   );
 }

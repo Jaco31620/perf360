@@ -12,7 +12,7 @@ import { QRCodeSVG } from "qrcode.react";
 import Gallery from "./Gallery";
 import { makeZip } from "./zip";
 import { api, adminToken, superToken, storage, syncPhotos, formatBytes, formatDate } from "./client";
-import { FRAMES, FILTERS } from "@/lib/clicclac/settings";
+import { FRAMES, FILTERS, CROPS } from "@/lib/clicclac/settings";
 
 export default function AdminApp({ code }) {
   const router = useRouter();
@@ -248,6 +248,16 @@ function SettingsTab({ code, token, settings, album, reload }) {
             className="w-24 border-2 border-gray-200 rounded-lg px-2 py-1" />
           <span className="text-sm text-gray-400">0 = illimité · la borne n'a pas de limite</span>
         </label>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-bold text-gray-900">Recadrage</h3>
+        <div className="flex flex-wrap gap-1.5">
+          {[["free", "Libre (l'invité choisit)"], ["off", "Désactivé"], ...CROPS.filter((c) => c.ratio).map((c) => [c.id, `Imposé ${c.label}`])].map(([v, l]) => (
+            <button key={v} onClick={() => set({ crop: v })} className={`px-3 py-1.5 rounded-full text-sm font-semibold ${s.crop === v ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}>{l}</button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400">Un format imposé (ex. carré) donne un album homogène, idéal pour les pêle-mêle : l'invité ajuste seulement la position et le zoom.</p>
       </section>
 
       <section className="space-y-3">
