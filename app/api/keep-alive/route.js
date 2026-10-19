@@ -13,6 +13,7 @@
  * donnée renvoyée, aucune écriture).
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { purgeClicClac } from "@/lib/clicclac/purge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,10 @@ export async function GET(request) {
       .from("ffbb_codes")
       .select("code", { count: "exact", head: true });
     if (error) throw error;
-    return Response.json({ status: "ok", pinged: true, count: count ?? null });
+    // Clic-Clac : alertes J-3 et suppression des albums expirés (jamais bloquant)
+    let clicclac = null;
+    try { clicclac = await purgeClicClac(); } catch (e) { clicclac = { error: String(e?.message || e) }; }
+    return Response.json({ status: "ok", pinged: true, count: count ?? null, clicclac });
   } catch (e) {
     return Response.json(
       { status: "error", reason: String(e?.message || e) },

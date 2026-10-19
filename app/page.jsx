@@ -27,6 +27,14 @@ const apps = [
     gradient: "from-cyan-500 to-violet-500",
     badge: "Gratuit",
   },
+  {
+    href: "/clic-clac",
+    emoji: "📸",
+    title: "Clic-Clac",
+    desc: "Le photo booth virtuel de vos événements : photos depuis les téléphones, borne, album partagé et diaporama en direct.",
+    gradient: "from-rose-500 to-amber-400",
+    badge: "Sur demande",
+  },
   // Ajoutez vos prochaines apps ici
 ];
 
