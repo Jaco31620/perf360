@@ -106,6 +106,7 @@ function fitText(ctx, text, maxW, size, family, weight = 700) {
 /* photo (canvas filtré) + cadre → nouveau canvas. info = { title, date, customImg } */
 export function applyFrame(photo, frame, info = {}) {
   const W = photo.width, H = photo.height, title = info.title || "", date = fmtDate(info.date);
+  if (PAINTING_FRAMES[frame]) return paintingFrame(photo, frame, title, date);
   if (frame === "polaroid") {
     const m = Math.round(Math.min(W, H) * 0.05), bottom = Math.round(Math.min(W, H) * 0.2);
     const c = makeCanvas(W + 2 * m, H + m + bottom), ctx = c.getContext("2d");
@@ -153,6 +154,162 @@ export function applyFrame(photo, frame, info = {}) {
     // cadre perso : posé par-dessus, étiré à la taille de la photo
     ctx.drawImage(info.customImg, 0, 0, W, H);
   }
+  return c;
+}
+
+/* ── Cadres « tableau » : moulure à onglets (dégradé = profil en relief) ── */
+const PROFILES = {
+  gold: ["#4a300a", "#a87a24", "#f7dc8a", "#c8962f", "#6f4a12", "#e9c463", "#fff1b8", "#b07e22", "#5a3b0c"],
+  silver: ["#3c4146", "#9aa1a8", "#eef1f4", "#b3bac1", "#5f666d", "#d7dce1", "#ffffff", "#9198a0", "#454b51"],
+  wood: ["#3b2010", "#6e3f1f", "#8f5a30", "#a86d3c", "#7a4724", "#94603a", "#5b331a", "#7d4a27", "#3e2312"],
+};
+const PAINTING_FRAMES = {
+  gold: { profile: "gold", width: 0.1 },
+  baroque: { profile: "gold", width: 0.14, ornate: true },
+  wood: { profile: "wood", width: 0.09, grain: true },
+  silver: { profile: "silver", width: 0.08 },
+  gallery: { gallery: true },
+};
+
+/* Dessine une moulure d'épaisseur b autour du rectangle (x, y, w, h) extérieur. */
+function moulding(ctx, x, y, w, h, b, stops, { grain = false } = {}) {
+  const sides = [
+    { poly: [[x, y], [x + w, y], [x + w - b, y + b], [x + b, y + b]], g: [x, y, x, y + b], along: "h" },
+    { poly: [[x + w, y], [x + w, y + h], [x + w - b, y + h - b], [x + w - b, y + b]], g: [x + w, y, x + w - b, y], along: "v" },
+    { poly: [[x + w, y + h], [x, y + h], [x + b, y + h - b], [x + w - b, y + h - b]], g: [x, y + h, x, y + h - b], along: "h" },
+    { poly: [[x, y + h], [x, y], [x + b, y + b], [x + b, y + h - b]], g: [x, y, x + b, y], along: "v" },
+  ];
+  sides.forEach((sd, i) => {
+    ctx.save();
+    ctx.beginPath();
+    sd.poly.forEach(([px, py], k) => (k ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+    ctx.closePath();
+    const gr = ctx.createLinearGradient(...sd.g);
+    stops.forEach((c, k) => gr.addColorStop(k / (stops.length - 1), c));
+    ctx.fillStyle = gr;
+    ctx.fill();
+    ctx.clip();
+    // éclairage : côtés haut/gauche plus clairs, bas/droite plus sombres
+    ctx.fillStyle = i < 1 || i === 3 ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.18)";
+    ctx.fill();
+    if (grain) {
+      // veinage du bois : lignes fines ondulées dans le sens de la moulure
+      let seed = 7 + i * 13;
+      const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+      ctx.lineWidth = Math.max(1, b / 90);
+      for (let n = 0; n < 46; n++) {
+        const off = rnd() * b, amp = b * (0.02 + rnd() * 0.05), per = 60 + rnd() * 220;
+        ctx.strokeStyle = `rgba(${rnd() < 0.5 ? "30,14,4" : "200,140,80"},${0.12 + rnd() * 0.18})`;
+        ctx.beginPath();
+        const len = sd.along === "h" ? w : h;
+        for (let t = 0; t <= len; t += 8) {
+          const wob = Math.sin(t / per + n) * amp;
+          const [px, py] = sd.along === "h"
+            ? [x + t, (i === 0 ? y : y + h - b) + off + wob]
+            : [(i === 3 ? x : x + w - b) + off + wob, y + t];
+          t ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  });
+  // arêtes des onglets
+  ctx.save();
+  ctx.strokeStyle = "rgba(0,0,0,.35)";
+  ctx.lineWidth = Math.max(1, b / 60);
+  for (const [ax, ay, bx2, by2] of [[x, y, x + b, y + b], [x + w, y, x + w - b, y + b], [x + w, y + h, x + w - b, y + h - b], [x, y + h, x + b, y + h - b]]) {
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx2, by2); ctx.stroke();
+  }
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.strokeRect(x + b, y + b, w - 2 * b, h - 2 * b);
+  ctx.restore();
+}
+
+/* Ombre portée de la moulure sur la photo (effet de profondeur). */
+function innerShadow(ctx, x, y, w, h, d) {
+  const edges = [
+    [x, y, x, y + d, [x, y, w, d]], [x, y + h, x, y + h - d, [x, y + h - d, w, d]],
+    [x, y, x + d, y, [x, y, d, h]], [x + w, y, x + w - d, y, [x + w - d, y, d, h]],
+  ];
+  for (const [x0, y0, x1, y1, r] of edges) {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, "rgba(0,0,0,.45)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g; ctx.fillRect(...r);
+  }
+}
+
+/* Ornements baroques : rang de perles sur la moulure + rosaces aux angles. */
+function baroqueOrnaments(ctx, x, y, w, h, b) {
+  const r = b * 0.07, inset = b * 0.68, step = r * 3.2;
+  const pearl = (px, py, rr) => {
+    const g = ctx.createRadialGradient(px - rr * 0.35, py - rr * 0.35, rr * 0.1, px, py, rr);
+    g.addColorStop(0, "#fff6cf"); g.addColorStop(0.45, "#e2b54e"); g.addColorStop(1, "#6d470f");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, rr, 0, Math.PI * 2); ctx.fill();
+  };
+  for (let t = x + b; t <= x + w - b; t += step) { pearl(t, y + inset, r); pearl(t, y + h - inset, r); }
+  for (let t = y + b; t <= y + h - b; t += step) { pearl(x + inset, t, r); pearl(x + w - inset, t, r); }
+  // rosaces : pétales autour d'un cœur
+  for (const [cx, cy] of [[x + b * 0.5, y + b * 0.5], [x + w - b * 0.5, y + b * 0.5], [x + b * 0.5, y + h - b * 0.5], [x + w - b * 0.5, y + h - b * 0.5]]) {
+    const R = b * 0.36;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      ctx.save(); ctx.translate(cx + Math.cos(a) * R * 0.55, cy + Math.sin(a) * R * 0.55); ctx.rotate(a);
+      const g = ctx.createLinearGradient(-R * 0.4, 0, R * 0.4, 0);
+      g.addColorStop(0, "#7a5214"); g.addColorStop(0.5, "#f7dc8a"); g.addColorStop(1, "#8a5e18");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, R * 0.42, R * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    pearl(cx, cy, R * 0.3);
+  }
+  // volutes au milieu de chaque côté
+  for (const [cx, cy, rot] of [[x + w / 2, y + b * 0.42, 0], [x + w / 2, y + h - b * 0.42, Math.PI], [x + b * 0.42, y + h / 2, -Math.PI / 2], [x + w - b * 0.42, y + h / 2, Math.PI / 2]]) {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+    ctx.strokeStyle = "#fff0b0"; ctx.lineWidth = b * 0.05; ctx.lineCap = "round";
+    for (const sgn of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(sgn * b * 0.5, -b * 0.25, sgn * b * 0.9, b * 0.15, sgn * b * 0.55, b * 0.12);
+      ctx.stroke();
+    }
+    pearl(0, 0, b * 0.09);
+    ctx.restore();
+  }
+}
+
+function paintingFrame(photo, id, title, date) {
+  const W = photo.width, H = photo.height, m = Math.min(W, H);
+  const spec = PAINTING_FRAMES[id];
+  if (spec.gallery) {
+    // galerie : fin cadre noir, large passe-partout, biseau, cartel
+    const f = Math.round(m * 0.03), mat = Math.round(m * 0.12), lab = Math.round(m * 0.13);
+    const c = makeCanvas(W + 2 * (f + mat), H + 2 * (f + mat) + lab), ctx = c.getContext("2d");
+    moulding(ctx, 0, 0, c.width, c.height, f, ["#000", "#2a2a2a", "#111", "#3a3a3a", "#000"]);
+    ctx.fillStyle = "#f7f5ef"; ctx.fillRect(f, f, c.width - 2 * f, c.height - 2 * f);
+    const px = f + mat, py = f + mat;
+    ctx.fillStyle = "#e4e0d4"; ctx.fillRect(px - m * 0.008, py - m * 0.008, W + m * 0.016, H + m * 0.016); // biseau
+    ctx.drawImage(photo, px, py);
+    innerShadow(ctx, px, py, W, H, m * 0.012);
+    if (title || date) {
+      const lw = Math.min(W * 0.6, m * 0.7), lh = lab * 0.66, lx = c.width / 2 - lw / 2, ly = py + H + (mat + lab - lh) / 2;
+      const g = ctx.createLinearGradient(lx, ly, lx, ly + lh);
+      g.addColorStop(0, "#efe4c4"); g.addColorStop(1, "#cbb98a");
+      ctx.fillStyle = g; ctx.fillRect(lx, ly, lw, lh);
+      ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.lineWidth = 1; ctx.strokeRect(lx + 0.5, ly + 0.5, lw - 1, lh - 1);
+      ctx.fillStyle = "#3b3324"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      fitText(ctx, title, lw * 0.9, lh * 0.36, 'Georgia, "Times New Roman", serif', 700);
+      ctx.fillText(title, c.width / 2, ly + lh * (date ? 0.38 : 0.5));
+      if (date) { ctx.font = `italic 400 ${Math.round(lh * 0.24)}px Georgia, serif`; ctx.fillText(date, c.width / 2, ly + lh * 0.74); }
+    }
+    return c;
+  }
+  const b = Math.round(m * spec.width), lip = Math.round(m * 0.012);
+  const c = makeCanvas(W + 2 * (b + lip), H + 2 * (b + lip)), ctx = c.getContext("2d");
+  moulding(ctx, 0, 0, c.width, c.height, b, PROFILES[spec.profile], { grain: spec.grain });
+  // filet intérieur (marie-louise fine)
+  ctx.fillStyle = spec.profile === "wood" ? "#e8dcc2" : spec.profile === "silver" ? "#2b2f33" : "#3a2a10";
+  ctx.fillRect(b, b, W + 2 * lip, H + 2 * lip);
+  ctx.drawImage(photo, b + lip, b + lip);
+  innerShadow(ctx, b + lip, b + lip, W, H, m * 0.02);
+  if (spec.ornate) baroqueOrnaments(ctx, 0, 0, c.width, c.height, b);
   return c;
 }
 
