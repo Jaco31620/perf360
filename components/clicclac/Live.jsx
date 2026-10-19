@@ -13,7 +13,7 @@ import { api, syncPhotos, storage } from "./client";
 const DEFAULTS = { speed: 6, order: "recent", layout: "single", transition: "kenburns", newFirst: true, captions: true, qr: true };
 const SPEEDS = [3, 5, 8, 12, 20];
 const ORDERS = [["recent", "Récentes en boucle"], ["chrono", "Chronologique"], ["random", "Aléatoire"]];
-const LAYOUTS = [["single", "Photo seule"], ["mosaic", "Mosaïque"], ["wall", "Mur de polaroïds"]];
+const LAYOUTS = [["single", "Photo seule"], ["mosaic", "Mosaïque"], ["wall", "Pêle-mêle polaroïds"], ["collage", "Pêle-mêle photos"]];
 const TRANSITIONS = [["fade", "Fondu"], ["kenburns", "Zoom lent"], ["slide", "Glissement"]];
 const MOSAIC = 12;
 
@@ -163,7 +163,9 @@ export default function Live({ code }) {
       ) : cfg.layout === "mosaic" ? (
         <Mosaic photos={history} current={current} captions={cfg.captions} qr={cfg.qr} />
       ) : cfg.layout === "wall" ? (
-        <Wall photos={history} captions={cfg.captions} qr={cfg.qr} screen={screen} qrBox={qrBox} />
+        <Wall photos={history} current={current} captions={cfg.captions} qr={cfg.qr} screen={screen} qrBox={qrBox} polaroid />
+      ) : cfg.layout === "collage" ? (
+        <Wall photos={history} current={current} captions={cfg.captions} qr={cfg.qr} screen={screen} qrBox={qrBox} polaroid={false} />
       ) : (
         <div key={current.id} className="absolute inset-0" style={{ animation: `${cfg.transition === "slide" ? "ccslide" : "ccfade"} .9s ease-out` }}>
           <img src={current.full} alt="" className="absolute inset-0 w-full h-full object-cover blur-3xl opacity-40 scale-110" />
@@ -306,22 +308,22 @@ function Mosaic({ photos, current, captions, qr }) {
   );
 }
 
-/* Mur de polaroïds : l'écran est découpé en emplacements (3×3, 4×3 sur écran
- * large, 2×4 en portrait) ; chaque photo en occupe un, avec un léger désordre
- * (position, inclinaison). La plus récente est plus grande, au premier plan.
- * Les cartes restent dans l'écran et ne recouvrent jamais la pastille QR. */
-function Wall({ photos, captions, qr, screen, qrBox }) {
+/* Pêle-mêle (polaroïds ou photos seules) : l'écran est découpé en emplacements
+ * (4×3 écran large, 3×3, 2×4 en portrait ; case de la pastille QR exclue) ;
+ * chaque photo en occupe un, avec un léger désordre (position, inclinaison).
+ * La photo du moment s'affiche EN GRAND au centre, puis rétrécit et glisse à sa
+ * place quand la suivante arrive (transition CSS sur transform).
+ * Cartes toujours dans l'écran, jamais sur la pastille QR. */
+function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true }) {
   const W = screen.w, H = screen.h, m = 20;
   const cols = W / H > 1.5 ? 4 : W / H > 0.9 ? 3 : 2, rows = W / H > 0.9 ? 3 : 4;
   const sw = (W - 2 * m) / cols, sh = (H - 2 * m) / rows;
-  // emplacements (sauf celui de la pastille QR, en bas à droite)
   const slots = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     if (qr && r === rows - 1 && c === cols - 1) continue;
     slots.push({ cx: m + (c + 0.5) * sw, cy: m + (r + 0.5) * sh });
   }
   const hash = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
-  // les plus récentes d'abord ; chacune garde son emplacement tant qu'elle reste affichée
   const shown = photos.slice(0, slots.length);
   const used = new Set();
   const placed = shown.map((p) => {
@@ -329,42 +331,64 @@ function Wall({ photos, captions, qr, screen, qrBox }) {
     while (used.has(k)) k = (k + 1) % slots.length;
     used.add(k);
     return { p, slot: slots[k] };
-  }).reverse(); // la plus récente dessinée en dernier (au-dessus)
+  }).reverse(); // la plus récente dessinée en dernier
+  const qrRect = qr && qrBox.w ? { x: W - 24 - qrBox.w, y: H - 24 - qrBox.h } : null;
+  // décale un rectangle (centre cx, cy ; taille w×h) hors de la pastille QR
+  const avoidQr = (cx, cy, w, h) => {
+    if (qrRect && cx + w / 2 > qrRect.x - 12 && cy + h / 2 > qrRect.y - 12) {
+      const up = cy + h / 2 - (qrRect.y - 12), left = cx + w / 2 - (qrRect.x - 12);
+      if (up <= left) cy -= up; else cx -= left;
+    }
+    return [cx, cy];
+  };
+  const pad = polaroid ? { side: 24, extra: 64 } : { side: 0, extra: 0 };
 
-  const qrRect = qr && qrBox.w ? { x: W - 24 - qrBox.w, y: H - 24 - qrBox.h, w: qrBox.w, h: qrBox.h } : null;
   return (
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#3a2a22,#120d0b)]">
       {placed.map(({ p, slot }, i) => {
-        const top = i === placed.length - 1;
+        const hero = current && p.id === current.id;
         const h = hash(p.id);
-        // taille maximale de la carte (photo + bord blanc ~ 24 px de côté, 52 px en bas)
-        const k = top ? 1.6 : 1.28;
-        const maxW = Math.min(sw * k, W * 0.45), maxH = Math.min(sh * k, H * 0.62);
-        const cardW = maxW, cardH = maxH;
+        // place « au repos » dans le tas
+        const cardW = Math.min(sw * 1.28, W * 0.45), cardH = Math.min(sh * 1.28, H * 0.62);
         let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.25;
         let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.25;
-        // rester dans l'écran
-        cx = Math.max(m + cardW / 2, Math.min(W - m - cardW / 2, cx));
-        cy = Math.max(m + cardH / 2, Math.min(H - m - cardH / 2, cy));
-        // ne pas recouvrir la pastille QR : on décale vers le haut ou la gauche (le moins coûteux)
-        if (qrRect && cx + cardW / 2 > qrRect.x - 12 && cy + cardH / 2 > qrRect.y - 12) {
-          const up = cy + cardH / 2 - (qrRect.y - 12), left = cx + cardW / 2 - (qrRect.x - 12);
-          if (up <= left) cy -= up; else cx -= left;
-        }
         const r = (h % 14) - 7;
+        // marge supplémentaire due à l'inclinaison (coins qui dépassent)
+        const tilt = Math.abs(Math.sin((r * Math.PI) / 180)) * Math.max(cardW, cardH) / 2;
+        cx = Math.max(m + tilt + cardW / 2, Math.min(W - m - tilt - cardW / 2, cx));
+        cy = Math.max(m + tilt + cardH / 2, Math.min(H - m - tilt - cardH / 2, cy));
+        [cx, cy] = avoidQr(cx, cy, cardW + 2 * tilt, cardH + 2 * tilt);
+        // en vedette : agrandie au centre de l'écran (hors QR), redressée
+        let t = `rotate(${r}deg)`;
+        if (hero) {
+          const sc = Math.min((W * 0.66) / cardW, (H * 0.8) / cardH);
+          let [hx, hy] = [W / 2, H / 2];
+          hx = Math.max(m + (cardW * sc) / 2, Math.min(W - m - (cardW * sc) / 2, hx));
+          hy = Math.max(m + (cardH * sc) / 2, Math.min(H - m - (cardH * sc) / 2, hy));
+          [hx, hy] = avoidQr(hx, hy, cardW * sc, cardH * sc);
+          t = `translate(${hx - cx}px, ${hy - cy}px) rotate(${r / 4}deg) scale(${sc})`;
+        }
         return (
           <div key={p.id} className="absolute flex items-center justify-center"
-            style={{ left: cx - cardW / 2, top: cy - cardH / 2, width: cardW, height: cardH, zIndex: i }}>
-            <div className="relative bg-[#fbfaf5] p-3 pb-12 shadow-2xl"
-              style={{ "--r": `rotate(${r}deg)`, transform: `rotate(${r}deg)`, animation: top ? "ccfall .8s ease-out" : undefined }}>
+            style={{
+              left: cx - cardW / 2, top: cy - cardH / 2, width: cardW, height: cardH,
+              zIndex: hero ? 100 : i, transform: t,
+              transition: "transform 1.1s cubic-bezier(.22,.8,.25,1)",
+            }}>
+            {/* l'apparition (pop) est sur l'élément intérieur : elle ne gêne pas le déplacement */}
+            <div className={`relative ${polaroid ? "bg-[#fbfaf5] p-3 pb-12" : ""} shadow-[0_18px_40px_rgba(0,0,0,.55)]`}
+              style={{ animation: hero ? "ccpop .7s ease-out" : undefined }}>
               {/* photo entière, aux proportions d'origine (orientation, cadre) */}
-              <img src={top ? p.full : p.thumb} alt="" className="block w-auto h-auto"
-                style={{ maxWidth: cardW - 24, maxHeight: cardH - 64 }} />
-              {captions && (p.name || p.caption) && (
+              <img src={p.full} alt="" className="block w-auto h-auto"
+                style={{ maxWidth: cardW - pad.side, maxHeight: cardH - pad.extra }} />
+              {captions && polaroid && (p.name || p.caption) && (
                 <p className="absolute bottom-2 left-0 right-0 text-center text-gray-800 truncate px-3"
-                  style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: top ? Math.max(16, sh * 0.075) : Math.max(13, sh * 0.06) }}>
+                  style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: Math.max(13, sh * 0.06) }}>
                   {p.caption || p.name}
                 </p>
+              )}
+              {captions && !polaroid && p.name && (
+                <span className="absolute bottom-2 left-2 bg-black/60 text-white rounded-full px-2.5 py-0.5" style={{ fontSize: Math.max(11, sh * 0.045) }}>📸 {p.name}</span>
               )}
             </div>
           </div>
