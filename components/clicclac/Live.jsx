@@ -308,98 +308,122 @@ function Mosaic({ photos, current, captions, qr }) {
   );
 }
 
-/* Pêle-mêle (polaroïds ou photos seules) : l'écran est découpé en emplacements
- * (4×3 écran large, 3×3, 2×4 en portrait ; case de la pastille QR exclue) ;
- * chaque photo en occupe un, avec un léger désordre (position, inclinaison).
- * La photo du moment s'affiche EN GRAND au centre, puis rétrécit et glisse à sa
- * place quand la suivante arrive (transition CSS sur transform).
- * Cartes toujours dans l'écran, jamais sur la pastille QR. */
+/* Pêle-mêle (polaroïds ou photos seules).
+ * Placement « au moins couvert » : l'écran est suivi par une carte de couverture
+ * (combien de photos recouvrent chaque zone). Chaque nouvelle photo, à sa taille
+ * RÉELLE (portrait / paysage / carré), est posée à l'endroit qui recouvre le moins
+ * les autres → les trous se comblent en premier, sans effet de colonnes. Une fois
+ * posée, elle ne bouge plus. La photo du moment s'affiche en grand au centre puis
+ * rejoint sa place. Débord léger aux bords ; zone du QR évitée (le QR reste au-dessus). */
+const GW = 40, GH = 24; // résolution de la carte de couverture
 function Wall({ photos, current, captions, qr, screen, qrBox, polaroid = true }) {
   const W = screen.w, H = screen.h, m = 20;
-  // grille d'emplacements qui DÉBORDE légèrement de l'écran (2 % de chaque côté) :
-  // le tas remplit tout l'écran, les cartes du bord sont coupées comme sur une table.
-  // La pastille QR reste au-dessus (z-index), la zone sous elle est un emplacement normal.
-  const cols = W / H > 1.5 ? 5 : W / H > 0.9 ? 4 : 3, rows = W / H > 0.9 ? 4 : 5;
-  const ox = -0.02 * W, oy = -0.02 * H, sw = (W * 1.04) / cols, sh = (H * 1.04) / rows;
-  const slots = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) slots.push({ cx: ox + (c + 0.5) * sw, cy: oy + (r + 0.5) * sh });
-  const hash = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0; return h; };
-
-  // Placement PERSISTANT : une photo garde son emplacement (et donc sa position)
-  // dès qu'elle a été posée. Jusqu'à 3 photos par emplacement (le tas s'épaissit) ;
-  // une nouvelle photo va sur l'emplacement le moins chargé. Au-delà, les plus
-  // anciennes disparaissent. Une photo remontrée en vedette revient au-dessus du tas.
-  const store = useRef({ map: new Map(), z: 0, hero: null });
+  const store = useRef({ map: new Map(), ratio: new Map(), cover: new Float32Array(GW * GH), z: 0, hero: null, seed: 1 });
   const st = store.current;
-  const maxCards = slots.length * 3;
+  const [, setTick] = useState(0);
+
+  // proportions des photos (nécessaires pour les poser à leur vraie taille)
+  useEffect(() => {
+    let alive = true;
+    for (const p of photos) {
+      if (st.ratio.has(p.id) || !p.thumb) continue;
+      st.ratio.set(p.id, null);
+      const img = new Image();
+      img.onload = () => { if (!alive) return; st.ratio.set(p.id, img.naturalWidth / img.naturalHeight); setTick((t) => t + 1); };
+      img.onerror = () => st.ratio.set(p.id, 4 / 3);
+      img.src = p.thumb;
+    }
+    return () => { alive = false; };
+  }, [photos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // taille d'une carte (fraction de l'écran) selon les proportions de la photo
+  const pad = polaroid ? { side: 24, extra: 64 } : { side: 0, extra: 0 };
+  const boxW = 0.25 * W, boxH = 0.37 * H; // taille maximale d'une carte au repos
+  const cardSize = (ratio) => {
+    const iw = Math.min(boxW - pad.side, (boxH - pad.extra) * ratio), ih = iw / ratio;
+    return { w: iw + pad.side, h: ih + pad.extra };
+  };
+
+  // carte de couverture : ajoute (+1) ou retire (-1) un rectangle (en fractions)
+  const cells = (fx, fy, fw, fh) => {
+    const x0 = Math.max(0, Math.floor((fx - fw / 2) * GW)), x1 = Math.min(GW - 1, Math.floor((fx + fw / 2) * GW));
+    const y0 = Math.max(0, Math.floor((fy - fh / 2) * GH)), y1 = Math.min(GH - 1, Math.floor((fy + fh / 2) * GH));
+    return [x0, x1, y0, y1];
+  };
+  const paint = (v, sign) => {
+    const [x0, x1, y0, y1] = cells(v.fx, v.fy, v.fw, v.fh);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) st.cover[y * GW + x] += sign;
+  };
+  const rnd = () => ((st.seed = (st.seed * 16807) % 2147483647) / 2147483647);
+  // zone du QR : un peu « déjà couverte » pour l'éviter sans l'interdire
+  const qrPenalty = (x, y) => (qr && qrBox.w && x >= (W - 24 - qrBox.w) / W && y >= (H - 24 - qrBox.h) / H ? 1.5 : 0);
+
+  const place = (id) => {
+    const { w, h } = cardSize(st.ratio.get(id) || 4 / 3);
+    const fw = w / W, fh = h / H;
+    const over = 0.025; // débord autorisé aux bords (fraction de l'écran)
+    let best = null;
+    for (let k = 0; k < 90; k++) {
+      const fx = fw / 2 - over + rnd() * (1 - fw + 2 * over);
+      const fy = fh / 2 - over + rnd() * (1 - fh + 2 * over);
+      const [x0, x1, y0, y1] = cells(fx, fy, fw, fh);
+      let sum = 0, n = 0;
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { sum += st.cover[y * GW + x] + qrPenalty((x + 0.5) / GW, (y + 0.5) / GH); n++; }
+      const score = sum / Math.max(1, n);
+      if (!best || score < best.score) best = { fx, fy, score };
+    }
+    const v = { fx: best.fx, fy: best.fy, fw, fh, r: rnd() * 32 - 16, z: ++st.z };
+    paint(v, 1);
+    st.map.set(id, v);
+  };
+
+  // retire les photos sorties de l'historique, pose les nouvelles (dont les proportions sont connues)
   const inHistory = new Set(photos.map((p) => p.id));
-  for (const id of [...st.map.keys()]) if (!inHistory.has(id)) st.map.delete(id);
-  for (const p of [...photos].reverse()) { // de la plus ancienne à la plus récente
-    if (st.map.has(p.id)) continue;
-    const load = new Array(slots.length).fill(0);
-    for (const v of st.map.values()) load[v.slot % slots.length]++;
-    const min = Math.min(...load);
-    const free = load.map((n, k) => (n === min ? k : -1)).filter((k) => k >= 0);
-    st.map.set(p.id, { slot: free[hash(p.id) % free.length], z: ++st.z });
-  }
+  for (const [id, v] of [...st.map]) if (!inHistory.has(id)) { paint(v, -1); st.map.delete(id); }
+  for (const p of [...photos].reverse()) if (!st.map.has(p.id) && st.ratio.get(p.id)) place(p.id);
   if (current && current.id !== st.hero && st.map.has(current.id)) { st.hero = current.id; st.map.get(current.id).z = ++st.z; }
-  while (st.map.size > maxCards) {
+  const MAX = 45;
+  while (st.map.size > MAX) {
     let oldest = null;
     for (const [id, v] of st.map) if (id !== current?.id && (!oldest || v.z < st.map.get(oldest).z)) oldest = id;
+    paint(st.map.get(oldest), -1);
     st.map.delete(oldest);
   }
+
   const byId = new Map(photos.map((p) => [p.id, p]));
-  const placed = [...st.map.entries()].filter(([id]) => byId.has(id))
-    .sort((a, b) => a[1].z - b[1].z) // la plus récente dessinée en dernier
-    .map(([id, v]) => ({ p: byId.get(id), slot: slots[v.slot % slots.length] }));
+  const placed = [...st.map.entries()].filter(([id]) => byId.has(id)).sort((a, b) => a[1].z - b[1].z);
   const qrRect = qr && qrBox.w ? { x: W - 24 - qrBox.w, y: H - 24 - qrBox.h } : null;
-  // décale un rectangle (centre cx, cy ; taille w×h) hors de la pastille QR
-  const avoidQr = (cx, cy, w, h) => {
-    if (qrRect && cx + w / 2 > qrRect.x - 12 && cy + h / 2 > qrRect.y - 12) {
-      const up = cy + h / 2 - (qrRect.y - 12), left = cx + w / 2 - (qrRect.x - 12);
-      if (up <= left) cy -= up; else cx -= left;
-    }
-    return [cx, cy];
-  };
-  const pad = polaroid ? { side: 24, extra: 64 } : { side: 0, extra: 0 };
 
   return (
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#3a2a22,#120d0b)]">
-      {placed.map(({ p, slot }, i) => {
-        const hero = current && p.id === current.id;
-        const h = hash(p.id);
-        // place « au repos » dans le tas (cartes larges : elles se chevauchent et débordent)
-        const cardW = Math.min(sw * 1.35, W * 0.4), cardH = Math.min(sh * 1.35, H * 0.58);
-        let cx = slot.cx + ((((h >> 4) % 100) / 100) - 0.5) * sw * 0.3;
-        let cy = slot.cy + ((((h >> 12) % 100) / 100) - 0.5) * sh * 0.3;
-        const r = ((h % 321) / 10) - 16; // inclinaison de -16° à +16°
-        // au repos, une carte peut déborder de l'écran ou passer sous le QR
-        // en vedette : agrandie au centre de l'écran (hors QR), redressée
-        let t = `rotate(${r}deg)`;
+      {placed.map(([id, v], i) => {
+        const p = byId.get(id);
+        const hero = current && id === current.id;
+        const cardW = v.fw * W, cardH = v.fh * H, cx = v.fx * W, cy = v.fy * H;
+        let t = `rotate(${v.r}deg)`;
         if (hero) {
+          // en vedette : agrandie au centre, entière et hors du QR
           const sc = Math.min((W * 0.66) / cardW, (H * 0.8) / cardH);
-          let [hx, hy] = [W / 2, H / 2];
+          let hx = W / 2, hy = H / 2;
           hx = Math.max(m + (cardW * sc) / 2, Math.min(W - m - (cardW * sc) / 2, hx));
           hy = Math.max(m + (cardH * sc) / 2, Math.min(H - m - (cardH * sc) / 2, hy));
-          [hx, hy] = avoidQr(hx, hy, cardW * sc, cardH * sc);
-          t = `translate(${hx - cx}px, ${hy - cy}px) rotate(${r / 4}deg) scale(${sc})`;
+          if (qrRect && hx + (cardW * sc) / 2 > qrRect.x - 12 && hy + (cardH * sc) / 2 > qrRect.y - 12) {
+            const up = hy + (cardH * sc) / 2 - (qrRect.y - 12), left = hx + (cardW * sc) / 2 - (qrRect.x - 12);
+            if (up <= left) hy -= up; else hx -= left;
+          }
+          t = `translate(${hx - cx}px, ${hy - cy}px) rotate(${v.r / 4}deg) scale(${sc})`;
         }
         return (
-          <div key={p.id} className="absolute flex items-center justify-center"
-            style={{
-              left: cx - cardW / 2, top: cy - cardH / 2, width: cardW, height: cardH,
-              zIndex: hero ? 100 : i, transform: t,
-              transition: "transform 1.1s cubic-bezier(.22,.8,.25,1)",
-            }}>
+          <div key={id} className="absolute flex items-center justify-center"
+            style={{ left: cx - cardW / 2, top: cy - cardH / 2, width: cardW, height: cardH, zIndex: hero ? 100 : i, transform: t,
+              transition: "transform 1.1s cubic-bezier(.22,.8,.25,1)" }}>
             {/* l'apparition (pop) est sur l'élément intérieur : elle ne gêne pas le déplacement */}
             <div className={`relative ${polaroid ? "bg-[#fbfaf5] p-3 pb-12" : ""} shadow-[0_18px_40px_rgba(0,0,0,.55)]`}
               style={{ animation: hero ? "ccpop .7s ease-out" : undefined }}>
-              {/* photo entière, aux proportions d'origine (orientation, cadre) */}
-              <img src={p.full} alt="" className="block w-auto h-auto"
-                style={{ maxWidth: cardW - pad.side, maxHeight: cardH - pad.extra }} />
+              <img src={p.full} alt="" className="block" style={{ width: cardW - pad.side, height: cardH - pad.extra }} />
               {captions && polaroid && (p.name || p.caption) && (
                 <p className="absolute bottom-2 left-0 right-0 text-center text-gray-800 truncate px-3"
-                  style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: Math.max(13, sh * 0.06) }}>
+                  style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: Math.max(13, H * 0.022) }}>
                   {p.caption || p.name}
                 </p>
               )}
