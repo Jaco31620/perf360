@@ -3,11 +3,11 @@
  * Clic-Clac — application invité (/clic-clac/<code>) : prénom (une fois),
  * prise de photo (quota), galerie de l'album.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Studio from "./Studio";
 import Gallery from "./Gallery";
-import { api, guestId, storage, mergePhotos, formatDate } from "./client";
+import { api, guestId, storage, syncPhotos, formatDate } from "./client";
 import { MAX_NAME } from "@/lib/clicclac/settings";
 
 export default function GuestApp({ code }) {
@@ -19,6 +19,7 @@ export default function GuestApp({ code }) {
   const [studio, setStudio] = useState(false);
   const [toast, setToast] = useState("");
   const [gid, setGid] = useState("");
+  const photosRef = useRef([]);
 
   useEffect(() => {
     setGid(guestId());
@@ -31,8 +32,8 @@ export default function GuestApp({ code }) {
       const d = await api(`/${code}?guest=${gid}`);
       setAlbum(d.album);
       setTaken(d.taken || 0);
-      const g = await api(`/${code}/photos?guest=${gid}`);
-      setPhotos((prev) => mergePhotos(prev, g.photos));
+      photosRef.current = await syncPhotos(code, photosRef.current, { query: `guest=${gid}` });
+      setPhotos(photosRef.current);
     } catch (e) {
       if (e.status === 404) setAlbum(null);
     }
@@ -40,8 +41,10 @@ export default function GuestApp({ code }) {
 
   useEffect(() => {
     load();
-    const t = setInterval(() => { if (!document.hidden) load(); }, 15000);
-    return () => clearInterval(t);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 30000);
+    const onVis = () => { if (!document.hidden) load(); }; // rafraîchit au retour sur l'appli
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
   }, [load]);
 
   const saveName = (e) => {
@@ -102,7 +105,7 @@ export default function GuestApp({ code }) {
       <div className="bg-white rounded-3xl p-3 shadow-xl mt-5">
         <h2 className="font-bold text-gray-900 px-2 pt-1 pb-3">🖼️ L'album <span className="text-gray-400 font-normal">({photos.length})</span></h2>
         <Gallery photos={photos} canDownload={s.guestDownload}
-          onDelete={async (p) => { await api(`/${code}/photos/${p.id}?guest=${gid}`, { method: "DELETE" }); setPhotos((l) => l.filter((x) => x.id !== p.id)); load(); }} />
+          onDelete={async (p) => { await api(`/${code}/photos/${p.id}?guest=${gid}`, { method: "DELETE" }); photosRef.current = photosRef.current.filter((x) => x.id !== p.id); setPhotos(photosRef.current); load(); }} />
       </div>
 
       {studio && (

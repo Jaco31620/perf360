@@ -3,6 +3,9 @@
  * - GET  : galerie (publiées ; + en attente pour l'organisateur), liens signés
  *          1 h vers miniature et version standard (+ HD pour l'organisateur).
  *          ?guest=<id> marque les photos de cet invité (« mine »).
+ *          ?meta=1     → liste SANS liens (léger : sert au rafraîchissement) ;
+ *          ?ids=a,b,…  → liens uniquement pour ces photos (≤ 200).
+ *          Le navigateur ne demande ainsi des liens que pour les nouvelles photos.
  * - POST : envoi (multipart) — full (JPEG ≈1600 px), thumb (JPEG ≈480 px),
  *          hd (JPEG, si l'album conserve la HD), guestId, guestName, caption, kind.
  *          Quotas : capacité de l'album (tous) + quota par invité (sauf borne /
@@ -34,11 +37,14 @@ export async function GET(req, { params }) {
     if (!admin) q = q.eq("status", "published");
     const { data, error } = await q;
     if (error) throw error;
+    const meta = url.searchParams.get("meta") === "1";
+    const only = url.searchParams.get("ids") ? new Set(url.searchParams.get("ids").split(",").slice(0, 200)) : null;
+    const rows = only ? data.filter((p) => only.has(p.id)) : data;
     const withHd = admin && url.searchParams.get("hd") === "1";
-    const paths = data.flatMap((p) => [p.thumb_path, p.path, ...(withHd ? [p.hd_path || p.path] : [])]);
-    const urls = await signUrls(paths);
+    const paths = meta ? [] : rows.flatMap((p) => [p.thumb_path, p.path, ...(withHd ? [p.hd_path || p.path] : [])]);
+    const urls = meta ? [] : await signUrls(paths);
     const step = withHd ? 3 : 2;
-    const photos = data.map((p, i) => ({
+    const photos = rows.map((p, i) => ({
       id: p.id,
       name: p.guest_name || "",
       caption: p.caption || "",
@@ -46,8 +52,8 @@ export async function GET(req, { params }) {
       source: p.source,
       status: p.status,
       createdAt: p.created_at,
-      thumb: urls[i * step],
-      full: urls[i * step + 1],
+      thumb: meta ? undefined : urls[i * step],
+      full: meta ? undefined : urls[i * step + 1],
       ...(withHd ? { hd: urls[i * step + 2] } : {}),
       mine: validGuest(guest) && p.guest_id === guest,
     }));

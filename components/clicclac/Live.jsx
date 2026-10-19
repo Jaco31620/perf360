@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { api, mergePhotos, storage } from "./client";
+import { api, syncPhotos, storage } from "./client";
 
 const DEFAULTS = { speed: 6, order: "recent", layout: "single", transition: "kenburns", newFirst: true, captions: true, qr: true };
 const SPEEDS = [3, 5, 8, 12, 20];
@@ -70,9 +70,8 @@ export default function Live({ code }) {
     try {
       const d = await api(`/${code}`);
       setAlbum(d.album);
-      const g = await api(`/${code}/photos`);
       const first = known.current.size === 0;
-      const next = mergePhotos(listRef.current, g.photos);
+      const next = await syncPhotos(code, listRef.current);
       let fresh = false;
       for (const p of [...next].reverse()) if (!known.current.has(p.id)) { if (!first) { queue.current.push(p.id); fresh = true; } known.current.add(p.id); }
       listRef.current = next;
@@ -169,10 +168,11 @@ export default function Live({ code }) {
         <div key={current.id} className="absolute inset-0" style={{ animation: `${cfg.transition === "slide" ? "ccslide" : "ccfade"} .9s ease-out` }}>
           <img src={current.full} alt="" className="absolute inset-0 w-full h-full object-cover blur-3xl opacity-40 scale-110" />
           {(() => {
-            const box = photoBox(screen, cfg.qr ? qrBox : null, ratios[current.id] || 4 / 3, cfg.captions && (current.caption || current.name));
+            const ratio = ratios[current.id] || 4 / 3;
+            const r = photoRect(screen, photoBox(screen, cfg.qr ? qrBox : null, ratio, cfg.captions && (current.caption || current.name)), ratio);
             return (
-              <div className="absolute flex items-center justify-center" style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
-                <img src={current.full} alt={current.caption || ""} className="max-w-full max-h-full object-contain"
+              <div className="absolute" style={{ left: r.x, top: r.y, width: r.w, height: r.h }}>
+                <img src={current.full} alt={current.caption || ""} className="w-full h-full object-contain"
                   onLoad={(e) => { const r = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight; setRatios((m) => (m[current.id] === r ? m : { ...m, [current.id]: r })); }}
                   style={cfg.transition === "kenburns" ? { animation: `cczoom ${dur} linear forwards` } : undefined} />
               </div>
@@ -260,6 +260,18 @@ function photoBox(screen, qr, ratio, caption) {
   return fit(a.w, a.h) >= fit(b.w, b.h) ? a : b;
 }
 
+/* Taille maximale de la photo dans la zone libre, puis position CENTRÉE sur
+ * l'écran — décalée seulement si nécessaire pour rester dans la zone libre. */
+function photoRect(screen, box, ratio) {
+  const w = Math.min(box.w, box.h * ratio), h = w / ratio;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  return {
+    w, h,
+    x: clamp((screen.w - w) / 2, box.x, box.x + box.w - w),
+    y: clamp((screen.h - h) / 2, box.y, box.y + box.h - h),
+  };
+}
+
 function Field({ label, children }) {
   return <div className="space-y-1.5"><p className="font-semibold text-gray-600">{label}</p>{children}</div>;
 }
@@ -280,12 +292,14 @@ function Mosaic({ photos, current, captions, qr }) {
   return (
     <div className="absolute inset-0 p-4 pb-4 grid grid-cols-4 grid-rows-3 gap-3">
       <div key={current.id} className="col-span-2 row-span-2 relative rounded-2xl overflow-hidden bg-black" style={{ animation: "ccpop .7s ease-out" }}>
-        <img src={current.full} alt="" className="w-full h-full object-cover" />
+        <img src={current.thumb} alt="" className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-50 scale-110" />
+        <img src={current.full} alt="" className="relative w-full h-full object-contain" />
         {captions && current.name && <span className="absolute bottom-3 left-4 text-xl font-bold drop-shadow-lg">📸 {current.name}</span>}
       </div>
       {rest.map((p) => (
         <div key={p.id} className="relative rounded-xl overflow-hidden bg-black" style={{ animation: "ccfade .6s ease-out" }}>
-          <img src={p.thumb} alt="" className="w-full h-full object-cover" />
+          <img src={p.thumb} alt="" className="absolute inset-0 w-full h-full object-cover blur-xl opacity-50 scale-110" />
+          <img src={p.thumb} alt="" className="relative w-full h-full object-contain" />
         </div>
       ))}
     </div>
@@ -299,8 +313,8 @@ function Wall({ photos, captions, qr }) {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
     // zone de dépôt : cartes entièrement visibles, à gauche de la pastille QR si elle est affichée
-    const xMax = qr ? 46 : 62, yMax = 30;
-    return { x: 4 + (h % (xMax - 4)), y: 7 + ((h >> 8) % (yMax - 7)), r: ((h >> 16) % 16) - 8 };
+    const xMax = qr ? 46 : 62, yMax = 24;
+    return { x: 4 + (h % (xMax - 4)), y: 11 + ((h >> 8) % (yMax - 9)), r: ((h >> 16) % 16) - 8 };
   };
   return (
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,#3a2a22,#120d0b)]">
@@ -309,8 +323,10 @@ function Wall({ photos, captions, qr }) {
         const top = i === cards.length - 1;
         return (
           <div key={p.id} className="absolute bg-[#fbfaf5] p-3 pb-12 shadow-2xl"
-            style={{ left: `${x}%`, top: `${y}%`, width: top ? "min(30vw, 62vh)" : "min(22vw, 46vh)", "--r": `rotate(${r}deg)`, transform: `rotate(${r}deg)`, zIndex: i, animation: top ? "ccfall .8s ease-out" : undefined }}>
-            <img src={top ? p.full : p.thumb} alt="" className="w-full aspect-[4/3] object-cover" />
+            style={{ left: `${x}%`, top: `${y}%`, "--r": `rotate(${r}deg)`, transform: `rotate(${r}deg)`, zIndex: i, animation: top ? "ccfall .8s ease-out" : undefined }}>
+            {/* photo entière, aux proportions d'origine (orientation, cadre) */}
+            <img src={top ? p.full : p.thumb} alt="" className="block w-auto h-auto"
+              style={{ maxWidth: top ? "30vw" : "22vw", maxHeight: top ? "52vh" : "40vh" }} />
             {captions && (p.name || p.caption) && (
               <p className="absolute bottom-2 left-0 right-0 text-center text-gray-800 truncate px-3" style={{ fontFamily: '"Segoe Print","Bradley Hand","Comic Sans MS",cursive', fontSize: top ? "1.6vw" : "1.2vw" }}>
                 {p.caption || p.name}

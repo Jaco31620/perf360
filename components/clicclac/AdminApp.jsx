@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import Gallery from "./Gallery";
 import { makeZip } from "./zip";
-import { api, adminToken, superToken, storage, mergePhotos, formatBytes, formatDate } from "./client";
+import { api, adminToken, superToken, storage, syncPhotos, formatBytes, formatDate } from "./client";
 import { FRAMES, FILTERS } from "@/lib/clicclac/settings";
 
 export default function AdminApp({ code }) {
@@ -23,6 +23,7 @@ export default function AdminApp({ code }) {
   const [tab, setTab] = useState("photos");
   const [pin, setPin] = useState("");
   const [err, setErr] = useState("");
+  const photosRef = useRef([]);
 
   useEffect(() => {
     setToken(adminToken(code) || superToken());
@@ -35,8 +36,8 @@ export default function AdminApp({ code }) {
       const d = await api(`/${code}`, { token });
       if (!d.admin) { storage.set(`cc_admin_${code}`, null); setToken(null); return; }
       setInfo(d);
-      const g = await api(`/${code}/photos`, { token });
-      setPhotos((prev) => mergePhotos(prev, g.photos));
+      photosRef.current = await syncPhotos(code, photosRef.current, { token });
+      setPhotos(photosRef.current);
     } catch (e) {
       if (e.status === 404) setInfo(null);
     }
@@ -44,7 +45,7 @@ export default function AdminApp({ code }) {
 
   useEffect(() => {
     load();
-    const t = setInterval(() => { if (!document.hidden) load(); }, 10000);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 15000);
     return () => clearInterval(t);
   }, [load]);
 

@@ -44,6 +44,27 @@ export async function api(path, { method = "GET", token, body, form } = {}) {
   return data;
 }
 
+/* Rafraîchit une galerie à moindre coût : liste légère (sans liens), puis liens
+ * demandés seulement pour les photos nouvelles ou dont le lien a > 45 min.
+ * query : paramètres additionnels (ex. "guest=…"). */
+export async function syncPhotos(code, prev, { token, query = "" } = {}) {
+  const q = query ? `&${query}` : "";
+  const { photos: list } = await api(`/${code}/photos?meta=1${q}`, { token });
+  const now = Date.now();
+  const old = new Map(prev.map((p) => [p.id, p]));
+  const need = list.filter((p) => { const o = old.get(p.id); return !o || !o.full || now - o._at > 45 * 60 * 1000; }).map((p) => p.id);
+  const fresh = new Map();
+  for (let i = 0; i < need.length; i += 150) {
+    const { photos } = await api(`/${code}/photos?ids=${need.slice(i, i + 150).join(",")}${q}`, { token });
+    for (const p of photos) fresh.set(p.id, { thumb: p.thumb, full: p.full, _at: now });
+  }
+  return list.map((p) => {
+    const f = fresh.get(p.id), o = old.get(p.id);
+    if (f) return { ...p, ...f };
+    return o?.full ? { ...p, thumb: o.thumb, full: o.full, hd: o.hd, _at: o._at } : null; // supprimée entre-temps
+  }).filter(Boolean);
+}
+
 /* Fusionne une nouvelle liste de photos en conservant les liens déjà connus
  * (valables 1 h) tant qu'ils ont moins de 45 min. */
 export function mergePhotos(prev, next) {
