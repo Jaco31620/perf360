@@ -190,13 +190,13 @@ export default function Live({ code }) {
       )}
 
       {banner && cfg.layout !== "wall" && cfg.layout !== "collage" && ( // en pêle-mêle, l'arrivée en grand suffit
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-[#ff5a5f] text-white text-2xl font-black px-8 py-3 rounded-full shadow-2xl" style={{ animation: "ccdrop .5s ease-out" }}>
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[250] bg-[#ff5a5f] text-white text-2xl font-black px-8 py-3 rounded-full shadow-2xl" style={{ animation: "ccdrop .5s ease-out" }}>
           📸 Nouvelle photo{banner.name ? ` de ${banner.name}` : ""} !
         </div>
       )}
 
       {cfg.qr && (
-        <div ref={qrRef} className="absolute bottom-6 right-6 bg-white text-gray-900 rounded-3xl p-4 flex items-center gap-4 shadow-2xl">
+        <div ref={qrRef} className="absolute bottom-6 right-6 z-[250] bg-white text-gray-900 rounded-3xl p-4 flex items-center gap-4 shadow-2xl">
           <div className="text-right">
             <p className="text-xs font-bold uppercase text-[#ff5a5f]">Clic-Clac</p>
             <p className="font-black leading-tight max-w-[180px] truncate">{album?.name}</p>
@@ -208,14 +208,14 @@ export default function Live({ code }) {
       )}
 
       {/* commandes (apparaissent au mouvement de la souris) */}
-      <div className={`absolute top-4 right-4 flex gap-2 transition-opacity ${ui || panel ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+      <div className={`absolute top-4 right-4 z-[300] flex gap-2 transition-opacity ${ui || panel ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         {paused && <span className="bg-black/60 px-3 py-2 rounded-full text-sm">⏸ En pause</span>}
         <button onClick={() => setPanel((v) => !v)} className="bg-black/60 hover:bg-black/80 px-4 py-2 rounded-full text-sm font-semibold">⚙️ Réglages</button>
         <button onClick={fullscreen} className="bg-black/60 hover:bg-black/80 px-4 py-2 rounded-full text-sm font-semibold">{isFull ? "Quitter le plein écran" : "⛶ Plein écran"}</button>
       </div>
 
       {panel && (
-        <div className="absolute top-16 right-4 w-80 bg-white text-gray-900 rounded-2xl shadow-2xl p-5 space-y-4 text-sm">
+        <div className="absolute top-16 right-4 z-[300] w-80 max-h-[calc(100dvh-5rem)] overflow-y-auto bg-white text-gray-900 rounded-2xl shadow-2xl p-5 space-y-4 text-sm">
           <Field label="Affichage"><Seg options={LAYOUTS} value={cfg.layout} onChange={(v) => set({ layout: v })} /></Field>
           {cfg.layout === "single" && <Field label="Transition"><Seg options={TRANSITIONS} value={cfg.transition} onChange={(v) => set({ transition: v })} /></Field>}
           <Field label={`Vitesse : ${cfg.speed} s par photo`}>
