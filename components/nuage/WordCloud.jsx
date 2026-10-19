@@ -225,10 +225,13 @@ function tryLayout(words, W, H, maxFont, minFont, maxN, allowDrop, { weight, str
 
   function tryPlace(word, rank) {
     if (failed) return;
-    const size = minFont + (maxFont - minFont) * (word.n / maxN);
+    const mt = metrics(word.w, weight);
+    // taille proportionnelle au nombre d'envois, mais aucun mot (une longue
+    // phrase…) ne dépasse 70 % de la largeur : sinon il bloquerait à lui seul
+    // l'agrandissement de tout le nuage
+    const size = Math.min(minFont + (maxFont - minFont) * (word.n / maxN), (0.7 * W * REF) / mt.w);
     const m = marginFor(size);
     const k = size / REF;
-    const mt = metrics(word.w, weight);
     const mask = wordMask(word.w, size, weight, mt, m);
     const w = mask.cw * CELL, h = mask.ch * CELL;
     if (mask.cw > GW || mask.ch > GH) { if (!allowDrop) failed = true; return; }
@@ -342,7 +345,7 @@ function placeAll(list, W, H, opts) {
       // agrandit plutôt la police tant que tous les mots trouvent leur place.
       let best = res;
       const cap = Math.min(maxFontFor(list.length, H), W * 0.25, 300);
-      for (let g = 0; g < 6 && maxFont * 1.18 <= cap; g++) {
+      for (let g = 0; g < 10 && maxFont * 1.18 <= cap; g++) {
         maxFont *= 1.18;
         const next = tryLayout(list, W, H, maxFont, Math.max(12, maxFont * 0.2), maxN, false, opts);
         if (!next) break;
@@ -408,8 +411,8 @@ function layout(words, W, H, weight, spread, effect, obstacles = []) {
 }
 
 /* Calcul complet (placement + couleurs), réutilisé pour l'export en image. */
-export function computeCloud(words, W, H, { weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", nColors }) {
-  return colorize(layout(words, W, H, weight, arrangement === "spread", effect), nColors);
+export function computeCloud(words, W, H, { weight = DEFAULT_WEIGHT, arrangement = "center", effect = "medium", nColors, obstacles = [] }) {
+  return colorize(layout(words, W, H, weight, arrangement === "spread", effect, obstacles), nColors);
 }
 
 export const CLOUD_FONT = FONT;
