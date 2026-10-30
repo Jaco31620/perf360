@@ -1,0 +1,59 @@
+-- Jukebox (/jukebox) — tables.
+-- À exécuter une fois dans Supabase → SQL Editor.
+-- RLS activée sans policy (deny-all) : tous les accès
+-- passent par les routes serveur /api/jukebox/*
+-- (clé service_role), comme pour le nuage de mots.
+
+create table if not exists public.jukebox_sessions (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  name text not null,
+  admin_hash text not null,
+  status text not null default 'open',
+  max_per_participant int not null default 3,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.jukebox_tracks (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null
+    references public.jukebox_sessions(id)
+    on delete cascade,
+  video_id text not null,
+  title text not null,
+  channel text,
+  thumb text,
+  duration int,
+  participant_id text not null,
+  author text,
+  status text not null default 'queued',
+  position double precision not null,
+  created_at timestamptz not null default now(),
+  played_at timestamptz
+);
+
+create index if not exists jukebox_tracks_idx
+  on public.jukebox_tracks(session_id, status, position);
+
+-- Cache des recherches YouTube (quota limité).
+create table if not exists public.jukebox_cache (
+  q text primary key,
+  results jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- Réglages (clé API YouTube si absente des variables d'env).
+create table if not exists public.jukebox_config (
+  key text primary key,
+  value text not null
+);
+
+alter table public.jukebox_sessions enable row level security;
+alter table public.jukebox_tracks enable row level security;
+alter table public.jukebox_cache enable row level security;
+alter table public.jukebox_config enable row level security;
+
+grant all on public.jukebox_sessions to service_role;
+grant all on public.jukebox_tracks to service_role;
+grant all on public.jukebox_cache to service_role;
+grant all on public.jukebox_config to service_role;
