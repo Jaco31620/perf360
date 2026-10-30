@@ -37,6 +37,10 @@ export default function Regie({ code }) {
   const active = useRef(0);
   const primed = useRef(null); // { id, idx, ready } : titre suivant préchargé
   const fading = useRef(false);
+  // Bascule locale vers le titre suivant pas encore confirmée par le serveur :
+  // { from, to, until }. D'ici là, une réponse qui annonce encore `from` en
+  // cours est périmée et ne doit pas toucher aux lecteurs.
+  const switching = useRef(null);
   const master = useRef(100); // volume choisi
   const loaded = useRef(null); // id du titre joué par le lecteur actif
   const advancing = useRef(false);
@@ -127,6 +131,7 @@ export default function Regie({ code }) {
     const oldP = cur();
     const newP = players.current[pr.idx];
     primed.current = null;
+    switching.current = { from: loaded.current, to: pr.id, until: Date.now() + 15000 };
     loaded.current = pr.id;
     setActive(pr.idx);
     newP.seekTo(0, true);
@@ -201,6 +206,11 @@ export default function Regie({ code }) {
   useEffect(() => {
     if (!started || !ready || !data) return;
     const now = data.now;
+    const sw = switching.current;
+    if (sw) {
+      if (now?.id === sw.from && Date.now() < sw.until) return; // réponse périmée
+      switching.current = null;
+    }
     if (now && loaded.current !== now.id) {
       if (primed.current?.id === now.id && primed.current.ready) return switchToPrimed(0);
       dropPrimed();
