@@ -283,7 +283,7 @@ function Page({ children }) {
 
 /* Mémoire « titre Deezer → vidéo YouTube », à passer en revue : filtres
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
- * changement de vidéo (validée d'office), oubli (le titre sera recherché à
+ * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
 const STATUS_FILTERS = [["todo", "À vérifier"], ["ok", "Validés"], ["all", "Tous"]];
 const MODE_TAG = {
