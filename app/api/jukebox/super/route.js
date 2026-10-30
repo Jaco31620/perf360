@@ -2,16 +2,18 @@
  * Route SUPER-ADMIN du jukebox (en-tête x-jukebox-super requis).
  * - GET  : toutes les soirées (activité, compteurs, date de suppression),
  *          réglages, recherches YouTube du jour.
+ *          ?songs=1&q=… : mémoire des titres (titre Deezer → vidéo YouTube).
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode? }
  *     regie { code }   → nouveau lien régie (l'ancien ne fonctionne plus)
  *     delete { code }  → supprimer une soirée
+ *     forgetSong { key } → oublier une correspondance de la mémoire
  *     password { current, next } → changer le mot de passe super-admin
  *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 
 export const runtime = "nodejs";
@@ -22,6 +24,9 @@ const DAY = 24 * 3600 * 1000;
 export async function GET(req) {
   if (!isJukeboxSuper(req)) return Response.json({ error: "Accès refusé." }, { status: 401 });
   try {
+    const url = new URL(req.url);
+    if (url.searchParams.get("songs"))
+      return Response.json({ songs: await listSongs(url.searchParams.get("q")) }, { headers: { "cache-control": "no-store" } });
     const [config, sessions, searches, songs] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount()]);
     return Response.json({
       config,
@@ -43,6 +48,9 @@ export async function POST(req) {
     switch (body?.action) {
       case "settings":
         await saveConfig(body);
+        return Response.json({ ok: true });
+      case "forgetSong":
+        await forgetSong(body.key);
         return Response.json({ ok: true });
       case "password": {
         const err = await changeMasterPassword(body.current, body.next);

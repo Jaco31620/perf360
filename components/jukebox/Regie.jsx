@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
-import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider } from "./Controls";
+import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 
 export default function Regie({ code }) {
@@ -31,6 +31,7 @@ export default function Regie({ code }) {
   const [bigQr, setBigQr] = useState(false);
   const [copied, setCopied] = useState(false);
   const [remoteQr, setRemoteQr] = useState(false);
+  const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const token = useRef(null);
   // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
   // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
@@ -45,6 +46,7 @@ export default function Regie({ code }) {
   const switching = useRef(null);
   const master = useRef(100); // volume choisi
   const loaded = useRef(null); // id du titre joué par le lecteur actif
+  const loadedVideo = useRef(null); // sa vidéo (peut être corrigée en cours de soirée)
   const advancing = useRef(false);
   const dataRef = useRef(null);
   dataRef.current = data;
@@ -136,6 +138,7 @@ export default function Regie({ code }) {
     primed.current = null;
     switching.current = { from: loaded.current, to: pr.id, until: Date.now() + 15000 };
     loaded.current = pr.id;
+    loadedVideo.current = pr.videoId;
     setActive(pr.idx);
     newP.seekTo(0, true);
     newP.playVideo();
@@ -214,11 +217,12 @@ export default function Regie({ code }) {
       if (now?.id === sw.from && Date.now() < sw.until) return; // réponse périmée
       switching.current = null;
     }
-    if (now && loaded.current !== now.id) {
-      if (primed.current?.id === now.id && primed.current.ready) return switchToPrimed(0);
+    if (now && (loaded.current !== now.id || loadedVideo.current !== now.videoId)) {
+      if (primed.current?.id === now.id && primed.current.videoId === now.videoId && primed.current.ready) return switchToPrimed(0);
       dropPrimed();
       other()?.stopVideo();
       loaded.current = now.id;
+      loadedVideo.current = now.videoId;
       cur().setVolume(master.current);
       cur().loadVideoById(now.videoId);
     } else if (!now) {
@@ -241,11 +245,11 @@ export default function Regie({ code }) {
       if (!next) { dropPrimed(); return; }
       const fadeSec = d.session.fade;
       const rem = (now.duration || p.getDuration()) - p.getCurrentTime();
-      if (primed.current && primed.current.id !== next.id) dropPrimed(); // file réordonnée
+      if (primed.current && (primed.current.id !== next.id || primed.current.videoId !== next.videoId)) dropPrimed(); // file réordonnée, vidéo corrigée
       if (!primed.current) {
         if (rem <= fadeSec + 10) {
           const idx = 1 - active.current;
-          primed.current = { id: next.id, idx, ready: false };
+          primed.current = { id: next.id, videoId: next.videoId, idx, ready: false };
           players.current[idx].setVolume(0);
           players.current[idx].loadVideoById(next.videoId);
         }
@@ -275,6 +279,7 @@ export default function Regie({ code }) {
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       loaded.current = data.now.id;
+      loadedVideo.current = data.now.videoId;
       cur().loadVideoById({ videoId: data.now.videoId, startSeconds: resumeAt(data) });
     }
   };
@@ -388,7 +393,7 @@ export default function Regie({ code }) {
                 <>
                   <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment · proposé par {now.author}</p>
                   <p className="text-xl font-bold truncate">{now.title}</p>
-                  <p className="text-sm text-white/50">{now.channel}</p>
+                  <p className="text-sm text-white/50">{now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »
@@ -438,7 +443,7 @@ export default function Regie({ code }) {
             </Link>
           </div>
 
-          <QueueList queue={queue} act={act} playNow={playNow} />
+          <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
 
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
             {token.current && <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>}
@@ -450,6 +455,8 @@ export default function Regie({ code }) {
           </div>
         </aside>
       </div>
+
+      {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
 
       {remoteQr && (
         <div onClick={() => setRemoteQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 cursor-pointer text-center">

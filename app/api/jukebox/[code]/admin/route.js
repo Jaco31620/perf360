@@ -18,12 +18,15 @@
  *                            en cours est interrompu)
  *   move { id, dir }       → up | down | top dans la file
  *   clearDedication { id } → effacer la dédicace d'un titre (modération)
+ *   videos { id }          → autres vidéos possibles pour ce titre (« Mauvaise vidéo ? »)
+ *   replaceVideo { id, videoId } → changer la vidéo d'un titre (en attente ou en
+ *                            cours) et corriger la mémoire des titres
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (et l'historique)
  *   delete                 → supprimer la soirée
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, isAdminReq } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade, normalizeReveal } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -130,6 +133,27 @@ export async function POST(req, { params }) {
       case "clearDedication":
         res = await tracks().update({ dedication: null }).eq("session_id", s.id).eq("id", String(body.id || ""));
         break;
+      case "videos":
+      case "replaceVideo": {
+        const { data: t, error } = await tracks().select("*")
+          .eq("session_id", s.id).eq("id", String(body.id || "")).in("status", ["queued", "playing"]).maybeSingle();
+        if (error) throw error;
+        if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+        const mode = publicSession(s).searchMode;
+        if (body.action === "videos") {
+          const { candidates } = await songAlternatives(t, mode);
+          return Response.json({ ok: true, current: t.video_id, candidates });
+        }
+        const { video, reason } = await ytVideo(String(body.videoId || ""), { musicOnly: false });
+        if (!video) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
+        const key = await findSongKey(t.video_id, mode);
+        res = await tracks().update({
+          video_id: video.id, duration: video.duration,
+          ...(String(t.thumb || "").includes("ytimg") ? { thumb: video.thumb } : {}), // pochette Deezer conservée
+        }).eq("id", t.id);
+        if (!res.error && key) await rememberSong(key, video); // corrigé pour les prochaines soirées
+        break;
+      }
       case "remove":
         res = await tracks().delete().eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued");
         break;
@@ -145,6 +169,7 @@ export async function POST(req, { params }) {
     if (res.error) throw res.error;
     return Response.json({ ok: true });
   } catch (e) {
+    if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox admin:", e);
     return Response.json({ error: "Action impossible." }, { status: 502 });
   }

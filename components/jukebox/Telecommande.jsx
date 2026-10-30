@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
-import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider } from "./Controls";
+import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 
 export default function Telecommande({ code }) {
@@ -20,6 +20,7 @@ export default function Telecommande({ code }) {
   const [missing, setMissing] = useState(false);
   const [volume, setVolume] = useState(null); // valeur du curseur pendant qu'on le bouge
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
   const volumeTimer = useRef(null);
@@ -126,6 +127,7 @@ export default function Telecommande({ code }) {
                 <div className="min-w-0">
                   <p className="font-bold leading-snug line-clamp-2">{now.title}</p>
                   <p className="text-xs text-white/50">proposé par {now.author}</p>
+                  <FixVideoButton onClick={() => setFixing(now)} />
                   {now.dedication && (
                     <p className="text-xs text-fuchsia-300 italic">
                       💌 « {now.dedication} »
@@ -168,7 +170,9 @@ export default function Telecommande({ code }) {
           + Ajouter un titre
         </Link>
 
-        <QueueList queue={queue} act={act} playNow={playNow} />
+        <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+
+        {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
 
         <section className="bg-white/5 rounded-2xl">
           <button onClick={() => setSettingsOpen((v) => !v)} className="w-full flex justify-between items-center px-4 py-3 font-bold">

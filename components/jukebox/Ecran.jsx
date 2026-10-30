@@ -86,8 +86,8 @@ export default function Ecran({ code }) {
       const known = s && s.id === now.id; // la régie a commencé ce titre
       const target = known ? s.pos + (s.playing ? (Date.now() - s.localAt) / 1000 : 0) : 0;
       const shouldPlay = known && s.playing;
-      if (loaded.current !== now.id) {
-        loaded.current = now.id;
+      if (loaded.current !== `${now.id}:${now.videoId}`) { // nouveau titre, ou vidéo corrigée
+        loaded.current = `${now.id}:${now.videoId}`;
         p.loadVideoById({ videoId: now.videoId, startSeconds: target });
         return;
       }

@@ -3,14 +3,14 @@
  * Jukebox — super-admin (/jukebox/admin), mot de passe de Clic-Clac :
  * toutes les soirées (activité, suppression prévue), accès à leur régie,
  * nouveau lien régie, suppression ; réglages de conservation et de création ;
- * recherches YouTube du jour.
+ * recherches YouTube du jour ; mémoire des titres (recherche, oubli).
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
-import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, maxLabel } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const CREATION_MODES = [
@@ -180,6 +180,8 @@ export default function SuperAdmin() {
 
       {link && <LinkBox {...link} onClose={() => setLink(null)} />}
 
+      <SongMemory call={call} total={data?.songs} />
+
       <div className="space-y-3 mt-5">
         {data?.sessions.length === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
         {data?.sessions.map((s) => (
@@ -277,3 +279,79 @@ function Page({ children }) {
     </div>
   );
 }
+
+/* Mémoire « titre Deezer → vidéo YouTube » : recherche par libellé, aperçu
+ * de la vidéo retenue, oubli (le titre sera recherché à nouveau au prochain
+ * ajout). La correction d'une vidéo se fait depuis la régie (« Mauvaise
+ * vidéo ? »). */
+function SongMemory({ call, total }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [songs, setSongs] = useState(null);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async (term) => {
+    try {
+      const res = await fetch(`/api/jukebox/super?songs=1&q=${encodeURIComponent(term || "")}`, {
+        cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Chargement impossible.");
+      setSongs(d.songs);
+      setErr("");
+    } catch (e) {
+      setErr(e.message);
+    }
+  }, []);
+
+  useEffect(() => { if (open) load(""); }, [open, load]);
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => load(q), 300);
+    return () => clearTimeout(t);
+  }, [q, open, load]);
+
+  const forget = async (s) => {
+    if (!confirm(`Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)) return;
+    try { await call("POST", { action: "forgetSong", key: s.key }); load(q); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div className="mt-5 bg-white rounded-2xl border border-purple-100">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex justify-between items-center px-5 py-4 font-bold text-gray-900">
+        <span>🧠 Mémoire des titres {typeof total === "number" && <span className="text-gray-400 font-normal">({total})</span>}</span>
+        <span className="text-gray-400">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 space-y-3">
+          <p className="text-xs text-gray-500">Vidéo YouTube retenue pour chaque titre et chaque mode. Pour corriger une vidéo, utilisez « Mauvaise vidéo ? » dans la régie ; ici, vous pouvez en oublier une.</p>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
+            className="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-fuchsia-500 outline-none" />
+          {err && <p className="text-sm text-red-600">{err}</p>}
+          {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
+            <p className="text-sm text-gray-400">Aucun titre.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {songs.map((s) => (
+                <li key={s.key} className="flex items-center gap-3 py-2">
+                  <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer" className="shrink-0" title="Voir la vidéo sur YouTube">
+                    <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="w-20 aspect-video object-cover rounded-lg" />
+                  </a>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
+                    <p className="text-xs text-gray-500">
+                      <span className="font-semibold text-fuchsia-600">{modeLabel(s.mode)}</span> · {formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}
+                    </p>
+                  </div>
+                  <button onClick={() => forget(s)} className="shrink-0 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const modeLabel = (m) => SEARCH_MODES.find((x) => x.id === m)?.label || m;

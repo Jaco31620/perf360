@@ -5,7 +5,9 @@
  * titre suivant, volume). `act(action, extra)` envoie une action à
  * /api/jukebox/<code>/admin.
  */
-import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume1, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
+import { authHeaders } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export function Settings({ session, act }) {
@@ -62,7 +64,7 @@ export function Settings({ session, act }) {
   );
 }
 
-export function QueueList({ queue, act, playNow }) {
+export function QueueList({ queue, act, playNow, onFixVideo }) {
   return (
     <div className="bg-white/5 rounded-2xl p-4">
       <h2 className="font-bold mb-3">À suivre <span className="text-white/40 font-normal">({queue.length})</span></h2>
@@ -89,6 +91,7 @@ export function QueueList({ queue, act, playNow }) {
                 <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}><ChevronsUp size={17} /></IconBtn>
                 <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}><ChevronUp size={17} /></IconBtn>
                 <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}><ChevronDown size={17} /></IconBtn>
+                {onFixVideo && <IconBtn label="Mauvaise vidéo ?" onClick={() => onFixVideo(t)}><RefreshCw size={15} /></IconBtn>}
                 <IconBtn label="Retirer" danger onClick={() => confirm(`Retirer « ${t.title} » ?`) && act("remove", { id: t.id })}><X size={16} /></IconBtn>
               </div>
             </li>
@@ -166,5 +169,113 @@ export function VolumeSlider({ value, onChange, className = "" }) {
           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
           [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0" />
     </label>
+  );
+}
+
+/* ---------- « Mauvaise vidéo ? » ----------
+ * Fenêtre de la régie / télécommande : autres vidéos YouTube possibles pour
+ * un titre (servies par le cache) ou lien collé. Le choix remplace la vidéo
+ * du titre et corrige la mémoire des titres pour les prochaines soirées. */
+export function FixVideoButton({ onClick }) {
+  return (
+    <button onClick={onClick} className="inline-flex items-center gap-1 text-xs text-white/50 hover:text-white underline">
+      <RefreshCw size={12} /> Mauvaise vidéo ?
+    </button>
+  );
+}
+
+export function VideoPicker({ code, track, onClose, onDone }) {
+  const [list, setList] = useState(null);
+  const [current, setCurrent] = useState(track.videoId);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [link, setLink] = useState("");
+
+  const post = async (body) => {
+    const res = await fetch(`/api/jukebox/${code}/admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders(code) },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || "Action impossible.");
+    return d;
+  };
+
+  useEffect(() => {
+    post({ action: "videos", id: track.id })
+      .then((d) => { setList(d.candidates); setCurrent(d.current); })
+      .catch((e) => { setList([]); setError(e.message); });
+  }, [track.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const choose = async (videoId) => {
+    setBusy(videoId);
+    setError("");
+    try {
+      await post({ action: "replaceVideo", id: track.id, videoId });
+      onDone?.();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setBusy("");
+    }
+  };
+
+  const linkId = (() => {
+    const m = link.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([\w-]{11})/);
+    return m ? m[1] : null;
+  })();
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-3" onClick={() => !busy && onClose()}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gray-900 text-white rounded-3xl p-5 space-y-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-400">Mauvaise vidéo ?</p>
+            <p className="font-bold leading-snug">{track.title}</p>
+            <p className="text-xs text-white/50">{track.channel}</p>
+          </div>
+          <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
+        </div>
+        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre et sera retenue pour les prochaines soirées.</p>
+
+        {list === null ? (
+          <p className="text-white/60 text-sm py-4 text-center">Recherche des autres versions…</p>
+        ) : (
+          <ul className="space-y-2">
+            {list.map((v) => (
+              <li key={v.id} className={`flex items-center gap-3 rounded-xl p-2 ${v.id === current ? "bg-fuchsia-600/20 ring-1 ring-fuchsia-500/50" : "bg-white/5"}`}>
+                <img src={v.thumb || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`} alt="" className="w-24 aspect-video object-cover rounded-lg shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold leading-snug line-clamp-2">{v.title}</p>
+                  <p className="text-xs text-white/50 truncate">{v.channel} · {formatDuration(v.duration)}</p>
+                  <a href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white"><ExternalLink size={11} /> voir sur YouTube</a>
+                </div>
+                {v.id === current ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-fuchsia-300 shrink-0"><Check size={14} /> actuelle</span>
+                ) : (
+                  <button onClick={() => choose(v.id)} disabled={!!busy}
+                    className="shrink-0 bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-sm font-bold px-3 py-1.5 rounded-full">
+                    {busy === v.id ? "…" : "Choisir"}
+                  </button>
+                )}
+              </li>
+            ))}
+            {list.length === 0 && !error && <li className="text-sm text-white/50 text-center py-3">Aucune autre version trouvée.</li>}
+          </ul>
+        )}
+
+        <div className="flex gap-2">
+          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="… ou collez un lien YouTube"
+            className="flex-1 min-w-0 bg-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-fuchsia-500" />
+          <button onClick={() => linkId && choose(linkId)} disabled={!linkId || !!busy}
+            className="shrink-0 bg-white/15 hover:bg-white/25 disabled:opacity-30 text-sm font-bold px-3 rounded-xl">
+            {busy && busy === linkId ? "…" : "Utiliser"}
+          </button>
+        </div>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </div>
+    </div>
   );
 }

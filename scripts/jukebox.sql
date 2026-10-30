@@ -90,3 +90,7 @@ create index if not exists jukebox_songs_checked_idx
   on public.jukebox_songs(checked_at);
 alter table public.jukebox_songs enable row level security;
 grant all on public.jukebox_songs to service_role;
+
+-- v8 (30/10/2026) : libellé lisible des titres mémorisés (super-admin).
+alter table public.jukebox_songs
+  add column if not exists label text;
