@@ -1,8 +1,9 @@
 "use client";
 /*
  * Jukebox — régie (PC branché à la sono, ou TV). Joue la file avec le lecteur
- * YouTube intégré et enchaîne tout seul : à la fin d'un titre (ou s'il ne peut
- * pas être lu), on demande le suivant au serveur. Rafraîchit la file toutes
+ * YouTube intégré et enchaîne tout seul : le titre suivant est préchargé dans
+ * un 2e lecteur, puis fondu enchaîné (durée réglable) ou passage direct à la
+ * fin du titre ; s'il ne peut pas être lu, on demande le suivant au serveur. Rafraîchit la file toutes
  * les 2 s. Jeton régie en localStorage, ou #t=… dans l'URL pour ouvrir la
  * régie sur un autre appareil.
  * Les navigateurs bloquent le son sans geste de l'utilisateur : la lecture
@@ -14,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, rememberParty, forgetParty, formatCode } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -25,13 +26,25 @@ export default function Regie({ code }) {
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(100);
+  const [activeIdx, setActiveIdx] = useState(0); // lecteur visible
   const [bigQr, setBigQr] = useState(false);
   const [copied, setCopied] = useState(false);
   const token = useRef(null);
-  const player = useRef(null);
-  const playerEl = useRef(null);
-  const loaded = useRef(null); // id du titre chargé dans le lecteur
+  // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
+  // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
+  const players = useRef([null, null]);
+  const playerEls = [useRef(null), useRef(null)];
+  const active = useRef(0);
+  const primed = useRef(null); // { id, idx, ready } : titre suivant préchargé
+  const fading = useRef(false);
+  const master = useRef(100); // volume choisi
+  const loaded = useRef(null); // id du titre joué par le lecteur actif
   const advancing = useRef(false);
+  const dataRef = useRef(null);
+  dataRef.current = data;
+
+  const cur = () => players.current[active.current];
+  const other = () => players.current[1 - active.current];
 
   useEffect(() => {
     const m = window.location.hash.match(/t=([a-f0-9]+)/);
@@ -76,18 +89,16 @@ export default function Regie({ code }) {
     return true;
   }, [code, refresh]);
 
-  const advance = useCallback(async (skip) => {
+  const advance = useCallback(async (skip, from = loaded.current) => {
     if (advancing.current) return;
     advancing.current = true;
-    try { await act("next", { from: loaded.current, skip }, true); } finally { advancing.current = false; }
+    try { await act("next", { from, skip }, true); } finally { advancing.current = false; }
   }, [act]);
 
-  // Les événements du lecteur sont branchés une fois : ils passent par une ref.
-  const onEvent = useRef({});
   // Position de lecture transmise à l'écran d'affichage (qui suit en muet) :
   // à chaque lecture / pause et toutes les 5 s.
   const report = useCallback(() => {
-    const p = player.current;
+    const p = players.current[active.current];
     if (!loaded.current || !p?.getCurrentTime) return;
     fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
@@ -102,53 +113,155 @@ export default function Regie({ code }) {
     return () => clearInterval(id);
   }, [started, report]);
 
-  onEvent.current = { advance, report };
+  const setActive = (i) => { active.current = i; setActiveIdx(i); };
 
-  // Lecteur YouTube (IFrame API)
+  const dropPrimed = () => {
+    if (!primed.current) return;
+    players.current[primed.current.idx]?.stopVideo();
+    primed.current = null;
+  };
+
+  // Le titre préchargé devient le titre actif, avec ou sans fondu.
+  const switchToPrimed = (fadeSec) => {
+    const pr = primed.current;
+    const oldP = cur();
+    const newP = players.current[pr.idx];
+    primed.current = null;
+    loaded.current = pr.id;
+    setActive(pr.idx);
+    newP.seekTo(0, true);
+    newP.playVideo();
+    if (!fadeSec) {
+      oldP.stopVideo();
+      newP.setVolume(master.current);
+      return;
+    }
+    fading.current = true;
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / (fadeSec * 1000));
+      newP.setVolume(Math.round(master.current * k));
+      oldP.setVolume(Math.round(master.current * (1 - k)));
+      if (k >= 1) {
+        clearInterval(id);
+        oldP.stopVideo();
+        oldP.setVolume(master.current);
+        fading.current = false;
+      }
+    }, 100);
+  };
+
+  // Les événements des lecteurs sont branchés une fois : ils passent par une ref.
+  const onEvent = useRef({});
+  onEvent.current = {
+    state: (i, e) => {
+      if (i === active.current) {
+        setPlaying(e.data === 1);
+        if (e.data === 0 && !fading.current) { // terminé
+          // suivant déjà préchargé : on enchaîne tout de suite, sans attendre le serveur
+          if (primed.current?.ready && primed.current.id === dataRef.current?.queue?.[0]?.id) {
+            const from = loaded.current;
+            switchToPrimed(0);
+            advance(false, from);
+          } else advance(false);
+        }
+        if (e.data === 1 || e.data === 2) report(); // lecture / pause → écran
+      } else if (primed.current?.idx === i && !primed.current.ready && e.data === 1) {
+        // préchargé : on le met en attente au début, en silence
+        e.target.pauseVideo();
+        e.target.seekTo(0, true);
+        primed.current.ready = true;
+      }
+    },
+    error: (i) => {
+      if (i === active.current) advance(true); // lecture bloquée, vidéo retirée…
+      else if (primed.current?.idx === i) primed.current = null;
+    },
+  };
+
+  // Lecteurs YouTube (IFrame API)
   useEffect(() => {
     let cancelled = false;
     loadYouTubeApi().then(() => {
-      if (cancelled || player.current || !playerEl.current) return;
-      player.current = createPlayer(playerEl.current, {
+      if (cancelled || players.current[0] || !playerEls[0].current) return;
+      let readyCount = 0;
+      players.current = [0, 1].map((i) => createPlayer(playerEls[i].current, {
         playerVars: { autoplay: 0, rel: 0, playsinline: 1 },
         events: {
-          onReady: () => setReady(true),
-          onStateChange: (e) => {
-            setPlaying(e.data === 1);
-            if (e.data === 0) onEvent.current.advance(false); // terminé
-            if (e.data === 1 || e.data === 2) onEvent.current.report(); // lecture / pause → écran
-          },
-          onError: () => onEvent.current.advance(true), // lecture bloquée, vidéo retirée…
+          onReady: () => { if (++readyCount === 2) setReady(true); },
+          onStateChange: (e) => onEvent.current.state(i, e),
+          onError: () => onEvent.current.error(i),
         },
-      });
+      }));
     });
     return () => { cancelled = true; };
-  }, [data?.admin]); // le conteneur n'existe qu'une fois l'accès régie confirmé
+  }, [data?.admin]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Synchronise le lecteur avec le titre en cours côté serveur.
+  // Synchronise les lecteurs avec le titre en cours côté serveur.
   useEffect(() => {
     if (!started || !ready || !data) return;
     const now = data.now;
     if (now && loaded.current !== now.id) {
+      if (primed.current?.id === now.id && primed.current.ready) return switchToPrimed(0);
+      dropPrimed();
+      other()?.stopVideo();
       loaded.current = now.id;
-      player.current.loadVideoById(now.videoId);
+      cur().setVolume(master.current);
+      cur().loadVideoById(now.videoId);
     } else if (!now) {
-      if (loaded.current) { player.current.stopVideo(); loaded.current = null; }
+      if (loaded.current) { cur().stopVideo(); loaded.current = null; }
+      dropPrimed();
       if (data.queue.length) advance(false);
     }
-  }, [data, started, ready, advance]);
+  }, [data, started, ready, advance]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Préchargement du titre suivant, puis fondu enchaîné sur la fin du titre.
+  // La fin est calculée avec la durée du titre (pas celle d'une éventuelle pub).
+  useEffect(() => {
+    if (!started || !ready) return;
+    const id = setInterval(() => {
+      const d = dataRef.current;
+      const now = d?.now;
+      const next = d?.queue?.[0];
+      const p = cur();
+      if (!now || fading.current || loaded.current !== now.id || p.getPlayerState() !== 1) return;
+      if (!next) { dropPrimed(); return; }
+      const fadeSec = d.session.fade;
+      const rem = (now.duration || p.getDuration()) - p.getCurrentTime();
+      if (primed.current && primed.current.id !== next.id) dropPrimed(); // file réordonnée
+      if (!primed.current) {
+        if (rem <= fadeSec + 10) {
+          const idx = 1 - active.current;
+          primed.current = { id: next.id, idx, ready: false };
+          players.current[idx].setVolume(0);
+          players.current[idx].loadVideoById(next.videoId);
+        }
+        return;
+      }
+      if (fadeSec > 0 && primed.current.ready && rem <= fadeSec) {
+        const from = loaded.current;
+        switchToPrimed(fadeSec);
+        advance(false, from); // le serveur passe au titre suivant (écran, invités)
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [started, ready, advance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const start = () => {
     setStarted(true);
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       loaded.current = data.now.id;
-      player.current.loadVideoById(data.now.videoId);
+      cur().loadVideoById(data.now.videoId);
     }
   };
 
-  const togglePlay = () => (playing ? player.current?.pauseVideo() : player.current?.playVideo());
-  const changeVolume = (v) => { setVolume(v); player.current?.setVolume(v); };
+  const togglePlay = () => (playing ? cur()?.pauseVideo() : cur()?.playVideo());
+  const changeVolume = (v) => {
+    setVolume(v);
+    master.current = v;
+    if (!fading.current) cur()?.setVolume(v);
+  };
 
   const copyRegieLink = async () => {
     try {
@@ -202,9 +315,12 @@ export default function Regie({ code }) {
       <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1fr_380px]">
         <main className="min-w-0">
           <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
-            <div ref={playerEl} className="absolute inset-0" />
+            {[0, 1].map((i) => (
+              <div key={i} ref={playerEls[i]}
+                className={`absolute inset-0 transition-opacity duration-1000 ${i === activeIdx ? "opacity-100 z-10" : "opacity-0 pointer-events-none"}`} />
+            ))}
             {!started && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/85 text-center px-6">
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 text-center px-6">
                 <p className="text-white/70">
                   {now || queue.length ? `${queue.length + (now ? 1 : 0)} titre${queue.length + (now ? 1 : 0) > 1 ? "s" : ""} dans la file` : "La file est vide pour l'instant : la musique démarrera au premier titre proposé."}
                 </p>
@@ -215,7 +331,7 @@ export default function Regie({ code }) {
               </div>
             )}
             {started && !now && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black text-white/60 text-center px-6 pointer-events-none">
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black text-white/60 text-center px-6 pointer-events-none">
                 En attente du prochain titre… Scannez le QR code pour en proposer un !
               </div>
             )}
@@ -284,6 +400,13 @@ export default function Regie({ code }) {
                 ))}
               </div>
             </div>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-white/70">🎚️ Fondu enchaîné</span>
+              <select value={session.fade} onChange={(e) => act("options", { fade: Number(e.target.value) })}
+                className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold">
+                {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
+              </select>
+            </label>
             <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
             <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
               hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />

@@ -4,7 +4,8 @@
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
  *   searchMode { mode }    → recherche normale | paroles | karaoke
- *   options { screenQueue?, guestQueue? } → file visible sur l'écran / chez les invités
+ *   options { screenQueue?, guestQueue?, fade? } → file visible sur l'écran /
+ *                            chez les invités, durée du fondu enchaîné
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
  *                            croit en cours (null si aucun) : si ce n'est plus
@@ -18,7 +19,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, checkToken } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax, normalizeMode } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,7 @@ export async function POST(req, { params }) {
       case "options": {
         const options = { ...(s.options || {}) };
         for (const k of ["screenQueue", "guestQueue"]) if (k in body) options[k] = !!body[k];
+        if ("fade" in body) options.fade = normalizeFade(body.fade);
         res = await update({ options });
         break;
       }
