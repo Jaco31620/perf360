@@ -77,3 +77,16 @@ alter table public.jukebox_sessions
 -- v6 (30/10/2026) : dédicaces.
 alter table public.jukebox_tracks
   add column if not exists dedication text;
+
+-- v7 (30/10/2026) : mémoire « titre Deezer → vidéo YouTube »,
+-- revérifiée chaque nuit (règle YouTube des 30 jours).
+create table if not exists public.jukebox_songs (
+  key text primary key,
+  video_id text not null,
+  duration int,
+  checked_at timestamptz not null default now()
+);
+create index if not exists jukebox_songs_checked_idx
+  on public.jukebox_songs(checked_at);
+alter table public.jukebox_songs enable row level security;
+grant all on public.jukebox_songs to service_role;

@@ -111,6 +111,7 @@ export default function SuperAdmin() {
             <div className="h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
               <div className={`h-full ${data.searches >= SEARCH_QUOTA * 0.8 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${Math.min(100, (data.searches / SEARCH_QUOTA) * 100)}%` }} />
             </div>
+            <p className="text-sm mt-3"><span className="font-semibold">Titres en mémoire :</span> {data.songs}</p>
             <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à 9 h (heure de Paris). Les recherches déjà faites (30 j) et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.</p>
           </div>
 

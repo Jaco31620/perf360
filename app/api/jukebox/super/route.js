@@ -9,7 +9,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,10 +19,11 @@ const DAY = 24 * 3600 * 1000;
 export async function GET(req) {
   if (!isJukeboxSuper(req)) return Response.json({ error: "Accès refusé." }, { status: 401 });
   try {
-    const [config, sessions, searches] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday()]);
+    const [config, sessions, searches, songs] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount()]);
     return Response.json({
       config,
       searches,
+      songs,
       sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {

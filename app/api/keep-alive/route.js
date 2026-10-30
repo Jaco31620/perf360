@@ -15,6 +15,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { purgeClicClac } from "@/lib/clicclac/purge";
 import { purgeJukebox } from "@/lib/jukeboxAdmin";
+import { refreshSongs } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,8 @@ export async function GET(request) {
     // Jukebox : suppression des soirées inactives (jamais bloquant)
     let jukebox = null;
     try { jukebox = await purgeJukebox(); } catch (e) { jukebox = { error: String(e?.message || e) }; }
+    // Jukebox : revérification des titres mémorisés (règle YouTube des 30 jours)
+    try { jukebox = { ...jukebox, songs: await refreshSongs() }; } catch (e) { jukebox = { ...jukebox, songs: { error: String(e?.message || e) } }; }
     return Response.json({ status: "ok", pinged: true, count: count ?? null, clicclac, jukebox });
   } catch (e) {
     return Response.json(
