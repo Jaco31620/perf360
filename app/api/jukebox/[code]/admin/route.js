@@ -4,6 +4,7 @@
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
  *   karaoke { on }         → versions karaoké en priorité dans la recherche
+ *   options { screenQueue?, guestQueue? } → file visible sur l'écran / chez les invités
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
  *                            croit en cours (null si aucun) : si ce n'est plus
@@ -52,6 +53,12 @@ export async function POST(req, { params }) {
       case "karaoke":
         res = await update({ karaoke: !!body.on });
         break;
+      case "options": {
+        const options = { ...(s.options || {}) };
+        for (const k of ["screenQueue", "guestQueue"]) if (k in body) options[k] = !!body[k];
+        res = await update({ options });
+        break;
+      }
       case "name": {
         const name = String(body.name || "").trim().slice(0, MAX_NAME_LEN);
         if (!name) return Response.json({ error: "Nom vide." }, { status: 400 });

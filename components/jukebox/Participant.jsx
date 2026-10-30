@@ -112,7 +112,7 @@ export default function Participant({ code }) {
     );
   }
 
-  const { session, now, queue, pending, admin } = data;
+  const { session, now, queue, total, pending, admin } = data;
   const open = session.status === "open";
   const limit = session.maxPerParticipant || UNLIMITED_CAP;
   const full = !admin && pending >= limit;
@@ -200,6 +200,29 @@ export default function Participant({ code }) {
         ) : (
           <p className="text-sm text-gray-500 mb-4">La musique n'a pas encore commencé.</p>
         )}
+        {!session.guestQueue && !admin ? (
+          <>
+            <h2 className="font-bold text-gray-900 mb-1">Vos titres</h2>
+            <p className="text-xs text-gray-400 mb-2">{total} titre{total > 1 ? "s" : ""} dans la file</p>
+            {queue.length === 0 ? (
+              <p className="text-sm text-gray-500">Vous n'avez aucun titre en attente.</p>
+            ) : (
+              <ul className="space-y-2">
+                {queue.map((t) => (
+                  <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 bg-fuchsia-50">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
+                      <p className="text-xs font-semibold text-fuchsia-700">
+                        {t.ahead === 0 ? "🔜 C'est le prochain !" : `${t.ahead} titre${t.ahead > 1 ? "s" : ""} avant le vôtre`}
+                      </p>
+                    </div>
+                    <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        ) : (<>
         <h2 className="font-bold text-gray-900 mb-2">À suivre {queue.length > 0 && <span className="text-gray-400 font-normal">({queue.length})</span>}</h2>
         {queue.length === 0 ? (
           <p className="text-sm text-gray-500">La file est vide : proposez un titre !</p>
@@ -217,6 +240,7 @@ export default function Participant({ code }) {
             ))}
           </ol>
         )}
+        </>)}
       </div>
     </Shell>
   );

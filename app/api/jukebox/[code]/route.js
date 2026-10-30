@@ -3,6 +3,11 @@
  * - GET    : soirée, titre en cours et file d'attente. Avec ?pid=<participant>,
  *            marque ses titres (mine) et compte ceux en attente.
  *            Avec l'en-tête x-jukebox-admin valide, ajoute admin: true.
+ *            Sans lui, la file est réduite selon les choix de la régie : vide
+ *            pour ?view=ecran si l'écran ne l'affiche pas, limitée aux titres
+ *            du participant si les invités ne voient pas toute la file.
+ *            Chaque titre porte `ahead` (titres avant lui) ; `total` = taille
+ *            de la file complète.
  * - POST   : ajout d'un titre { participantId, author, videoId }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). La régie
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
@@ -30,18 +35,27 @@ export async function GET(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ session: null }, { status: 404 });
-    const pid = new URL(req.url).searchParams.get("pid");
+    const url = new URL(req.url);
+    const pid = url.searchParams.get("pid");
     const me = validPid(pid) ? pid : null;
     const rows = await activeTracks(getSupabaseAdmin(), s.id);
     const now = rows.find((r) => r.status === "playing");
     const queue = rows.filter((r) => r.status === "queued");
+    const session = publicSession(s);
+    const admin = checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash);
+    let list = queue.map((r, i) => ({ ...trackOut(r, me), ahead: i }));
+    if (!admin) {
+      if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
+      else if (!session.guestQueue) list = list.filter((t) => t.mine);
+    }
     const out = {
-      session: publicSession(s),
+      session,
       now: now ? trackOut(now, me) : null,
-      queue: queue.map((r) => trackOut(r, me)),
+      queue: list,
+      total: queue.length,
       pending: me ? queue.filter((r) => r.participant_id === me).length : 0,
     };
-    if (checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash)) out.admin = true;
+    if (admin) out.admin = true;
     return Response.json(out, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     console.error("jukebox GET:", e);

@@ -268,13 +268,13 @@ export default function Regie({ code }) {
                 {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
               </select>
             </label>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-white/70">🎤 Titres karaoké en priorité</span>
-              <button onClick={() => act("karaoke", { on: !session.karaoke })} role="switch" aria-checked={session.karaoke}
-                className={`font-bold px-3 py-1.5 rounded-full ${session.karaoke ? "bg-fuchsia-600 hover:bg-fuchsia-700" : "bg-white/10 hover:bg-white/20"}`}>
-                {session.karaoke ? "Oui" : "Non"}
-              </button>
-            </div>
+            <Toggle label="🎤 Titres karaoké en priorité" on={session.karaoke} onClick={() => act("karaoke", { on: !session.karaoke })} />
+            <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
+            <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
+              hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
+            <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+              📺 Ouvrir l'écran d'affichage
+            </Link>
             <Link href={`/jukebox/${code}`} target="_blank" className="block text-center font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-2">
               + Ajouter un titre
             </Link>
@@ -323,6 +323,21 @@ export default function Regie({ code }) {
           <p className="text-white/60">code <span className="font-mono font-bold text-white text-3xl">{formatCode(code)}</span></p>
         </div>
       )}
+    </div>
+  );
+}
+
+function Toggle({ label, on, onClick, hint }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-white/70">{label}</span>
+        <button onClick={onClick} role="switch" aria-checked={on}
+          className={`font-bold px-3 py-1.5 rounded-full shrink-0 ${on ? "bg-fuchsia-600 hover:bg-fuchsia-700" : "bg-white/10 hover:bg-white/20"}`}>
+          {on ? "Oui" : "Non"}
+        </button>
+      </div>
+      {hint && <p className="text-xs text-white/40 mt-1">{hint}</p>}
     </div>
   );
 }

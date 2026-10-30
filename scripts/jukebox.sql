@@ -61,3 +61,7 @@ grant all on public.jukebox_config to service_role;
 -- v2 (30/10/2026) : versions karaoké en priorité (choix de la régie).
 alter table public.jukebox_sessions
   add column if not exists karaoke boolean not null default false;
+
+-- v3 (30/10/2026) : options d'affichage (file sur l'écran / chez les invités).
+alter table public.jukebox_sessions
+  add column if not exists options jsonb not null default '{}'::jsonb;
