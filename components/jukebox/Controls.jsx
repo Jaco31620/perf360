@@ -4,7 +4,7 @@
  * de la soirée et gestion de la file. `act(action, extra)` envoie une action
  * à /api/jukebox/<code>/admin.
  */
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export function Settings({ session, act }) {
   const open = session.status === "open";
@@ -42,6 +42,15 @@ export function Settings({ session, act }) {
           {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
         </select>
       </label>
+      <Toggle label="💌 Dédicaces" on={session.dedications} onClick={() => act("options", { dedications: !session.dedications })}
+        hint={session.dedications ? "Les invités peuvent ajouter un petit mot à leur titre." : null} />
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-white/70">👤 Nom de l'invité</span>
+        <select value={session.authorReveal} onChange={(e) => act("options", { authorReveal: Number(e.target.value) })}
+          className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold max-w-[55%]">
+          {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+        </select>
+      </label>
       <Toggle label="⚖️ File équitable" on={session.fairQueue} onClick={() => act("options", { fairQueue: !session.fairQueue })}
         hint={session.fairQueue ? "Les nouveaux titres alternent entre les invités." : "Les titres passent dans l'ordre d'arrivée."} />
       <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
@@ -65,6 +74,13 @@ export function QueueList({ queue, act, playNow }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{t.title}</p>
                 <p className="text-xs text-white/50 truncate">{t.author} · {formatDuration(t.duration)}</p>
+                {t.dedication && (
+                  <p className="text-xs text-fuchsia-300 italic flex items-start gap-1">
+                    <span className="min-w-0 break-words">💌 « {t.dedication} »</span>
+                    <button onClick={() => confirm("Effacer cette dédicace ?") && act("clearDedication", { id: t.id })}
+                      className="not-italic text-white/40 hover:text-red-400 shrink-0" aria-label="Effacer la dédicace">✕</button>
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 text-white/50">
                 <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}>▶</IconBtn>

@@ -126,6 +126,13 @@ export default function Telecommande({ code }) {
                 <div className="min-w-0">
                   <p className="font-bold leading-snug line-clamp-2">{now.title}</p>
                   <p className="text-xs text-white/50">proposé par {now.author}</p>
+                  {now.dedication && (
+                    <p className="text-xs text-fuchsia-300 italic">
+                      💌 « {now.dedication} »
+                      <button onClick={() => confirm("Effacer cette dédicace ?") && act("clearDedication", { id: now.id })}
+                        className="not-italic ml-2 text-white/40" aria-label="Effacer la dédicace">✕</button>
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden">

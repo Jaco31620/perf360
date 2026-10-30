@@ -4,7 +4,7 @@
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
  *   searchMode { mode }    → recherche normale | paroles | karaoke
- *   options { screenQueue?, guestQueue?, fairQueue?, fade? } → file visible sur l'écran /
+ *   options { screenQueue?, guestQueue?, fairQueue?, dedications?, authorReveal?, fade? } → file visible sur l'écran /
  *                            chez les invités, durée du fondu enchaîné
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
@@ -17,13 +17,14 @@
  *   playnow { id }         → lancer tout de suite un titre de la file (le titre
  *                            en cours est interrompu)
  *   move { id, dir }       → up | down | top dans la file
+ *   clearDedication { id } → effacer la dédicace d'un titre (modération)
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (et l'historique)
  *   delete                 → supprimer la soirée
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, isAdminReq } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade, normalizeReveal } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 
@@ -63,8 +64,9 @@ export async function POST(req, { params }) {
         break;
       case "options": {
         const options = { ...(s.options || {}) };
-        for (const k of ["screenQueue", "guestQueue", "fairQueue"]) if (k in body) options[k] = !!body[k];
+        for (const k of ["screenQueue", "guestQueue", "fairQueue", "dedications"]) if (k in body) options[k] = !!body[k];
         if ("fade" in body) options.fade = normalizeFade(body.fade);
+        if ("authorReveal" in body) options.authorReveal = normalizeReveal(body.authorReveal);
         res = await update({ options });
         break;
       }
@@ -125,6 +127,9 @@ export async function POST(req, { params }) {
         if (!res.error) res = await tracks().update({ position: q[i].position }).eq("id", q[j].id);
         break;
       }
+      case "clearDedication":
+        res = await tracks().update({ dedication: null }).eq("session_id", s.id).eq("id", String(body.id || ""));
+        break;
       case "remove":
         res = await tracks().delete().eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued");
         break;

@@ -388,6 +388,13 @@ export default function Regie({ code }) {
                   <p className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider">▶ En ce moment · proposé par {now.author}</p>
                   <p className="text-xl font-bold truncate">{now.title}</p>
                   <p className="text-sm text-white/50">{now.channel}</p>
+                  {now.dedication && (
+                    <p className="text-sm text-fuchsia-300 italic mt-1">
+                      💌 « {now.dedication} »
+                      <button onClick={() => confirm("Effacer cette dédicace ?") && act("clearDedication", { id: now.id })}
+                        className="not-italic ml-2 text-white/40 hover:text-red-400" aria-label="Effacer la dédicace">✕</button>
+                    </p>
+                  )}
                 </>
               ) : <p className="text-white/50">Aucun titre en cours.</p>}
             </div>

@@ -22,6 +22,7 @@ export default function Ecran({ code }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [mouseActive, setMouseActive] = useState(false);
   const [ready, setReady] = useState(false);
+  const [, tick] = useState(0); // compte à rebours avant de révéler le nom
   const player = useRef(null);
   const playerEl = useRef(null);
   const loaded = useRef(null); // id du titre chargé dans le lecteur
@@ -48,6 +49,7 @@ export default function Ecran({ code }) {
       else if (sync.current?.at !== pb.at || !c) // nouvelle position envoyée par la régie
         sync.current = { id: pb.id, pos: pb.pos, playing: pb.playing, at: pb.at, localAt: pb.at - clock.current.offset };
       nowRef.current = d.now;
+      d.fetchedAt = Date.now();
       setData(d);
     } catch (e) { /* réseau : on retentera */ }
   }, [code]);
@@ -111,6 +113,11 @@ export default function Ecran({ code }) {
   }, [ready]);
 
   useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     setOrigin(window.location.origin);
     refresh();
     const id = setInterval(refresh, 3000);
@@ -169,7 +176,16 @@ export default function Ecran({ code }) {
             <>
               <p className="mt-[2.5vh] text-[1.2vw] font-bold uppercase tracking-wider text-fuchsia-300">▶ En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
-              <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
+              {now.author ? (
+                <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
+              ) : now.revealIn ? (
+                <p className="mt-[0.5vh] text-[1.5vw] text-white/70">
+                  🤫 Qui a choisi ce titre ? Réponse dans <span className="font-bold text-white tabular-nums">
+                    {Math.max(0, Math.ceil(now.revealIn - (Date.now() - data.fetchedAt) / 1000))} s
+                  </span>
+                </p>
+              ) : null}
+              {now.dedication && <p className="mt-[1vh] text-[1.7vw] italic text-fuchsia-200 line-clamp-2">💌 « {now.dedication} »</p>}
             </>
           ) : (
             <>
@@ -205,7 +221,8 @@ export default function Ecran({ code }) {
                       {t.thumb && <img src={t.thumb} alt="" className="w-[5vw] aspect-video object-cover rounded-[0.4vw] shrink-0" />}
                       <div className="min-w-0">
                         <p className="text-[1.15vw] font-semibold truncate">{t.title}</p>
-                        <p className="text-[0.95vw] text-white/60 truncate">{t.author}</p>
+                        {t.author && <p className="text-[0.95vw] text-white/60 truncate">{t.author}</p>}
+                        {t.dedication && <p className="text-[0.95vw] text-fuchsia-200 italic truncate">💌 « {t.dedication} »</p>}
                       </div>
                     </li>
                   ))}

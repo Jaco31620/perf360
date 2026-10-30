@@ -73,3 +73,7 @@ alter table public.jukebox_sessions
 -- v5 (30/10/2026) : ordres de la télécommande (pause, lecture, volume).
 alter table public.jukebox_sessions
   add column if not exists command jsonb;
+
+-- v6 (30/10/2026) : dédicaces.
+alter table public.jukebox_tracks
+  add column if not exists dedication text;

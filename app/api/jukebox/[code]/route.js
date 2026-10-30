@@ -9,24 +9,23 @@
  *            Chaque titre porte `ahead` (titres avant lui) ; `total` = taille
  *            de la file complète. `playback` (position de la régie, horodatée
  *            par le serveur) + `serverTime` : synchronisation de l'écran.
- * - POST   : ajout d'un titre { participantId, author, videoId }. Les infos
+ * - POST   : ajout d'un titre { participantId, author, videoId, dedication? }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). Placement
  *            en file équitable (alternance des invités) si la régie l'a choisi. La régie
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, fairPosition, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
-import { isValidVideoId, MAX_AUTHOR_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
+import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
+import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const validPid = (pid) => /^[a-z0-9-]{8,64}$/i.test(String(pid || ""));
-const COLS = "id,video_id,title,channel,thumb,duration,author,participant_id,status,position";
 
 async function activeTracks(sb, sessionId) {
-  const { data, error } = await sb.from("jukebox_tracks").select(COLS)
+  const { data, error } = await sb.from("jukebox_tracks").select("*")
     .eq("session_id", sessionId).in("status", ["queued", "playing"]).order("position");
   if (error) throw error;
   return data;
@@ -50,9 +49,11 @@ export async function GET(req, { params }) {
       if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
       else if (!session.guestQueue) list = list.filter((t) => t.mine);
     }
+    const nowOut = now ? trackOut(now, me) : null;
+    if (!admin) hideAuthors(nowOut, list, now, session.authorReveal);
     const out = {
       session,
-      now: now ? trackOut(now, me) : null,
+      now: nowOut,
       queue: list,
       total: queue.length,
       pending: me ? queue.filter((r) => r.participant_id === me).length : 0,
@@ -78,6 +79,7 @@ export async function POST(req, { params }) {
   const pid = body?.participantId;
   const author = String(body?.author || "").replace(/\s+/g, " ").trim().slice(0, MAX_AUTHOR_LEN);
   const videoId = String(body?.videoId || "");
+  const dedication = String(body?.dedication || "").replace(/\s+/g, " ").trim().slice(0, MAX_DEDICATION_LEN);
   if (!validPid(pid)) return Response.json({ error: "Participant invalide." }, { status: 400 });
   if (!isValidVideoId(videoId)) return Response.json({ error: "Titre invalide." }, { status: 400 });
 
@@ -105,6 +107,7 @@ export async function POST(req, { params }) {
     const { error } = await sb.from("jukebox_tracks").insert({
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,
       duration: v.duration, participant_id: pid, author: author || "Régie",
+      ...(dedication && publicSession(s).dedications ? { dedication } : {}),
       position: publicSession(s).fairQueue ? fairPosition(rows.filter((r) => r.status === "queued"), pid) : Date.now(),
     });
     if (error) throw error;

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
-import { MAX_AUTHOR_LEN, UNLIMITED_CAP, formatDuration } from "@/lib/jukebox";
+import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration } from "@/lib/jukebox";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
@@ -20,6 +20,7 @@ export default function Participant({ code }) {
   const [adding, setAdding] = useState("");
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
+  const [dedication, setDedication] = useState("");
   const pid = useRef(null);
 
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
@@ -71,13 +72,14 @@ export default function Participant({ code }) {
     try {
       const res = await fetch(`/api/jukebox/${code}`, {
         method: "POST", headers: headers(),
-        body: JSON.stringify({ participantId: pid.current, author: name, videoId: v.id }),
+        body: JSON.stringify({ participantId: pid.current, author: name, videoId: v.id, dedication }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Ajout impossible.");
       setFlash(v.title);
       setTimeout(() => setFlash(""), 2500);
       setResults(null);
+      setDedication("");
       setQ("");
       refresh();
     } catch (err) {
@@ -146,6 +148,14 @@ export default function Participant({ code }) {
                 {session.searchMode === "karaoke" ? "🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké." : "📝 La recherche propose en priorité les versions avec les paroles à l'écran."}
               </p>
             )}
+            {session.dedications && (
+              <div className="mb-3">
+                <input value={dedication} onChange={(e) => setDedication(e.target.value)} maxLength={MAX_DEDICATION_LEN}
+                  placeholder="💌 Dédicace (facultatif)" autoComplete="off"
+                  className="w-full border-2 border-fuchsia-100 bg-fuchsia-50/50 rounded-2xl px-4 py-2.5 focus:border-fuchsia-400 outline-none" />
+                {dedication && <p className="text-xs text-gray-400 mt-1 px-1">Elle accompagnera le prochain titre que vous ajoutez · {dedication.length}/{MAX_DEDICATION_LEN}</p>}
+              </div>
+            )}
             <form onSubmit={search} className="flex gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} enterKeyHint="search"
                 placeholder="Artiste, titre… ou lien YouTube" autoComplete="off"
@@ -196,7 +206,12 @@ export default function Participant({ code }) {
             <div className="min-w-0">
               <p className="text-xs font-bold text-fuchsia-600 uppercase tracking-wider">▶ En ce moment</p>
               <p className="font-bold text-gray-900 leading-snug line-clamp-2">{now.title}</p>
-              <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>
+              {now.mine || now.author ? (
+                <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>
+              ) : now.revealIn ? (
+                <p className="text-xs text-gray-500">🤫 Qui l'a choisi ? Réponse dans quelques instants…</p>
+              ) : null}
+              {now.dedication && <p className="text-sm text-fuchsia-700 italic mt-0.5">💌 « {now.dedication} »</p>}
             </div>
           </div>
         ) : (
@@ -235,7 +250,8 @@ export default function Participant({ code }) {
                 <span className="w-5 text-right text-sm font-bold text-gray-400 shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
-                  <p className="text-xs text-gray-500">{t.mine ? "vous" : t.author}</p>
+                  {(t.mine || t.author) && <p className="text-xs text-gray-500">{t.mine ? "vous" : t.author}</p>}
+                  {t.dedication && <p className="text-xs text-fuchsia-700 italic truncate">💌 « {t.dedication} »</p>}
                 </div>
                 {t.mine && <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>}
               </li>
