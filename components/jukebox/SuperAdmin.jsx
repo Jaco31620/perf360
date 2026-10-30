@@ -377,7 +377,7 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
+const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
 const MODE_TAG = {
   normal: "bg-sky-100 text-sky-700",
   paroles: "bg-amber-100 text-amber-700",
@@ -453,7 +453,7 @@ function SongMemory({ call, total }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
@@ -463,7 +463,9 @@ function SongMemory({ call, total }) {
                     <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
-                      {s.validated
+                      {s.missing
+                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700" title="La vidéo n'existe plus ou n'est plus lisible : choisissez-en une autre">⚠️ Vidéo disparue · à remplacer</span>
+                        : s.validated
                         ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ Validé</span>
                         : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">À vérifier</span>}
                       <button onClick={() => run({ action: "blindSong", key: s.key, blind: !s.blind })}
@@ -475,14 +477,16 @@ function SongMemory({ call, total }) {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
-                    {s.validated ? (
+                    {s.missing ? null : s.validated ? (
                       <button onClick={() => run({ action: "validateSong", key: s.key, validated: false })}
                         className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Retirer la validation</button>
                     ) : (
                       <button onClick={() => run({ action: "validateSong", key: s.key, validated: true })}
                         className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">✓ Valider</button>
                     )}
-                    <button onClick={() => setFixing(s)} className="text-xs font-bold bg-gray-100 px-3 py-1.5 rounded-full">Changer la vidéo</button>
+                    <button onClick={() => setFixing(s)} className={`text-xs font-bold px-3 py-1.5 rounded-full ${s.missing ? "bg-red-600 text-white" : "bg-gray-100"}`}>
+                      {s.missing ? "Remplacer la vidéo" : "Changer la vidéo"}
+                    </button>
                     <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer"
                       className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">YouTube ↗</a>
                     <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)}

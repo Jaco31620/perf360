@@ -124,3 +124,8 @@ create index if not exists jukebox_answers_session_idx
   on public.jukebox_answers(session_id);
 alter table public.jukebox_answers enable row level security;
 grant all on public.jukebox_answers to service_role;
+
+-- v11 (31/10/2026) : vidéo disparue d'un titre validé / blind test
+-- (gardé « à remplacer » au lieu d'être oublié).
+alter table public.jukebox_songs
+  add column if not exists missing boolean not null default false;
