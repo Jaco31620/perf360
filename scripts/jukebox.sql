@@ -57,3 +57,7 @@ grant all on public.jukebox_sessions to service_role;
 grant all on public.jukebox_tracks to service_role;
 grant all on public.jukebox_cache to service_role;
 grant all on public.jukebox_config to service_role;
+
+-- v2 (30/10/2026) : versions karaoké en priorité (choix de la régie).
+alter table public.jukebox_sessions
+  add column if not exists karaoke boolean not null default false;

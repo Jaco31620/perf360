@@ -143,6 +143,7 @@ export default function Participant({ code }) {
           </p>
         ) : (
           <>
+            {session.karaoke && <p className="text-sm font-semibold text-fuchsia-700 bg-fuchsia-50 rounded-xl px-3 py-2 mb-3">🎤 Soirée karaoké : la recherche propose les versions karaoké.</p>}
             <form onSubmit={search} className="flex gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} enterKeyHint="search"
                 placeholder="Artiste, titre… ou lien YouTube" autoComplete="off"

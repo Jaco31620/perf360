@@ -268,6 +268,13 @@ export default function Regie({ code }) {
                 {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
               </select>
             </label>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-white/70">🎤 Titres karaoké en priorité</span>
+              <button onClick={() => act("karaoke", { on: !session.karaoke })} role="switch" aria-checked={session.karaoke}
+                className={`font-bold px-3 py-1.5 rounded-full ${session.karaoke ? "bg-fuchsia-600 hover:bg-fuchsia-700" : "bg-white/10 hover:bg-white/20"}`}>
+                {session.karaoke ? "Oui" : "Non"}
+              </button>
+            </div>
             <Link href={`/jukebox/${code}`} target="_blank" className="block text-center font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-2">
               + Ajouter un titre
             </Link>

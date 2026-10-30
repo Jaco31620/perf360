@@ -3,6 +3,7 @@
  * Body : { action, ... }
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
+ *   karaoke { on }         → versions karaoké en priorité dans la recherche
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
  *                            croit en cours (null si aucun) : si ce n'est plus
@@ -47,6 +48,9 @@ export async function POST(req, { params }) {
         break;
       case "max":
         res = await update({ max_per_participant: normalizeMax(body.max) });
+        break;
+      case "karaoke":
+        res = await update({ karaoke: !!body.on });
         break;
       case "name": {
         const name = String(body.name || "").trim().slice(0, MAX_NAME_LEN);

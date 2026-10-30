@@ -1,6 +1,7 @@
 /*
- * Recherche de titres pour une soirée ouverte : ?q=<texte> (YouTube, catégorie
- * Musique, cache 7 jours) ou lien YouTube / YouTube Music collé (1 unité).
+ * Recherche de titres pour une soirée : ?q=<texte> (YouTube, catégorie Musique,
+ * ou versions karaoké si la régie l'a choisi ; cache 7 jours) ou lien YouTube /
+ * YouTube Music collé (1 unité).
  */
 import { loadSession, ytSearch, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_QUERY_LEN, parseVideoId } from "@/lib/jukebox";
@@ -17,7 +18,7 @@ export async function GET(req, { params }) {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
     const id = parseVideoId(q);
-    const results = id ? await ytVideos([id]) : await ytSearch(q.slice(0, MAX_QUERY_LEN));
+    const results = id ? await ytVideos([id]) : await ytSearch(q.slice(0, MAX_QUERY_LEN), !!s.karaoke);
     if (id && !results.length)
       return Response.json({ results, error: "Ce titre ne peut pas être joué ici (trop long ou lecture bloquée)." });
     return Response.json({ results });
