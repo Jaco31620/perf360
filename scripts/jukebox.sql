@@ -65,3 +65,7 @@ alter table public.jukebox_sessions
 -- v3 (30/10/2026) : options d'affichage (file sur l'écran / chez les invités).
 alter table public.jukebox_sessions
   add column if not exists options jsonb not null default '{}'::jsonb;
+
+-- v4 (30/10/2026) : position de lecture de la régie (écran synchronisé).
+alter table public.jukebox_sessions
+  add column if not exists playback jsonb;

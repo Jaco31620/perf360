@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
+import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, rememberParty, forgetParty, formatCode } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
 
@@ -83,40 +84,44 @@ export default function Regie({ code }) {
 
   // Les événements du lecteur sont branchés une fois : ils passent par une ref.
   const onEvent = useRef({});
-  onEvent.current = { advance };
+  // Position de lecture transmise à l'écran d'affichage (qui suit en muet) :
+  // à chaque lecture / pause et toutes les 5 s.
+  const report = useCallback(() => {
+    const p = player.current;
+    if (!loaded.current || !p?.getCurrentTime) return;
+    fetch(`/api/jukebox/${code}/admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-jukebox-admin": token.current || "" },
+      body: JSON.stringify({ action: "playback", id: loaded.current, pos: p.getCurrentTime(), playing: p.getPlayerState() === 1 }),
+    }).catch(() => {});
+  }, [code]);
+
+  useEffect(() => {
+    if (!started) return;
+    const id = setInterval(report, 5000);
+    return () => clearInterval(id);
+  }, [started, report]);
+
+  onEvent.current = { advance, report };
 
   // Lecteur YouTube (IFrame API)
   useEffect(() => {
     let cancelled = false;
-    const create = () => {
+    loadYouTubeApi().then(() => {
       if (cancelled || player.current || !playerEl.current) return;
-      // élément créé hors de React : le lecteur le remplace par son iframe
-      const el = document.createElement("div");
-      playerEl.current.appendChild(el);
-      player.current = new window.YT.Player(el, {
-        width: "100%", height: "100%",
+      player.current = createPlayer(playerEl.current, {
         playerVars: { autoplay: 0, rel: 0, playsinline: 1 },
         events: {
           onReady: () => setReady(true),
           onStateChange: (e) => {
             setPlaying(e.data === 1);
             if (e.data === 0) onEvent.current.advance(false); // terminé
+            if (e.data === 1 || e.data === 2) onEvent.current.report(); // lecture / pause → écran
           },
           onError: () => onEvent.current.advance(true), // lecture bloquée, vidéo retirée…
         },
       });
-    };
-    if (window.YT?.Player) create();
-    else {
-      const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => { prev?.(); create(); };
-      if (!document.getElementById("yt-iframe-api")) {
-        const s = document.createElement("script");
-        s.id = "yt-iframe-api";
-        s.src = "https://www.youtube.com/iframe_api";
-        document.body.appendChild(s);
-      }
-    }
+    });
     return () => { cancelled = true; };
   }, [data?.admin]); // le conteneur n'existe qu'une fois l'accès régie confirmé
 

@@ -9,6 +9,8 @@
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
  *                            croit en cours (null si aucun) : si ce n'est plus
  *                            le cas, rien ne bouge (double appel, 2e onglet…)
+ *   playback { id, pos, playing } → position de lecture de la régie (pour
+ *                            l'écran d'affichage), horodatée par le serveur
  *   move { id, dir }       → up | down | top dans la file
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (et l'historique)
@@ -76,6 +78,13 @@ export async function POST(req, { params }) {
         }
         const [nxt] = await queued();
         if (nxt) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", nxt.id);
+        break;
+      }
+      case "playback": {
+        const pos = Number(body.pos);
+        if (typeof body.id !== "string" || !Number.isFinite(pos) || pos < 0 || pos > 86400)
+          return Response.json({ error: "Position invalide." }, { status: 400 });
+        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: Date.now() } });
         break;
       }
       case "move": {

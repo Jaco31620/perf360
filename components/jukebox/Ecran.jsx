@@ -1,13 +1,17 @@
 "use client";
 /*
  * Jukebox — écran d'affichage (TV, vidéoprojecteur), sans aucun réglage :
- * titre en cours, QR code pour proposer des titres et, si la régie l'a
- * choisi, la file à suivre. Aucun son : la musique est jouée par la régie.
- * Toujours vu « comme le public » (?view=ecran, sans jeton régie).
+ * vidéo en cours, QR code pour proposer des titres et, si la régie l'a
+ * choisi, la file à suivre. Toujours vu « comme le public » (?view=ecran,
+ * sans jeton régie).
+ * La vidéo est jouée en MUET (le son vient de la régie) et suit la position
+ * envoyée par la régie : `playback` est horodaté par le serveur, converti en
+ * heure locale grâce à `serverTime` (pas besoin d'horloges synchronisées).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { formatCode } from "./storage";
+import { loadYouTubeApi, createPlayer } from "./youtube";
 
 const MAX_SHOWN = 6;
 
@@ -17,14 +21,67 @@ export default function Ecran({ code }) {
   const [origin, setOrigin] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [mouseActive, setMouseActive] = useState(false);
+  const [ready, setReady] = useState(false);
+  const player = useRef(null);
+  const playerEl = useRef(null);
+  const loaded = useRef(null); // id du titre chargé dans le lecteur
+  const nowRef = useRef(null);
+  const sync = useRef(null); // { id, pos, playing, localAt }
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch(`/api/jukebox/${code}?view=ecran`, { cache: "no-store" });
       if (res.status === 404) return setMissing(true);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) return;
+      const d = await res.json();
+      const pb = d.playback;
+      sync.current = pb ? { id: pb.id, pos: pb.pos, playing: pb.playing, localAt: Date.now() - (d.serverTime - pb.at) } : null;
+      nowRef.current = d.now;
+      setData(d);
     } catch (e) { /* réseau : on retentera */ }
   }, [code]);
+
+  // Lecteur muet, sans commandes (un calque transparent bloque les clics).
+  const hasData = !!data;
+  useEffect(() => {
+    let cancelled = false;
+    loadYouTubeApi().then(() => {
+      if (cancelled || player.current || !playerEl.current) return;
+      player.current = createPlayer(playerEl.current, {
+        playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1 },
+        events: { onReady: (e) => { e.target.mute(); setReady(true); } },
+      });
+    });
+    return () => { cancelled = true; };
+  }, [hasData]); // le conteneur n'existe qu'une fois les données chargées
+
+  // Recalage chaque seconde sur la position de la régie.
+  useEffect(() => {
+    if (!ready) return;
+    const id = setInterval(() => {
+      const p = player.current;
+      const now = nowRef.current;
+      if (!now) {
+        if (loaded.current) { p.stopVideo(); loaded.current = null; }
+        return;
+      }
+      const s = sync.current;
+      const known = s && s.id === now.id; // la régie a commencé ce titre
+      const target = known ? s.pos + (s.playing ? (Date.now() - s.localAt) / 1000 : 0) : 0;
+      const shouldPlay = known && s.playing;
+      if (loaded.current !== now.id) {
+        loaded.current = now.id;
+        p.loadVideoById({ videoId: now.videoId, startSeconds: target });
+        return;
+      }
+      const state = p.getPlayerState();
+      if (state === 3) return; // chargement en cours
+      if (shouldPlay && state !== 1) p.playVideo();
+      if (!shouldPlay && state === 1) p.pauseVideo();
+      if (Math.abs(p.getCurrentTime() - target) > (shouldPlay ? 1 : 0.5)) p.seekTo(target, true);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [ready]);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -75,12 +132,17 @@ export default function Ecran({ code }) {
       <div className="relative h-full flex flex-col lg:flex-row gap-[3vw] p-[3vw]">
         <main className="flex-1 min-w-0 flex flex-col justify-center">
           <p className="text-[1.4vw] font-bold tracking-[0.2em] uppercase text-white/60 mb-[1.5vh]">{session.name}</p>
+          {/* toujours monté (sinon le lecteur serait détruit), invisible sans titre */}
+          <div className={now ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
+            style={now ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
+            <div ref={playerEl} className="absolute inset-0" />
+            <div className="absolute inset-0" />
+          </div>
           {now ? (
             <>
-              <img src={cover} alt="" className="w-full max-w-[52vw] max-h-[52vh] aspect-video object-cover rounded-[1.5vw] shadow-2xl" />
-              <p className="mt-[3vh] text-[1.3vw] font-bold uppercase tracking-wider text-fuchsia-300">▶ En ce moment</p>
-              <h1 className="text-[3.6vw] font-black leading-tight line-clamp-2">{now.title}</h1>
-              <p className="mt-[1vh] text-[1.6vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
+              <p className="mt-[2.5vh] text-[1.2vw] font-bold uppercase tracking-wider text-fuchsia-300">▶ En ce moment</p>
+              <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
+              <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
             </>
           ) : (
             <>

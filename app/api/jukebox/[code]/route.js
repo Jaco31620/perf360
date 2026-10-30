@@ -7,7 +7,8 @@
  *            pour ?view=ecran si l'écran ne l'affiche pas, limitée aux titres
  *            du participant si les invités ne voient pas toute la file.
  *            Chaque titre porte `ahead` (titres avant lui) ; `total` = taille
- *            de la file complète.
+ *            de la file complète. `playback` (position de la régie, horodatée
+ *            par le serveur) + `serverTime` : synchronisation de l'écran.
  * - POST   : ajout d'un titre { participantId, author, videoId }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). La régie
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
@@ -54,6 +55,8 @@ export async function GET(req, { params }) {
       queue: list,
       total: queue.length,
       pending: me ? queue.filter((r) => r.participant_id === me).length : 0,
+      playback: s.playback || null,
+      serverTime: Date.now(),
     };
     if (admin) out.admin = true;
     return Response.json(out, { headers: { "cache-control": "no-store" } });
