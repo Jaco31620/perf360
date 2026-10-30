@@ -10,10 +10,12 @@ import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume
 import { authHeaders } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration } from "@/lib/jukebox";
 
+/* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
 export function Settings({ session, act }) {
   const open = session.status === "open";
   return (
     <>
+      <Group title="📱 Invités" first />
       <div className="flex items-center justify-between gap-3">
         <span className="text-white/70">Ajouts des invités</span>
         <button onClick={() => act(open ? "close" : "open")}
@@ -39,13 +41,6 @@ export function Settings({ session, act }) {
           ))}
         </div>
       </div>
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">🎚️ Fondu enchaîné</span>
-        <select value={session.fade} onChange={(e) => act("options", { fade: Number(e.target.value) })}
-          className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold">
-          {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
-        </select>
-      </label>
       <Toggle label="💌 Dédicaces" on={session.dedications} onClick={() => act("options", { dedications: !session.dedications })}
         hint={session.dedications ? "Les invités peuvent ajouter un petit mot à leur titre." : null} />
       <label className="flex items-center justify-between gap-3">
@@ -55,14 +50,29 @@ export function Settings({ session, act }) {
           {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
         </select>
       </label>
+
+      <Group title="🎚️ Lecture" />
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-white/70">Fondu enchaîné</span>
+        <select value={session.fade} onChange={(e) => act("options", { fade: Number(e.target.value) })}
+          className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold">
+          {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
+        </select>
+      </label>
       <Toggle label="⚖️ File équitable" on={session.fairQueue} onClick={() => act("options", { fairQueue: !session.fairQueue })}
         hint={session.fairQueue ? "Les nouveaux titres alternent entre les invités." : "Les titres passent dans l'ordre d'arrivée."} />
-      <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
-      <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
+
+      <Group title="📺 Affichage" />
+      <Toggle label="File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
+      <Toggle label="Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
         hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
       {session.theme && <ThemeSettings code={session.code} theme={session.theme} act={act} />}
     </>
   );
+}
+
+function Group({ title, first }) {
+  return <p className={`text-xs font-bold uppercase tracking-wider text-white/40 ${first ? "" : "pt-3 border-t border-white/10"}`}>{title}</p>;
 }
 
 /* Image choisie → data URL réduite (512 px max, WebP) pour le logo du thème. */
@@ -112,7 +122,7 @@ export function ThemeSettings({ code, theme, act }) {
 
   return (
     <div className="space-y-2.5 pt-3 border-t border-white/10">
-      <p className="font-bold">🎨 Thème de la soirée</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-white/40">🎨 Thème de la soirée</p>
       <div className="grid grid-cols-3 gap-1.5">
         {THEMES.map((t) => (
           <button key={t.id} onClick={() => t.id !== theme.palette && act("theme", { palette: t.id })}

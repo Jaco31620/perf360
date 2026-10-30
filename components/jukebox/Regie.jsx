@@ -36,6 +36,9 @@ export default function Regie({ code }) {
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [peek, setPeek] = useState(null); // blind test : titre affiché quand même en régie
+  const [tab, setTab] = useState("queue"); // onglet de la colonne de droite (retenu par appareil)
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:regieTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:regieTab", t); } catch (e) { /* ignoré */ } };
   const token = useRef(null);
   // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
   // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
@@ -363,6 +366,13 @@ export default function Regie({ code }) {
   const { session, now, queue } = data;
   const open = session.status === "open";
   const masked = !!(data.blind?.on && now && !data.blind.revealed && peek !== now.id);
+  const tabs = [
+    { id: "queue", label: `🎵 File${queue.length ? ` (${queue.length})` : ""}` },
+    { id: "settings", label: "⚙️ Réglages" },
+    ...(session.blindSettings ? [{ id: "blind", label: "🕵️ Blind", dot: session.blindSettings.on }] : []),
+    { id: "tools", label: "🔧 Outils" },
+  ];
+  const shown = tabs.some((t) => t.id === tab) ? tab : "queue"; // onglet retiré (blind test coupé)
   const joinUrl = `${origin}/jukebox/${code}`;
 
   return (
@@ -435,53 +445,77 @@ export default function Regie({ code }) {
           </div>
         </main>
 
-        <aside className="space-y-5 min-w-0">
-          <div className="bg-white/5 rounded-2xl p-4 flex items-center gap-4">
+        <aside className="space-y-4 min-w-0">
+          <div className="bg-white/5 rounded-2xl p-3 flex items-center gap-3">
             {origin && (
-              <button onClick={() => setBigQr(true)} className="bg-white p-1.5 rounded-lg shrink-0" aria-label="Agrandir le QR code">
-                <QRCodeSVG value={joinUrl} size={104} fgColor="#0f172a" />
+              <button onClick={() => setBigQr(true)} className="bg-white p-1 rounded-lg shrink-0" aria-label="Agrandir le QR code">
+                <QRCodeSVG value={joinUrl} size={64} fgColor="#0f172a" />
               </button>
             )}
-            <div className="min-w-0">
-              <p className="text-sm text-white/60">Proposez vos titres :</p>
-              <p className="font-bold break-all">{joinUrl.replace(/^https?:\/\//, "")}</p>
-              <p className="text-sm text-white/60 mt-1">code <span className="font-mono font-bold text-white text-lg">{formatCode(code)}</span></p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-white/60">Proposez vos titres :</p>
+              <p className="font-bold text-sm break-all">{joinUrl.replace(/^https?:\/\//, "")}</p>
+              <p className="text-xs text-white/60">code <span className="font-mono font-bold text-white text-base">{formatCode(code)}</span></p>
             </div>
+            <Link href={`/jukebox/${code}`} target="_blank" className="shrink-0 font-bold text-sm bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full px-3 py-2">
+              + Titre
+            </Link>
           </div>
 
-          <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
-            <Settings session={session} act={act} />
-            {token.current && (
-              <button onClick={() => setRemoteQr(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
-                📱 Télécommande sur téléphone
+          {/* onglets : la file reste à portée, les réglages ne l'écrasent plus */}
+          <div className="flex bg-white/5 rounded-full p-1 text-sm">
+            {tabs.map((t) => (
+              <button key={t.id} onClick={() => chooseTab(t.id)}
+                className={`relative flex-1 px-2 py-1.5 rounded-full font-bold whitespace-nowrap ${shown === t.id ? "bg-white/15 text-white" : "text-white/50 hover:text-white"}`}>
+                {t.label}
+                {t.dot && <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-green-400" />}
               </button>
-            )}
-            <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
-              📺 Ouvrir l'écran d'affichage
-            </Link>
-            <Link href={`/jukebox/${code}`} target="_blank" className="block text-center font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-2">
-              + Ajouter un titre
-            </Link>
+            ))}
           </div>
 
-          {session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
-
-          <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
-
-          {session.features.history && (
-            <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">
-              🕘 Historique de la soirée
-            </button>
+          {shown === "queue" && (
+            <>
+              <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+              {session.features.history && (
+                <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">
+                  🕘 Historique de la soirée
+                </button>
+              )}
+            </>
           )}
 
-          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
-            {token.current && <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>}
-            <button onClick={() => confirm("Vider la file et arrêter le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
-            <button onClick={async () => {
-              if (!confirm("Supprimer définitivement cette soirée ?")) return;
-              if (await act("delete")) { forgetParty(code); router.push("/jukebox"); }
-            }} className="hover:text-red-400">Supprimer la soirée</button>
-          </div>
+          {shown === "settings" && (
+            <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
+              <Settings session={session} act={act} />
+            </div>
+          )}
+
+          {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
+
+          {shown === "tools" && (
+            <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
+              {token.current && (
+                <button onClick={() => setRemoteQr(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+                  📱 Télécommande sur téléphone
+                </button>
+              )}
+              <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+                📺 Ouvrir l'écran d'affichage
+              </Link>
+              {token.current && (
+                <button onClick={copyRegieLink} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+                  {copied ? "✓ Lien copié" : "🔗 Copier le lien régie (autre appareil)"}
+                </button>
+              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-white/10 text-xs text-white/50">
+                <button onClick={() => confirm("Vider la file et arrêter le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
+                <button onClick={async () => {
+                  if (!confirm("Supprimer définitivement cette soirée ?")) return;
+                  if (await act("delete")) { forgetParty(code); router.push("/jukebox"); }
+                }} className="hover:text-red-400">Supprimer la soirée</button>
+              </div>
+            </div>
+          )}
         </aside>
       </div>
 
