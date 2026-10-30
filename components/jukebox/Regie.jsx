@@ -391,7 +391,7 @@ export default function Regie({ code }) {
           <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
             {[0, 1].map((i) => (
               <div key={i} ref={playerEls[i]}
-                className={`absolute transition-opacity duration-1000 ${started && masked ? "right-3 bottom-3 w-40 aspect-video rounded-lg overflow-hidden" : "inset-0"} ${i === activeIdx ? `opacity-100 ${started && masked ? "z-30" : "z-10"}` : "opacity-0 pointer-events-none"}`} />
+                className={`absolute transition-opacity duration-1000 ${started && masked ? "right-2 bottom-2 w-[356px] max-w-[60%] aspect-video rounded-lg overflow-hidden" : "inset-0"} ${i === activeIdx ? `opacity-100 ${started && masked ? "z-30" : "z-10"}` : "opacity-0 pointer-events-none"}`} />
             ))}
             {!started && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 text-center px-6">

@@ -25,7 +25,9 @@
       "Skill(update-config)",
       "Bash(node scripts/promote-perms.mjs)",
       "Bash(npx next *)",
-      "Bash(npx supabase *)"
+      "Bash(npx supabase *)",
+      "Bash(git rm *)",
+      "Bash(npx vercel *)"
     ]
   },
   "hooks": {
