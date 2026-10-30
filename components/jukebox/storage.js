@@ -29,6 +29,21 @@ export const setName = (name) => set("jukebox_name", name);
 export const getAdminToken = (code) => get(`jukebox_admin_${code}`);
 export const setAdminToken = (code, token) => set(`jukebox_admin_${code}`, token);
 
+export const getSuperToken = () => get("jukebox_super");
+export function setSuperToken(token) {
+  try { token ? localStorage.setItem("jukebox_super", token) : localStorage.removeItem("jukebox_super"); } catch (e) { /* ignoré */ }
+}
+
+/* En-têtes d'accès régie : jeton de la soirée et/ou super-admin. */
+export function authHeaders(code) {
+  const h = {};
+  const t = getAdminToken(code);
+  const s = getSuperToken();
+  if (t) h["x-jukebox-admin"] = t;
+  if (s) h["x-jukebox-super"] = s;
+  return h;
+}
+
 export function myParties() {
   try { return JSON.parse(get("jukebox_mine") || "[]"); } catch (e) { return []; }
 }

@@ -18,7 +18,7 @@
  *   delete                 → supprimer la soirée
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, checkToken } from "@/lib/jukeboxServer";
+import { loadSession, isAdminReq } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export async function POST(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    if (!checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash))
+    if (!isAdminReq(req, s))
       return Response.json({ error: "Accès refusé." }, { status: 401 });
 
     const sb = getSupabaseAdmin();

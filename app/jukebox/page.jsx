@@ -1,12 +1,13 @@
 "use client";
 /*
  * Jukebox — accueil : rejoindre une soirée avec son code, ou en créer une
- * (le créateur devient régie et reçoit un jeton gardé en local).
+ * (le créateur devient régie et reçoit un jeton gardé en local). La création
+ * suit le réglage du super-admin : libre, sur code de création, ou réservée.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { myParties, rememberParty, setAdminToken, forgetParty, formatCode } from "@/components/jukebox/storage";
+import { myParties, rememberParty, setAdminToken, forgetParty, formatCode, getSuperToken } from "@/components/jukebox/storage";
 import { DEFAULT_MAX_PER_PARTICIPANT, MAX_NAME_LEN, MAX_CHOICES, maxLabel } from "@/lib/jukebox";
 
 export default function JukeboxHome() {
@@ -17,8 +18,17 @@ export default function JukeboxHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [mine, setMine] = useState([]);
+  const [mode, setMode] = useState("open");
+  const [creationCode, setCreationCode] = useState("");
+  const [isSuper, setIsSuper] = useState(false);
 
-  useEffect(() => setMine(myParties()), []);
+  useEffect(() => {
+    setMine(myParties());
+    setIsSuper(!!getSuperToken());
+    fetch("/api/jukebox", { cache: "no-store" }).then((r) => r.json()).then((d) => setMode(d.creationMode || "open")).catch(() => {});
+  }, []);
+  const needCode = mode === "code" && !isSuper;
+  const closed = mode === "super" && !isSuper;
 
   const join = (e) => {
     e.preventDefault();
@@ -34,8 +44,8 @@ export default function JukeboxHome() {
     try {
       const res = await fetch("/api/jukebox", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, maxPerParticipant: max }),
+        headers: { "Content-Type": "application/json", ...(isSuper ? { "x-jukebox-super": getSuperToken() } : {}) },
+        body: JSON.stringify({ name, maxPerParticipant: max, creationCode }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Création impossible.");
@@ -82,6 +92,12 @@ export default function JukeboxHome() {
             </button>
           </form>
 
+          {closed ? (
+            <div className="bg-white/90 rounded-3xl p-7 shadow-xl space-y-3">
+              <h2 className="text-xl font-bold text-gray-900">Lancer une soirée</h2>
+              <p className="text-gray-600">La création de soirées est réservée à l'organisateur. Contactez-le pour obtenir votre lien régie.</p>
+            </div>
+          ) : (
           <form onSubmit={create} className="bg-white rounded-3xl p-7 shadow-xl space-y-4">
             <h2 className="text-xl font-bold text-gray-900">Lancer une soirée</h2>
             <input
@@ -96,12 +112,20 @@ export default function JukeboxHome() {
                 {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
               </select>
             </label>
+            {needCode && (
+              <input
+                placeholder="Code de création" autoComplete="off" value={creationCode}
+                onChange={(e) => setCreationCode(e.target.value.toUpperCase())}
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 font-mono tracking-widest focus:border-indigo-500 outline-none"
+              />
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button disabled={busy || !name.trim()}
+            <button disabled={busy || !name.trim() || (needCode && !creationCode.trim())}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-3 rounded-full transition-colors">
               {busy ? "Création…" : "Ouvrir la régie"}
             </button>
           </form>
+          )}
         </div>
 
         {mine.length > 0 && (

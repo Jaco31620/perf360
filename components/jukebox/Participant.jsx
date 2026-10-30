@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { participantId, getName, setName, getAdminToken, formatCode } from "./storage";
+import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
 import { MAX_AUTHOR_LEN, UNLIMITED_CAP, formatDuration } from "@/lib/jukebox";
 
 export default function Participant({ code }) {
@@ -21,9 +21,8 @@ export default function Participant({ code }) {
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
   const pid = useRef(null);
-  const token = useRef(null);
 
-  const headers = () => ({ "Content-Type": "application/json", ...(token.current ? { "x-jukebox-admin": token.current } : {}) });
+  const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
 
   const refresh = useCallback(async () => {
     try {
@@ -35,7 +34,6 @@ export default function Participant({ code }) {
 
   useEffect(() => {
     pid.current = participantId();
-    token.current = getAdminToken(code);
     setNameState(getName());
     refresh();
     const id = setInterval(() => { if (!document.hidden) refresh(); }, 4000);

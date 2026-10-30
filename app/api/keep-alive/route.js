@@ -14,6 +14,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { purgeClicClac } from "@/lib/clicclac/purge";
+import { purgeJukebox } from "@/lib/jukeboxAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +38,10 @@ export async function GET(request) {
     // Clic-Clac : alertes J-3 et suppression des albums expirés (jamais bloquant)
     let clicclac = null;
     try { clicclac = await purgeClicClac(); } catch (e) { clicclac = { error: String(e?.message || e) }; }
-    return Response.json({ status: "ok", pinged: true, count: count ?? null, clicclac });
+    // Jukebox : suppression des soirées inactives (jamais bloquant)
+    let jukebox = null;
+    try { jukebox = await purgeJukebox(); } catch (e) { jukebox = { error: String(e?.message || e) }; }
+    return Response.json({ status: "ok", pinged: true, count: count ?? null, clicclac, jukebox });
   } catch (e) {
     return Response.json(
       { status: "error", reason: String(e?.message || e) },

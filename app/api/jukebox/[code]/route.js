@@ -2,7 +2,7 @@
  * Route serveur PUBLIQUE d'une soirée jukebox.
  * - GET    : soirée, titre en cours et file d'attente. Avec ?pid=<participant>,
  *            marque ses titres (mine) et compte ceux en attente.
- *            Avec l'en-tête x-jukebox-admin valide, ajoute admin: true.
+ *            Avec l'en-tête x-jukebox-admin (ou x-jukebox-super) valide, ajoute admin: true.
  *            Sans lui, la file est réduite selon les choix de la régie : vide
  *            pour ?view=ecran si l'écran ne l'affiche pas, limitée aux titres
  *            du participant si les invités ne voient pas toute la file.
@@ -15,7 +15,7 @@
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, checkToken, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ export async function GET(req, { params }) {
     const now = rows.find((r) => r.status === "playing");
     const queue = rows.filter((r) => r.status === "queued");
     const session = publicSession(s);
-    const admin = checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash);
+    const admin = isAdminReq(req, s);
     let list = queue.map((r, i) => ({ ...trackOut(r, me), ahead: i }));
     if (!admin) {
       if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
@@ -80,7 +80,7 @@ export async function POST(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    const admin = checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash);
+    const admin = isAdminReq(req, s);
     if (!admin && s.status !== "open") return Response.json({ error: "Les ajouts de titres sont bloqués pour le moment." }, { status: 403 });
     if (!admin && !author) return Response.json({ error: "Merci d'indiquer votre prénom." }, { status: 400 });
 

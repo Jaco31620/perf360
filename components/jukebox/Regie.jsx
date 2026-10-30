@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
-import { getAdminToken, setAdminToken, rememberParty, forgetParty, formatCode } from "./storage";
+import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export default function Regie({ code }) {
@@ -60,7 +60,7 @@ export default function Regie({ code }) {
     try {
       const res = await fetch(`/api/jukebox/${code}`, {
         cache: "no-store",
-        headers: token.current ? { "x-jukebox-admin": token.current } : {},
+        headers: authHeaders(code),
       });
       if (res.status === 404) return setMissing(true);
       if (res.ok) {
@@ -80,7 +80,7 @@ export default function Regie({ code }) {
   const act = useCallback(async (action, extra = {}, silent = false) => {
     const res = await fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-jukebox-admin": token.current || "" },
+      headers: { "Content-Type": "application/json", ...authHeaders(code) },
       body: JSON.stringify({ action, ...extra }),
     });
     const d = await res.json().catch(() => ({}));
@@ -102,7 +102,7 @@ export default function Regie({ code }) {
     if (!loaded.current || !p?.getCurrentTime) return;
     fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-jukebox-admin": token.current || "" },
+      headers: { "Content-Type": "application/json", ...authHeaders(code) },
       body: JSON.stringify({ action: "playback", id: loaded.current, pos: p.getCurrentTime(), playing: p.getPlayerState() === 1 }),
     }).catch(() => {});
   }, [code]);
@@ -444,7 +444,7 @@ export default function Regie({ code }) {
           </div>
 
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
-            <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>
+            {token.current && <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>}
             <button onClick={() => confirm("Vider la file et le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
             <button onClick={async () => {
               if (!confirm("Supprimer définitivement cette soirée ?")) return;
