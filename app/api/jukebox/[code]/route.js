@@ -64,7 +64,7 @@ export async function POST(req, { params }) {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
     const admin = checkToken(req.headers.get("x-jukebox-admin"), s.admin_hash);
-    if (!admin && s.status !== "open") return Response.json({ error: "Les propositions sont fermées." }, { status: 403 });
+    if (!admin && s.status !== "open") return Response.json({ error: "Les ajouts de titres sont bloqués pour le moment." }, { status: 403 });
     if (!admin && !author) return Response.json({ error: "Merci d'indiquer votre prénom." }, { status: 400 });
 
     const sb = getSupabaseAdmin();

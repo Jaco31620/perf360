@@ -136,7 +136,7 @@ export default function Participant({ code }) {
             </button>
           </form>
         ) : !open && !admin ? (
-          <p className="text-center bg-gray-100 text-gray-600 rounded-2xl py-4 font-medium">🔒 Les propositions sont fermées.</p>
+          <p className="text-center bg-gray-100 text-gray-600 rounded-2xl py-4 font-medium">🔒 Les ajouts de titres sont bloqués pour le moment.</p>
         ) : full ? (
           <p className="text-center bg-amber-50 text-amber-800 rounded-2xl py-4 px-3 font-medium">
             ⏳ Vous avez {pending} titre{pending > 1 ? "s" : ""} en attente. Vous pourrez en proposer un autre dès qu'il{pending > 1 ? "s" : ""} passe{pending > 1 ? "nt" : ""}.

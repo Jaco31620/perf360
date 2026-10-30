@@ -189,7 +189,7 @@ export default function Regie({ code }) {
         <Link href="/jukebox" className="text-white/60 hover:text-white text-sm">← Jukebox</Link>
         <h1 className="font-extrabold text-lg truncate flex-1 min-w-0">{session.name}</h1>
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${open ? "bg-green-500/20 text-green-300" : "bg-white/10 text-white/60"}`}>
-          {open ? "Propositions ouvertes" : "Propositions fermées"}
+          {open ? "Ajouts des invités autorisés" : "Ajouts des invités bloqués"}
         </span>
         <button onClick={toggleFullscreen} className="text-sm text-white/70 hover:text-white">⛶ Plein écran</button>
       </header>
@@ -255,10 +255,10 @@ export default function Regie({ code }) {
 
           <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-white/70">Propositions</span>
+              <span className="text-white/70">Ajouts des invités</span>
               <button onClick={() => act(open ? "close" : "open")}
                 className={`font-bold px-3 py-1.5 rounded-full ${open ? "bg-white/10 hover:bg-white/20" : "bg-green-600 hover:bg-green-700"}`}>
-                {open ? "Fermer" : "Ouvrir"}
+                {open ? "Bloquer" : "Autoriser"}
               </button>
             </div>
             <label className="flex items-center justify-between gap-3">
