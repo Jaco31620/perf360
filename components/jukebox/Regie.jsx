@@ -15,7 +15,8 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
-import { Settings, QueueList } from "./Controls";
+import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider } from "./Controls";
+import { Play } from "lucide-react";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -370,7 +371,7 @@ export default function Regie({ code }) {
                 </p>
                 <button onClick={start} disabled={!ready}
                   className="bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-white text-xl font-bold px-8 py-4 rounded-full">
-                  {ready ? (now ? "▶ Reprendre la musique" : "▶ Lancer la musique") : "Chargement du lecteur…"}
+                  {ready ? <span className="inline-flex items-center gap-2"><Play size={22} fill="currentColor" strokeWidth={0} />{now ? "Reprendre la musique" : "Lancer la musique"}</span> : "Chargement du lecteur…"}
                 </button>
               </div>
             )}
@@ -399,13 +400,10 @@ export default function Regie({ code }) {
               ) : <p className="text-white/50">Aucun titre en cours.</p>}
             </div>
             {started && (
-              <div className="flex items-center gap-2">
-                <button onClick={togglePlay} disabled={!now} className="bg-white/10 hover:bg-white/20 disabled:opacity-30 w-11 h-11 rounded-full text-lg" aria-label={playing ? "Pause" : "Lecture"}>
-                  {playing ? "⏸" : "▶"}
-                </button>
-                <button onClick={() => advance(true)} disabled={!now} className="bg-white/10 hover:bg-white/20 disabled:opacity-30 w-11 h-11 rounded-full text-lg" aria-label="Titre suivant">⏭</button>
-                <input type="range" min={0} max={100} value={volume} onChange={(e) => changeVolume(Number(e.target.value))}
-                  className="w-28 accent-fuchsia-500" aria-label="Volume" />
+              <div className="flex items-center gap-3">
+                <PlayPauseButton playing={playing} onClick={togglePlay} disabled={!now} />
+                <SkipButton onClick={() => advance(true)} disabled={!now} />
+                <VolumeSlider value={volume} onChange={changeVolume} className="w-36 ml-1" />
               </div>
             )}
           </div>

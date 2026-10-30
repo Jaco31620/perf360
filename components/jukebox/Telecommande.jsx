@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
-import { Settings, QueueList } from "./Controls";
+import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 
 export default function Telecommande({ code }) {
@@ -152,21 +152,16 @@ export default function Telecommande({ code }) {
             </p>
           )}
 
-          <div className="flex items-center justify-center gap-5 mt-4">
-            <button onClick={togglePlay} disabled={!now}
-              className="w-20 h-20 rounded-full bg-fuchsia-600 active:bg-fuchsia-700 disabled:opacity-30 text-3xl" aria-label={isPlaying ? "Pause" : "Lecture"}>
-              {isPlaying ? "⏸" : "▶"}
-            </button>
-            <button onClick={skip} disabled={!now}
-              className="w-14 h-14 rounded-full bg-white/10 active:bg-white/20 disabled:opacity-30 text-2xl" aria-label="Titre suivant">⏭</button>
+          <div className="flex items-center justify-center gap-6 mt-5">
+            <span className="w-14" aria-hidden />
+            <PlayPauseButton size="lg" playing={isPlaying} onClick={togglePlay} disabled={!now} />
+            <SkipButton size="lg" onClick={skip} disabled={!now} />
           </div>
 
-          <label className="flex items-center gap-3 mt-5">
-            <span className="text-lg" aria-hidden>🔈</span>
-            <input type="range" min={0} max={100} value={shownVolume} onChange={(e) => changeVolume(Number(e.target.value))}
-              className="flex-1 accent-fuchsia-500 h-8" aria-label="Volume" />
-            <span className="w-10 text-right text-sm text-white/60">{shownVolume}</span>
-          </label>
+          <div className="flex items-center gap-3 mt-6">
+            <VolumeSlider value={shownVolume} onChange={changeVolume} className="flex-1" />
+            <span className="w-8 text-right text-sm text-white/50 tabular-nums">{shownVolume}</span>
+          </div>
         </section>
 
         <Link href={`/jukebox/${code}`} className="block text-center font-bold bg-fuchsia-600 active:bg-fuchsia-700 rounded-full py-3">

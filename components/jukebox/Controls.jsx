@@ -1,9 +1,11 @@
 "use client";
 /*
  * Jukebox — commandes partagées par la régie et la télécommande : réglages
- * de la soirée et gestion de la file. `act(action, extra)` envoie une action
- * à /api/jukebox/<code>/admin.
+ * de la soirée, gestion de la file et boutons de lecture (lecture/pause,
+ * titre suivant, volume). `act(action, extra)` envoie une action à
+ * /api/jukebox/<code>/admin.
  */
+import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume1, Volume2, VolumeX } from "lucide-react";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export function Settings({ session, act }) {
@@ -83,11 +85,11 @@ export function QueueList({ queue, act, playNow }) {
                 )}
               </div>
               <div className="flex shrink-0 text-white/50">
-                <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}>▶</IconBtn>
-                <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}>⤒</IconBtn>
-                <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}>↑</IconBtn>
-                <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}>↓</IconBtn>
-                <IconBtn label="Retirer" danger onClick={() => confirm(`Retirer « ${t.title} » ?`) && act("remove", { id: t.id })}>✕</IconBtn>
+                <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}><Play size={15} fill="currentColor" /></IconBtn>
+                <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}><ChevronsUp size={17} /></IconBtn>
+                <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}><ChevronUp size={17} /></IconBtn>
+                <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}><ChevronDown size={17} /></IconBtn>
+                <IconBtn label="Retirer" danger onClick={() => confirm(`Retirer « ${t.title} » ?`) && act("remove", { id: t.id })}><X size={16} /></IconBtn>
               </div>
             </li>
           ))}
@@ -115,9 +117,54 @@ export function Toggle({ label, on, onClick, hint }) {
 export function IconBtn({ label, onClick, disabled, danger, children }) {
   return (
     <button onClick={onClick} disabled={disabled} aria-label={label} title={label}
-      className={`w-9 h-9 lg:w-7 lg:h-7 rounded-lg disabled:opacity-20 ${danger ? "hover:text-red-400" : "hover:text-white"} hover:bg-white/10`}>
+      className={`inline-flex items-center justify-center w-9 h-9 lg:w-7 lg:h-7 rounded-lg disabled:opacity-20 ${danger ? "hover:text-red-400" : "hover:text-white"} hover:bg-white/10`}>
       {children}
     </button>
   );
 }
 
+
+/* ---------- Boutons de lecture ---------- */
+
+/* Lecture / pause : rond en dégradé, icône pleine. size : "md" | "lg". */
+export function PlayPauseButton({ playing, onClick, disabled, size = "md" }) {
+  const big = size === "lg";
+  return (
+    <button onClick={onClick} disabled={disabled} aria-label={playing ? "Pause" : "Lecture"}
+      className={`inline-flex items-center justify-center rounded-full text-white bg-gradient-to-br from-fuchsia-500 to-indigo-600
+        shadow-lg shadow-fuchsia-600/40 ring-1 ring-white/20 transition-transform hover:scale-105 active:scale-95
+        disabled:opacity-30 disabled:shadow-none disabled:hover:scale-100 ${big ? "w-20 h-20" : "w-14 h-14"}`}>
+      {playing
+        ? <Pause size={big ? 34 : 24} fill="currentColor" strokeWidth={0} />
+        : <Play size={big ? 34 : 24} fill="currentColor" strokeWidth={0} className={big ? "ml-1.5" : "ml-1"} />}
+    </button>
+  );
+}
+
+/* Titre suivant : rond translucide. */
+export function SkipButton({ onClick, disabled, size = "md" }) {
+  const big = size === "lg";
+  return (
+    <button onClick={onClick} disabled={disabled} aria-label="Titre suivant" title="Titre suivant"
+      className={`inline-flex items-center justify-center rounded-full text-white bg-white/10 ring-1 ring-white/15 backdrop-blur
+        transition hover:bg-white/20 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 ${big ? "w-14 h-14" : "w-11 h-11"}`}>
+      <SkipForward size={big ? 24 : 19} fill="currentColor" strokeWidth={1.5} />
+    </button>
+  );
+}
+
+/* Volume : icône selon le niveau + curseur rempli en dégradé. */
+export function VolumeSlider({ value, onChange, className = "" }) {
+  const Icon = value === 0 ? VolumeX : value < 50 ? Volume1 : Volume2;
+  return (
+    <label className={`flex items-center gap-2.5 text-white/70 ${className}`}>
+      <button type="button" onClick={() => onChange(value === 0 ? 70 : 0)} aria-label={value === 0 ? "Remettre le son" : "Couper le son"}
+        className="shrink-0 hover:text-white"><Icon size={20} /></button>
+      <input type="range" min={0} max={100} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label="Volume"
+        style={{ background: `linear-gradient(to right, #d946ef 0%, #6366f1 ${value}%, rgba(255,255,255,.15) ${value}%)` }}
+        className="flex-1 min-w-0 h-1.5 rounded-full appearance-none cursor-pointer
+          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+          [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0" />
+    </label>
+  );
+}
