@@ -23,6 +23,7 @@ import { MAX_NAME_LEN, normalizeMax, normalizeMode } from "@/lib/jukebox";
 export const runtime = "nodejs";
 
 export async function POST(req, { params }) {
+  const receivedAt = Date.now(); // horodatage de `playback` : avant tout accès base
   const { code } = await params;
   let body;
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
@@ -84,7 +85,7 @@ export async function POST(req, { params }) {
         const pos = Number(body.pos);
         if (typeof body.id !== "string" || !Number.isFinite(pos) || pos < 0 || pos > 86400)
           return Response.json({ error: "Position invalide." }, { status: 400 });
-        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: Date.now() } });
+        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt } });
         break;
       }
       case "move": {
