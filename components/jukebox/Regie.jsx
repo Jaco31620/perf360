@@ -456,7 +456,7 @@ export default function Regie({ code }) {
         </aside>
       </div>
 
-      {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
+      {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
 
       {remoteQr && (
         <div onClick={() => setRemoteQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 cursor-pointer text-center">

@@ -185,7 +185,7 @@ export function FixVideoButton({ onClick }) {
 }
 
 /* Titre de la file (régie / télécommande). */
-export function VideoPicker({ code, track, onClose, onDone }) {
+export function VideoPicker({ code, track, onClose, onDone, mute }) {
   const post = async (body) => {
     const res = await fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
@@ -197,17 +197,18 @@ export function VideoPicker({ code, track, onClose, onDone }) {
     return d;
   };
   return (
-    <VideoChooser title={track.title} subtitle={track.channel} initial={track.videoId} onClose={onClose} onDone={onDone}
+    <VideoChooser title={track.title} subtitle={track.channel} initial={track.videoId} onClose={onClose} onDone={onDone} mute={mute}
       load={() => post({ action: "videos", id: track.id })}
       choose={(videoId) => post({ action: "replaceVideo", id: track.id, videoId })} />
   );
 }
 
-/* Aperçu d'une vidéo YouTube dans la page (lecteur intégré, son compris). */
-export function VideoPreview({ videoId, onClose }) {
+/* Aperçu d'une vidéo YouTube dans la page (lecteur intégré). mute : sans son
+ * (régie : le son partirait sur la sono de la soirée). */
+export function VideoPreview({ videoId, onClose, mute }) {
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
-      <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`} title="Aperçu"
+      <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1${mute ? "&mute=1" : ""}`} title="Aperçu"
         allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="absolute inset-0 w-full h-full" />
       {onClose && (
         <button onClick={onClose} aria-label="Fermer l'aperçu"
@@ -232,7 +233,7 @@ export function PreviewThumb({ videoId, src, active, onClick, className = "w-24"
 }
 
 /* Fenêtre générique : load() → { current, candidates } ; choose(videoId). */
-export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone }) {
+export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone, mute }) {
   const [list, setList] = useState(null);
   const [current, setCurrent] = useState(initial);
   const [error, setError] = useState("");
@@ -276,7 +277,8 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
           <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
         </div>
         <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre et sera retenue pour les prochaines soirées. Cliquez une miniature pour l'écouter.</p>
-        {preview && <VideoPreview videoId={preview} onClose={() => setPreview(null)} />}
+        {mute && <p className="text-xs text-amber-300">🔇 Aperçu sans son, pour ne pas couper la musique de la soirée.</p>}
+        {preview && <VideoPreview videoId={preview} onClose={() => setPreview(null)} mute={mute} />}
 
         {list === null ? (
           <p className="text-white/60 text-sm py-4 text-center">Recherche des autres versions…</p>
