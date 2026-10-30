@@ -26,16 +26,27 @@ export default function Ecran({ code }) {
   const playerEl = useRef(null);
   const loaded = useRef(null); // id du titre chargé dans le lecteur
   const nowRef = useRef(null);
-  const sync = useRef(null); // { id, pos, playing, localAt }
+  const sync = useRef(null); // { id, pos, playing, at, localAt }
+  const clock = useRef(null); // { offset: heure serveur − heure locale, rtt }
+  const progress = useRef(null); // { cur, t } : la vidéo avance-t-elle vraiment ?
 
   const refresh = useCallback(async () => {
     try {
+      const t0 = Date.now();
       const res = await fetch(`/api/jukebox/${code}?view=ecran`, { cache: "no-store" });
       if (res.status === 404) return setMissing(true);
       if (!res.ok) return;
       const d = await res.json();
+      const t1 = Date.now();
+      // Écart d'horloge estimé au milieu de l'aller-retour ; on garde la mesure
+      // la plus fiable (aller-retour le plus court), renouvelée de temps en temps.
+      const rtt = t1 - t0;
+      const c = clock.current;
+      if (!c || rtt <= c.rtt * 1.2 || t1 - c.t > 60000) clock.current = { offset: d.serverTime - (t0 + t1) / 2, rtt, t: t1 };
       const pb = d.playback;
-      sync.current = pb ? { id: pb.id, pos: pb.pos, playing: pb.playing, localAt: Date.now() - (d.serverTime - pb.at) } : null;
+      if (!pb) sync.current = null;
+      else if (sync.current?.at !== pb.at || !c) // nouvelle position envoyée par la régie
+        sync.current = { id: pb.id, pos: pb.pos, playing: pb.playing, at: pb.at, localAt: pb.at - clock.current.offset };
       nowRef.current = d.now;
       setData(d);
     } catch (e) { /* réseau : on retentera */ }
@@ -55,7 +66,10 @@ export default function Ecran({ code }) {
     return () => { cancelled = true; };
   }, [hasData]); // le conteneur n'existe qu'une fois les données chargées
 
-  // Recalage chaque seconde sur la position de la régie.
+  // Recalage sur la position de la régie, en douceur : petit écart → vitesse
+  // légèrement modifiée (vidéo muette, invisible) ; saut seulement au-delà de
+  // 3 s (chaque saut peut déclencher une pub). Si la vidéo n'avance pas alors
+  // qu'elle devrait (pub, mise en mémoire), on ne force rien.
   useEffect(() => {
     if (!ready) return;
     const id = setInterval(() => {
@@ -76,10 +90,23 @@ export default function Ecran({ code }) {
       }
       const state = p.getPlayerState();
       if (state === 3) return; // chargement en cours
-      if (shouldPlay && state !== 1) p.playVideo();
-      if (!shouldPlay && state === 1) p.pauseVideo();
-      if (Math.abs(p.getCurrentTime() - target) > (shouldPlay ? 1 : 0.5)) p.seekTo(target, true);
-    }, 1000);
+      const cur = p.getCurrentTime();
+      const t = Date.now();
+      const prev = progress.current;
+      progress.current = { cur, t };
+      if (!shouldPlay) {
+        if (state === 1) p.pauseVideo();
+        if (Math.abs(cur - target) > 0.5) p.seekTo(target, true);
+        return;
+      }
+      if (state !== 1) { p.playVideo(); return; }
+      const stalled = prev && t - prev.t < 2000 && cur - prev.cur < 0.1;
+      if (stalled) return;
+      const drift = cur - target; // > 0 : l'écran est en avance
+      if (Math.abs(drift) > 3) { p.setPlaybackRate(1); p.seekTo(target, true); }
+      else if (Math.abs(drift) > 0.25) p.setPlaybackRate(drift < 0 ? 1.25 : 0.75);
+      else if (p.getPlaybackRate() !== 1) p.setPlaybackRate(1);
+    }, 500);
     return () => clearInterval(id);
   }, [ready]);
 
