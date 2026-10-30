@@ -9,7 +9,7 @@
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
- *     replaceSong { key, videoId } → changer la vidéo retenue (elle devient validée)
+ *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
  *     password { current, next } → changer le mot de passe super-admin
  *                      (commun avec Clic-Clac)

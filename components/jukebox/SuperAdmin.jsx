@@ -338,7 +338,7 @@ function SongMemory({ call, total }) {
         <div className="px-5 pb-5 space-y-3">
           <p className="text-xs text-gray-500">
             Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
-            qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre (validée d'office, comme « Mauvaise vidéo ? » en régie) ;
+            qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre, qui repasse « À vérifier » : testez-la (aperçu ouvert d'office) puis validez-la. Les corrections « Mauvaise vidéo ? » faites en régie arrivent aussi ici à vérifier ;
             <b> Oublier</b> la fera rechercher à nouveau au prochain ajout.
           </p>
           <div className="flex flex-wrap gap-2 items-center">
@@ -358,7 +358,8 @@ function SongMemory({ call, total }) {
               className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
-          {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)} onDone={load} />}
+          {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
+            onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
             <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : "Aucun titre."}</p>
           ) : (

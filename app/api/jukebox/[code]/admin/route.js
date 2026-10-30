@@ -151,7 +151,7 @@ export async function POST(req, { params }) {
           video_id: video.id, duration: video.duration,
           ...(String(t.thumb || "").includes("ytimg") ? { thumb: video.thumb } : {}), // pochette Deezer conservée
         }).eq("id", t.id);
-        if (!res.error && key) await rememberSong(key, video, null, true); // corrigé (et validé) pour les prochaines soirées
+        if (!res.error && key) await rememberSong(key, video, null, false); // corrigé pour les prochaines soirées, à valider dans le super-admin
         break;
       }
       case "remove":
