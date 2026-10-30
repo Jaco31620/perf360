@@ -2,7 +2,8 @@
  * Route SUPER-ADMIN du jukebox (en-tête x-jukebox-super requis).
  * - GET  : toutes les soirées (activité, compteurs, date de suppression),
  *          réglages, recherches YouTube du jour.
- *          ?songs=1&q=…&status=all|todo|ok&mode=… : mémoire des titres.
+ *          ?songs=1&q=…&status=all|todo|ok|blind&mode=… : mémoire des titres.
+ *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures? }
  *     features { code, features } → fonctions activées pour une soirée
@@ -13,17 +14,18 @@
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     blindSong { key, blind } → titre utilisable par le blind test automatique
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
- *     prefill { lines?, chart?, modes[], blind? } → titres à pré-chercher (cron de 6 h)
+ *     prefill { lines? | chart? | playlist?, modes[], blind? } (playlist : id ou lien Deezer)
+ *     prefillEdit { keys[], op: "remove" | "top" } → retirer / traiter en premier → titres à pré-chercher (cron de 6 h)
  *     clearPrefill → vider la file de pré-remplissage
  *     password { current, next } → changer le mot de passe super-admin
  *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
-import { prefillState, prefillFromLines, prefillFromChart, clearPrefill } from "@/lib/jukeboxPrefill";
+import { prefillState, prefillFromLines, prefillFromChart, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +37,10 @@ export async function GET(req) {
   if (!isJukeboxSuper(req)) return Response.json({ error: "Accès refusé." }, { status: 401 });
   try {
     const url = new URL(req.url);
+    if (url.searchParams.get("prefill"))
+      return Response.json({ items: await prefillItems() }, { headers: { "cache-control": "no-store" } });
+    if (url.searchParams.get("playlists"))
+      return Response.json({ playlists: await deezerPlaylistSearch(url.searchParams.get("playlists")) }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs"))
       return Response.json({ songs: await listSongs(Object.fromEntries(url.searchParams)) }, { headers: { "cache-control": "no-store" } });
     const [config, sessions, searches, songs, prefill] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState()]);
@@ -76,8 +82,18 @@ export async function POST(req) {
       case "validateSong":
         await validateSong(body.key, body.validated);
         return Response.json({ ok: true });
-      case "prefill":
+      case "prefill": {
+        if (body.playlist) {
+          const id = await deezerPlaylistId(body.playlist);
+          const r = id && await prefillFromPlaylist(id, body.modes, !!body.blind);
+          if (!r) return Response.json({ error: "Playlist Deezer introuvable (vérifiez le lien, elle doit être publique)." }, { status: 404 });
+          return Response.json({ ok: true, ...r });
+        }
         return Response.json({ ok: true, ...(body.chart ? await prefillFromChart(body.modes, !!body.blind) : await prefillFromLines(body.lines, body.modes, !!body.blind)) });
+      }
+      case "prefillEdit":
+        await editPrefill(body.keys, body.op);
+        return Response.json({ ok: true });
       case "clearPrefill":
         await clearPrefill();
         return Response.json({ ok: true });
