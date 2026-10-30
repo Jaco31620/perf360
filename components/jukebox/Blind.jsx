@@ -4,7 +4,7 @@
  * classement. Réglages : mode (réponses sur téléphone / animé par la régie),
  * pioche automatique dans la mémoire, délai avant de dévoiler la réponse,
  * passage au titre suivant après la réponse. Pendant un titre : dévoiler,
- * réponses des invités (accepter une réponse refusée à tort), scores.
+ * réponses des invités (accepter l'artiste ou le titre refusé à tort), scores.
  */
 import { Check, X } from "lucide-react";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES } from "@/lib/jukeboxBlind";
@@ -69,14 +69,10 @@ export function BlindPanel({ settings, blind, now, act }) {
                       <p className="font-semibold truncate">{a.name} <span className="text-white/40 font-normal">· {a.points} pts</span></p>
                       <p className="text-xs text-white/50 truncate">« {a.last} » ({a.attempts} essai{a.attempts > 1 ? "s" : ""})</p>
                     </div>
-                    <Mark ok={a.artist} label="Artiste" />
-                    <Mark ok={a.title} label="Titre" />
-                    {!(a.artist && a.title) && (
-                      <button onClick={() => act("blindAccept", { participantId: a.participantId, name: a.name })}
-                        className="text-xs font-bold bg-green-600/80 hover:bg-green-600 px-2 py-1 rounded-full shrink-0" title="Compter artiste et titre">
-                        Accepter
-                      </button>
-                    )}
+                    {[["artist", "Artiste"], ["title", "Titre"]].map(([part, label]) => (
+                      <Mark key={part} ok={a[part]} label={label}
+                        onAccept={() => act("blindAccept", { participantId: a.participantId, name: a.name, part })} />
+                    ))}
                   </li>
                 ))}
               </ul>
@@ -96,11 +92,20 @@ export function BlindPanel({ settings, blind, now, act }) {
   );
 }
 
-function Mark({ ok, label }) {
+/* Élément trouvé (vert) ; sinon bouton pour l'accepter (+50 pts). */
+function Mark({ ok, label, onAccept }) {
+  if (ok) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-green-500/20 text-green-300">
+        <Check size={11} />{label}
+      </span>
+    );
+  }
   return (
-    <span title={label} className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${ok ? "bg-green-500/20 text-green-300" : "bg-white/10 text-white/30"}`}>
-      {ok ? <Check size={11} /> : <X size={11} />}{label}
-    </span>
+    <button onClick={onAccept} title={`Accepter : ${label.toLowerCase()} trouvé (+50 pts)`}
+      className="group inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-white/10 text-white/40 hover:bg-green-600 hover:text-white">
+      <X size={11} className="group-hover:hidden" /><Check size={11} className="hidden group-hover:block" />{label}
+    </button>
   );
 }
 

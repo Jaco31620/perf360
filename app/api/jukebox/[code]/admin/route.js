@@ -27,7 +27,7 @@
  *   logo { dataUrl | null } → logo du thème (image ≤ 400 Ko, en data URL)
  *   blind { on?, mode?, auto?, reveal?, after? } → blind test (fonction « blind test »)
  *   blindReveal            → dévoiler le titre en cours
- *   blindAccept { participantId, name } → accepter la réponse d'un invité
+ *   blindAccept { participantId, name, part } → accepter l'artiste ou le titre d'un invité
  *   blindReset             → remettre les scores à zéro
  *   history                → titres joués (fonction « historique »)
  *   replay { id }          → remettre un titre joué en fin de file
@@ -206,7 +206,7 @@ export async function POST(req, { params }) {
         const { data: cur } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing").maybeSingle();
         if (body.action === "blindAccept") {
           if (!cur) return Response.json({ error: "Aucun titre en cours." }, { status: 409 });
-          await acceptAnswer(s, cur.id, String(body.participantId || ""), String(body.name || ""));
+          await acceptAnswer(s, cur.id, String(body.participantId || ""), String(body.name || ""), body.part === "title" ? "title" : "artist");
           break;
         }
         const next = body.action === "blindReveal"
