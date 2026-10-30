@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration } from "@/lib/jukebox";
 
@@ -198,7 +199,7 @@ export default function Participant({ code }) {
           <div className="flex items-center gap-3 mb-4">
             {now.thumb && <img src={now.thumb} alt="" className="w-24 h-[54px] object-cover rounded-lg shrink-0" />}
             <div className="min-w-0">
-              <p className="text-xs font-bold text-fuchsia-600 uppercase tracking-wider">▶ En ce moment</p>
+              <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-600 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment</p>
               <p className="font-bold text-gray-900 leading-snug line-clamp-2">{now.title}</p>
               {now.mine || now.author ? (
                 <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>

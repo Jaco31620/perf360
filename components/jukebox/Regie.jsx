@@ -386,7 +386,7 @@ export default function Regie({ code }) {
             <div className="flex-1 min-w-0">
               {now ? (
                 <>
-                  <p className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider">▶ En ce moment · proposé par {now.author}</p>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment · proposé par {now.author}</p>
                   <p className="text-xl font-bold truncate">{now.title}</p>
                   <p className="text-sm text-white/50">{now.channel}</p>
                   {now.dedication && (

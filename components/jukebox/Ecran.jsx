@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { Play } from "lucide-react";
 import { formatCode } from "./storage";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 
@@ -174,7 +175,7 @@ export default function Ecran({ code }) {
           </div>
           {now ? (
             <>
-              <p className="mt-[2.5vh] text-[1.2vw] font-bold uppercase tracking-wider text-fuchsia-300">▶ En ce moment</p>
+              <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-fuchsia-300"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
               {now.author ? (
                 <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
