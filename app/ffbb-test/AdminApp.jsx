@@ -20,6 +20,7 @@ import {
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, td, darkInput,
 } from "./shared";
 import RichEditor from "./RichEditor";
+import PasswordInput from "@/components/PasswordInput";
 import { buildEmailHtml } from "./emailTemplate";
 
 export default function AdminApp({ campaign }) {
@@ -210,7 +211,7 @@ function AdminLogin({ slug, campaignName, onAuthed, onBack }) {
           </div>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: "0 0 4px", letterSpacing: "-0.4px" }}>Espace administrateur</h2>
           {campaignName && <p style={{ color: "#888", fontSize: 13.5, margin: "0 0 16px" }}>{campaignName}</p>}
-          <input type="password" value={pw} placeholder="Mot de passe" onChange={e => { setPw(e.target.value); setErr(""); }}
+          <PasswordInput value={pw} placeholder="Mot de passe" onChange={e => { setPw(e.target.value); setErr(""); }}
             onKeyDown={e => { if (e.key === "Enter") tryLogin(); }}
             style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${err ? "#b3261e" : C.cardLine}`, fontSize: 15, boxSizing: "border-box", color: C.ink, background: "#fff", outline: "none" }} />
           {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>{err}</div>}

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
+import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, maxLabel } from "@/lib/jukebox";
 
@@ -99,7 +100,11 @@ export default function SuperAdmin() {
           <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-600">Super-admin</p>
           <h1 className="text-3xl font-black text-gray-900">Soirées Jukebox</h1>
         </div>
-        <button onClick={() => { setSuperToken(null); setToken(null); }} className="text-sm text-gray-400 underline">Se déconnecter</button>
+        <div className="flex flex-col items-end gap-2">
+          <button onClick={() => { setSuperToken(null); setToken(null); }} className="text-sm text-gray-400 underline">Se déconnecter</button>
+          <ChangePasswordForm accent="bg-fuchsia-600" note="Le même mot de passe sert au super-admin Clic-Clac."
+            onSubmit={(current, next) => call("POST", { action: "password", current, next })} />
+        </div>
       </div>
 
       {data && (

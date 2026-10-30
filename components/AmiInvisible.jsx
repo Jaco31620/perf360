@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import PasswordInput from "@/components/PasswordInput";
 
 const TABS = ["Participants", "Exclusions", "Message", "Tirage", "Historique"];
 const ICONS = ["👥", "🚫", "✉️", "🎲", "📋"];
@@ -537,7 +538,7 @@ function HistoriqueTab({ carnet, setCarnet, setParticipants, setTab, userId }) {
       {pwModal && (
         <Modal title="🔒 Accès admin" onClose={() => { setPwModal(false); setPw(""); setPwErr(""); }}>
           <p className="text-sm text-gray-500">Mot de passe administrateur requis.</p>
-          <input type="password" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+          <PasswordInput className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
             value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === "Enter" && tryUnlock()} placeholder="Mot de passe" autoFocus />
           {pwErr && <p className="text-red-500 text-xs">{pwErr}</p>}
           <button onClick={tryUnlock} className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg text-sm font-medium">Déverrouiller</button>

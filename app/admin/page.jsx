@@ -9,6 +9,7 @@
  */
 import { useState, useEffect } from "react";
 import { Lock, Plus, ExternalLink, Trash2, Settings, LogOut, Key, Mail, Copy, ShieldCheck } from "lucide-react";
+import PasswordInput from "@/components/PasswordInput";
 import {
   C, PageShell, Loader, Card, DarkCard,
   btnPrimary, btnGhost, btnGhostLight, h3, pSub, lbl, darkInput, DEFAULT_CONFIG,
@@ -123,7 +124,7 @@ function MasterLogin({ onAuthed }) {
           </div>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: C.ink, margin: "0 0 4px", letterSpacing: "-0.4px" }}>Super-administration</h2>
           <p style={{ color: "#888", fontSize: 13.5, margin: "0 0 16px" }}>Gestion des instances</p>
-          <input type="password" value={pw} placeholder="Mot de passe maître" onChange={e => { setPw(e.target.value); setErr(false); }}
+          <PasswordInput value={pw} placeholder="Mot de passe maître" onChange={e => { setPw(e.target.value); setErr(false); }}
             onKeyDown={e => { if (e.key === "Enter") tryLogin(); }}
             style={{ width: "100%", padding: "13px 15px", borderRadius: 12, border: `1.5px solid ${err ? "#b3261e" : C.cardLine}`, fontSize: 15, boxSizing: "border-box", color: C.ink, background: "#fff", outline: "none" }} />
           {err && <div style={{ color: "#b3261e", fontSize: 13, marginTop: 8 }}>Mot de passe incorrect.</div>}

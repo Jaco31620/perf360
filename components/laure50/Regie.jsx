@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { startClock } from "./clock";
 import QrWelcome from "./QrWelcome";
+import PasswordInput from "@/components/PasswordInput";
 
 const SHIFT_MIN = -0.6, SHIFT_MAX = 0.6, SHIFT_STEP = 0.05;
 
@@ -161,7 +162,7 @@ export default function Regie() {
         }}>
           <img src="/laure50/logo.png" alt="Laure 1976" />
           <h1>Régie karaoké</h1>
-          <input type="password" autoFocus value={draftKey} onChange={(e) => setDraftKey(e.target.value)} placeholder="Clé régie" />
+          <PasswordInput autoFocus value={draftKey} onChange={(e) => setDraftKey(e.target.value)} placeholder="Clé régie" />
           {keyError && <p className="l50-error">{keyError}</p>}
           <button>Entrer</button>
         </form>

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
+import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { api, superToken, storage, formatBytes, formatDate } from "./client";
 import { DEFAULT_SETTINGS } from "@/lib/clicclac/settings";
 
@@ -59,9 +60,11 @@ export default function SuperApp() {
           <p className="text-xs font-bold uppercase tracking-wider text-[#ff5a5f]">Super-admin</p>
           <h1 className="text-3xl font-black text-gray-900">Albums Clic-Clac</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <button onClick={() => { setCreating(true); setCreated(null); }} className="bg-[#ff5a5f] text-white font-bold px-5 py-2.5 rounded-full">+ Nouvel album</button>
           <button onClick={() => { storage.set("cc_super", null); setToken(null); }} className="text-sm text-gray-400 underline">Se déconnecter</button>
+          <ChangePasswordForm accent="bg-[#ff5a5f]" note="Le même mot de passe sert au super-admin Jukebox."
+            onSubmit={(current, next) => api("/super/password", { method: "POST", token, body: { current, next } })} />
         </div>
       </div>
 

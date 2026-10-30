@@ -112,4 +112,5 @@
 .l50-regie-login h1 { font-size: 22px; font-weight: 800; }
 .l50-regie-login input { padding: 12px 14px; border-radius: 12px; border: 2px solid #8b3f12; background: #1a0d05; color: #f4e7c7; font-size: 16px; }
 .l50-regie-login button { padding: 12px; border-radius: 999px; border: 0; background: #f0943a; color: #261408; font-weight: 800; font-size: 16px; cursor: pointer; }
+.l50-regie-login .pw-eye { background: none; padding: 0 14px; border-radius: 0; color: #c9a27a; }
 .l50-error { color: #ff8a6b; font-size: 14px; }

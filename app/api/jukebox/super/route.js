@@ -6,10 +6,13 @@
  *     settings { retentionDays?, creationMode?, creationCode? }
  *     regie { code }   → nouveau lien régie (l'ancien ne fonctionne plus)
  *     delete { code }  → supprimer une soirée
+ *     password { current, next } → changer le mot de passe super-admin
+ *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { loadSession, newAdminToken, hashToken, songsCount } from "@/lib/jukeboxServer";
+import { changeMasterPassword } from "@/lib/clicclac/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +44,14 @@ export async function POST(req) {
       case "settings":
         await saveConfig(body);
         return Response.json({ ok: true });
+      case "password": {
+        const err = await changeMasterPassword(body.current, body.next);
+        if (err) {
+          await new Promise((r) => setTimeout(r, 600)); // ralentit les essais
+          return Response.json({ error: err }, { status: 400 });
+        }
+        return Response.json({ ok: true });
+      }
       case "regie":
       case "delete": {
         const s = await loadSession(body.code);
