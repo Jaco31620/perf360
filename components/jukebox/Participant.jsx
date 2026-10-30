@@ -21,6 +21,7 @@ export default function Participant({ code }) {
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
   const [dedication, setDedication] = useState("");
+  const [picked, setPicked] = useState(null); // titre choisi, en attente de sa dédicace
   const pid = useRef(null);
 
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
@@ -80,6 +81,7 @@ export default function Participant({ code }) {
       setTimeout(() => setFlash(""), 2500);
       setResults(null);
       setDedication("");
+      setPicked(null);
       setQ("");
       refresh();
     } catch (err) {
@@ -148,14 +150,6 @@ export default function Participant({ code }) {
                 {session.searchMode === "karaoke" ? "🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké." : "📝 La recherche propose en priorité les versions avec les paroles à l'écran."}
               </p>
             )}
-            {session.dedications && (
-              <div className="mb-3">
-                <input value={dedication} onChange={(e) => setDedication(e.target.value)} maxLength={MAX_DEDICATION_LEN}
-                  placeholder="💌 Dédicace (facultatif)" autoComplete="off"
-                  className="w-full border-2 border-fuchsia-100 bg-fuchsia-50/50 rounded-2xl px-4 py-2.5 focus:border-fuchsia-400 outline-none" />
-                {dedication && <p className="text-xs text-gray-400 mt-1 px-1">Elle accompagnera le prochain titre que vous ajoutez · {dedication.length}/{MAX_DEDICATION_LEN}</p>}
-              </div>
-            )}
             <form onSubmit={search} className="flex gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} enterKeyHint="search"
                 placeholder="Artiste, titre… ou lien YouTube" autoComplete="off"
@@ -183,7 +177,7 @@ export default function Participant({ code }) {
                     {inQueue.has(v.id) ? (
                       <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
                     ) : (
-                      <button onClick={() => add(v)} disabled={!!adding}
+                      <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding}
                         className="shrink-0 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
                         {adding === v.id ? "…" : "+ Ajouter"}
                       </button>
@@ -260,6 +254,34 @@ export default function Participant({ code }) {
         )}
         </>)}
       </div>
+      {picked && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" onClick={() => !adding && setPicked(null)}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); add(picked); }}
+            className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              {picked.thumb && <img src={picked.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
+              <div className="min-w-0">
+                <p className="font-bold text-gray-900 text-sm leading-snug line-clamp-2">{picked.title}</p>
+                <p className="text-xs text-gray-500 truncate">{picked.channel} · {formatDuration(picked.duration)}</p>
+              </div>
+            </div>
+            <div>
+              <textarea autoFocus rows={2} value={dedication} onChange={(e) => setDedication(e.target.value)} maxLength={MAX_DEDICATION_LEN}
+                placeholder="💌 Une dédicace ? (facultatif)"
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-fuchsia-500 outline-none resize-none" />
+              <p className="text-xs text-gray-400 text-right">{dedication.length}/{MAX_DEDICATION_LEN}</p>
+            </div>
+            {error && <p className="text-center text-red-600 text-sm">{error}</p>}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPicked(null)} disabled={!!adding}
+                className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-full">Annuler</button>
+              <button disabled={!!adding} className="flex-[2] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-3 rounded-full">
+                {adding ? "Ajout…" : "Ajouter à la file"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </Shell>
   );
 }
