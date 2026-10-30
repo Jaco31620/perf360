@@ -6,7 +6,7 @@
  * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
  * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -41,6 +41,8 @@ export default function SuperAdmin() {
   const [origin, setOrigin] = useState("");
   const [link, setLink] = useState(null); // { name, url } lien régie à transmettre
   const [filter, setFilter] = useState("");
+  const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
+  const goTo = (on) => { chooseTab("biblio"); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
   useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
@@ -129,8 +131,8 @@ export default function SuperAdmin() {
               <div className={`h-full ${quotaPct >= 80 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${quotaPct}%` }} />
             </div>
           </Stat>
-          <Stat label="Titres en mémoire" value={data.songs} onClick={() => chooseTab("biblio")} />
-          <Stat label="En attente de pré-remplissage" value={data.prefill?.pending ?? 0} onClick={() => chooseTab("biblio")} />
+          <Stat label="Titres en mémoire" value={data.songs} onClick={() => goTo("memory")} />
+          <Stat label="En attente de pré-remplissage" value={data.prefill?.pending ?? 0} onClick={() => goTo("queue")} />
         </div>
       )}
 
@@ -197,61 +199,68 @@ export default function SuperAdmin() {
 
       {tab === "biblio" && (
         <>
-          <SongMemory call={call} total={data?.songs} />
-          <Prefill call={call} state={data?.prefill} onChanged={load} />
+          <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} />
+          <Prefill call={call} state={data?.prefill} onChanged={load} focus={focus?.on === "queue" ? focus.at : null} />
         </>
       )}
 
       {tab === "reglages" && cfg && (
         <div className="grid gap-4 md:grid-cols-2 items-start">
-          <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
-            <h2 className="font-bold text-base text-gray-900">Accès et recherche</h2>
-            <div>
-              <p className="font-semibold mb-1.5">Moteur de recherche des invités</p>
-              <div className="flex bg-gray-100 rounded-full p-0.5">
-                {[["deezer", "Deezer (sans quota)"], ["youtube", "YouTube"]].map(([id, label]) => (
-                  <button key={id} onClick={() => id !== cfg.searchEngine && action({ action: "settings", searchEngine: id })}
-                    className={`flex-1 px-2 py-1.5 rounded-full font-bold ${id === cfg.searchEngine ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
-                    {label}
-                  </button>
-                ))}
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
+              <h2 className="font-bold text-base text-gray-900">Accès et recherche</h2>
+              <div>
+                <p className="font-semibold mb-1.5">Moteur de recherche des invités</p>
+                <div className="flex bg-gray-100 rounded-full p-0.5">
+                  {[["deezer", "Deezer (sans quota)"], ["youtube", "YouTube"]].map(([id, label]) => (
+                    <button key={id} onClick={() => id !== cfg.searchEngine && action({ action: "settings", searchEngine: id })}
+                      className={`flex-1 px-2 py-1.5 rounded-full font-bold ${id === cfg.searchEngine ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  {cfg.searchEngine === "deezer"
+                    ? "Les invités cherchent dans le catalogue Deezer ; la vidéo YouTube n'est cherchée qu'à l'ajout (gardée 30 j, partagée entre soirées)."
+                    : "Chaque recherche d'invité consomme le quota YouTube (~100 recherches nouvelles par jour)."}
+                </p>
               </div>
-              <p className="text-xs text-gray-400 mt-1.5">
-                {cfg.searchEngine === "deezer"
-                  ? "Les invités cherchent dans le catalogue Deezer ; la vidéo YouTube n'est cherchée qu'à l'ajout (gardée 30 j, partagée entre soirées)."
-                  : "Chaque recherche d'invité consomme le quota YouTube (~100 recherches nouvelles par jour)."}
-              </p>
+              <label className="flex items-center justify-between gap-3">
+                <span className="font-semibold">Suppression après inactivité</span>
+                <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}
+                  className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
+                  {RETENTION_CHOICES.map((n) => <option key={n} value={n}>{n} jour{n > 1 ? "s" : ""}</option>)}
+                </select>
+              </label>
+              <div>
+                <p className="font-semibold mb-1.5">Qui peut créer une soirée ?</p>
+                <div className="flex bg-gray-100 rounded-full p-0.5">
+                  {CREATION_MODES.map((m) => (
+                    <button key={m.id} onClick={() => m.id !== cfg.creationMode && action({
+                      action: "settings", creationMode: m.id, ...(m.id === "code" && !cfg.creationCode ? { creationCode: randomCode() } : {}),
+                    })}
+                      className={`flex-1 px-2 py-1.5 rounded-full font-bold ${m.id === cfg.creationMode ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5">{CREATION_MODES.find((m) => m.id === cfg.creationMode)?.hint}</p>
+              </div>
+              {cfg.creationMode === "code" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-600">Code de création :</span>
+                  <span className="font-mono font-black text-lg tracking-widest">{cfg.creationCode}</span>
+                  <button onClick={() => action({ action: "settings", creationCode: randomCode() }, "Générer un nouveau code ? L'ancien ne fonctionnera plus.")}
+                    className="ml-auto text-xs text-fuchsia-600 underline">Nouveau code</button>
+                </div>
+              )}
+              <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">Quota YouTube : {QUOTA_NOTE}</p>
             </div>
-            <label className="flex items-center justify-between gap-3">
-              <span className="font-semibold">Suppression après inactivité</span>
-              <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}
-                className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
-                {RETENTION_CHOICES.map((n) => <option key={n} value={n}>{n} jour{n > 1 ? "s" : ""}</option>)}
-              </select>
-            </label>
-            <div>
-              <p className="font-semibold mb-1.5">Qui peut créer une soirée ?</p>
-              <div className="flex bg-gray-100 rounded-full p-0.5">
-                {CREATION_MODES.map((m) => (
-                  <button key={m.id} onClick={() => m.id !== cfg.creationMode && action({
-                    action: "settings", creationMode: m.id, ...(m.id === "code" && !cfg.creationCode ? { creationCode: randomCode() } : {}),
-                  })}
-                    className={`flex-1 px-2 py-1.5 rounded-full font-bold ${m.id === cfg.creationMode ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 mt-1.5">{CREATION_MODES.find((m) => m.id === cfg.creationMode)?.hint}</p>
+            <div className="bg-white rounded-2xl border border-purple-100 p-5 text-sm">
+              <h2 className="font-bold text-base text-gray-900 mb-2">Mot de passe</h2>
+              <ChangePasswordForm accent="bg-fuchsia-600" note="Le même mot de passe sert au super-admin Clic-Clac."
+                onSubmit={(current, next) => call("POST", { action: "password", current, next })} />
             </div>
-            {cfg.creationMode === "code" && (
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">Code de création :</span>
-                <span className="font-mono font-black text-lg tracking-widest">{cfg.creationCode}</span>
-                <button onClick={() => action({ action: "settings", creationCode: randomCode() }, "Générer un nouveau code ? L'ancien ne fonctionnera plus.")}
-                  className="ml-auto text-xs text-fuchsia-600 underline">Nouveau code</button>
-              </div>
-            )}
-            <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">Quota YouTube : {QUOTA_NOTE}</p>
           </div>
           <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
             <h2 className="font-bold text-base text-gray-900">Nouvelles soirées</h2>
@@ -265,11 +274,6 @@ export default function SuperAdmin() {
               <p className="text-xs text-gray-400 mb-2">Pour toutes les soirées créées ensuite (par vous ou par d'autres) ; la régie peut les changer pendant la soirée.</p>
               <SoireeFields value={cfg.defaultOptions} onChange={(patch) => action({ action: "settings", defaultOptions: patch })} />
             </div>
-          </div>
-          <div className="bg-white rounded-2xl border border-purple-100 p-5 text-sm">
-            <h2 className="font-bold text-base text-gray-900 mb-2">Mot de passe</h2>
-            <ChangePasswordForm accent="bg-fuchsia-600" note="Le même mot de passe sert au super-admin Clic-Clac."
-              onSubmit={(current, next) => call("POST", { action: "password", current, next })} />
           </div>
         </div>
       )}
@@ -485,10 +489,19 @@ const MODE_TAG = {
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
-function SongMemory({ call, total }) {
+function SongMemory({ call, total, focus }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("todo");
+  const box = useRef(null);
+  // tuile « Titres en mémoire » : liste complète, sans filtre
+  useEffect(() => {
+    if (!focus) return;
+    setOpen(true);
+    setStatus("all");
+    setQ("");
+    box.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focus]);
   const [mode, setMode] = useState("");
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
@@ -522,7 +535,7 @@ function SongMemory({ call, total }) {
   };
 
   return (
-    <div className="mt-5 bg-white rounded-2xl border border-purple-100">
+    <div ref={box} className="mt-5 bg-white rounded-2xl border border-purple-100 scroll-mt-4">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex justify-between items-center px-5 py-4 font-bold text-gray-900">
         <span>🧠 Mémoire des titres {typeof total === "number" && <span className="text-gray-400 font-normal">({total})</span>}</span>
         <span className="text-gray-400">{open ? "▲" : "▼"}</span>
@@ -610,7 +623,7 @@ const STOP_TEXT = { quota: "quota épuisé", time: "temps écoulé", empty: "fil
 
 /* Pré-remplissage : titres mis en attente, cherchés chaque matin vers 6 h
  * avec le reste du quota YouTube de la veille. */
-function Prefill({ call, state, onChanged }) {
+function Prefill({ call, state, onChanged, focus }) {
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
@@ -622,6 +635,15 @@ function Prefill({ call, state, onChanged }) {
   const [playlists, setPlaylists] = useState(null);
   const [showQueue, setShowQueue] = useState(false);
   const [queueVersion, setQueueVersion] = useState(0);
+  const queueBox = useRef(null);
+  // tuile « En attente » : file d'attente ouverte
+  useEffect(() => {
+    if (!focus) return;
+    setOpen(true);
+    setShowQueue(true);
+    const t = setTimeout(() => queueBox.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    return () => clearTimeout(t);
+  }, [focus]);
 
   const toggle = (id) => setModes((ms) => (ms.includes(id) ? ms.filter((m) => m !== id) : [...ms, id]));
   const send = async (body) => {
@@ -760,7 +782,7 @@ function Prefill({ call, state, onChanged }) {
             </div>
           )}
 
-          {showQueue && <PrefillQueue call={call} version={queueVersion} onChanged={onChanged} />}
+          {showQueue && <div ref={queueBox} className="scroll-mt-4"><PrefillQueue call={call} version={queueVersion} onChanged={onChanged} /></div>}
         </div>
       )}
     </div>
