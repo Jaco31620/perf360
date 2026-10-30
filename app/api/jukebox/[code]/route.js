@@ -16,7 +16,7 @@
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -101,8 +101,9 @@ export async function POST(req, { params }) {
         return Response.json({ error: `Vous avez déjà ${mine} titre${mine > 1 ? "s" : ""} en attente : patientez qu'il${mine > 1 ? "s" : ""} passe${mine > 1 ? "nt" : ""}.` }, { status: 429 });
     }
 
-    const [v] = await ytVideos([videoId]);
-    if (!v) return Response.json({ error: "Ce titre ne peut pas être joué ici (trop long ou lecture bloquée)." }, { status: 422 });
+    // chansons uniquement pour les invités ; la régie peut ajouter n'importe quelle vidéo jouable
+    const { video: v, reason } = await ytVideo(videoId, { musicOnly: !admin });
+    if (!v) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
 
     const { error } = await sb.from("jukebox_tracks").insert({
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,

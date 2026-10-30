@@ -56,7 +56,7 @@ export default function Participant({ code }) {
     setSearching(true);
     setError("");
     try {
-      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store" });
+      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store", headers: authHeaders(code) });
       const d = await res.json();
       setResults(d.results || []);
       if (d.error) setError(d.error);
