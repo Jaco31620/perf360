@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import PasswordInput from "@/components/PasswordInput";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, maxLabel } from "@/lib/jukebox";
 
@@ -80,7 +81,7 @@ export default function SuperAdmin() {
         <form onSubmit={login} className="max-w-sm mx-auto bg-white rounded-3xl shadow-xl p-7 mt-10 space-y-4">
           <h1 className="text-xl font-black">Super-admin Jukebox</h1>
           <p className="text-sm text-gray-500">Même mot de passe que le super-admin Clic-Clac.</p>
-          <input autoFocus type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Mot de passe"
+          <PasswordInput autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Mot de passe"
             className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-fuchsia-500 outline-none" />
           {err && <p className="text-red-600 text-sm">{err}</p>}
           <button className="w-full bg-gray-900 text-white font-bold py-3 rounded-full">Se connecter</button>

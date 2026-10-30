@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
+import PasswordInput from "@/components/PasswordInput";
 import { api, superToken, storage, formatBytes, formatDate } from "./client";
 import { DEFAULT_SETTINGS } from "@/lib/clicclac/settings";
 
@@ -42,7 +43,7 @@ export default function SuperApp() {
       <Page>
         <form onSubmit={login} className="max-w-sm mx-auto bg-white rounded-3xl shadow-xl p-7 mt-10 space-y-4">
           <h1 className="text-xl font-black">Super-admin Clic-Clac</h1>
-          <input autoFocus type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Mot de passe"
+          <PasswordInput autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="Mot de passe"
             className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-[#ff5a5f] outline-none" />
           {err && <p className="text-red-600 text-sm">{err}</p>}
           <button className="w-full bg-gray-900 text-white font-bold py-3 rounded-full">Se connecter</button>
