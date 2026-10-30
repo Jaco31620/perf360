@@ -18,6 +18,7 @@ import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, 
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
+import { BlindPanel } from "./Blind";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function Regie({ code }) {
   const [remoteQr, setRemoteQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [peek, setPeek] = useState(null); // blind test : titre affiché quand même en régie
   const token = useRef(null);
   // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
   // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
@@ -315,6 +317,15 @@ export default function Regie({ code }) {
     else if (c.type === "volume") changeVolume(c.value);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Blind test : titre suivant N s après la réponse dévoilée (réglage « Titre suivant »).
+  const blindNext = useRef(null);
+  useEffect(() => {
+    const b = data?.blind;
+    const now = data?.now;
+    if (!started || !b?.on || !now || !b.revealed || !b.after || blindNext.current === now.id) return;
+    if (b.revealedFor >= b.after) { blindNext.current = now.id; advance(false, now.id); }
+  }, [data, started, advance]);
+
   const copyRegieLink = async () => {
     try {
       await navigator.clipboard.writeText(`${origin}/jukebox/${code}/regie#t=${token.current}`);
@@ -351,6 +362,7 @@ export default function Regie({ code }) {
 
   const { session, now, queue } = data;
   const open = session.status === "open";
+  const masked = !!(data.blind?.on && now && !data.blind.revealed && peek !== now.id);
   const joinUrl = `${origin}/jukebox/${code}`;
 
   return (
@@ -382,6 +394,13 @@ export default function Regie({ code }) {
                 </button>
               </div>
             )}
+            {started && masked && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-950 text-center px-6">
+                <p className="text-5xl">🕵️</p>
+                <p className="text-white/70">Blind test : vidéo masquée jusqu'à la réponse.</p>
+                <button onClick={() => setPeek(now.id)} className="text-sm text-white/50 underline">Afficher quand même (régie)</button>
+              </div>
+            )}
             {started && !now && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black text-white/60 text-center px-6 pointer-events-none">
                 En attente du prochain titre… Scannez le QR code pour en proposer un !
@@ -394,8 +413,8 @@ export default function Regie({ code }) {
               {now ? (
                 <>
                   <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment · proposé par {now.author}</p>
-                  <p className="text-xl font-bold truncate">{now.title}</p>
-                  <p className="text-sm text-white/50">{now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
+                  <p className="text-xl font-bold truncate">{masked ? "🤫 Titre masqué" : now.title}</p>
+                  <p className="text-sm text-white/50">{masked ? "Blind test en cours" : now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »
@@ -444,6 +463,8 @@ export default function Regie({ code }) {
               + Ajouter un titre
             </Link>
           </div>
+
+          {session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
 
           <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
 

@@ -15,6 +15,7 @@ import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
+import { BlindPanel } from "./Blind";
 
 export default function Telecommande({ code }) {
   const [data, setData] = useState(null);
@@ -171,6 +172,8 @@ export default function Telecommande({ code }) {
         <Link href={`/jukebox/${code}`} className="block text-center font-bold bg-fuchsia-600 active:bg-fuchsia-700 rounded-full py-3">
           + Ajouter un titre
         </Link>
+
+        {session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
 
         <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
 

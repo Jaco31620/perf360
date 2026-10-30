@@ -25,6 +25,10 @@
  *   reset                  → vider la file (titre en cours compris ; l'historique reste)
  *   theme { palette?, title?, message? } → thème de la soirée (fonction « thème »)
  *   logo { dataUrl | null } → logo du thème (image ≤ 400 Ko, en data URL)
+ *   blind { on?, mode?, auto?, reveal?, after? } → blind test (fonction « blind test »)
+ *   blindReveal            → dévoiler le titre en cours
+ *   blindAccept { participantId, name } → accepter la réponse d'un invité
+ *   blindReset             → remettre les scores à zéro
  *   history                → titres joués (fonction « historique »)
  *   replay { id }          → remettre un titre joué en fin de file
  *   clearHistory           → effacer l'historique
@@ -33,6 +37,8 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
+import { normalizeBlind } from "@/lib/jukeboxBlind";
+import { sessionBlind, topUpBlind, acceptAnswer } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 
@@ -90,8 +96,10 @@ export async function POST(req, { params }) {
             .eq("session_id", s.id).eq("status", "playing");
           if (res.error) break;
         }
+        await topUpBlind(s); // blind test automatique : file complétée
         const [nxt] = await queued();
         if (nxt) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", nxt.id);
+        if (!res.error) await topUpBlind(s);
         break;
       }
       case "playback": {
@@ -183,6 +191,29 @@ export async function POST(req, { params }) {
           }
         }
         res = await update({ options: { ...(s.options || {}), theme: normalizeTheme(theme) } });
+        break;
+      }
+      case "blind":
+      case "blindReveal":
+      case "blindAccept":
+      case "blindReset": {
+        const blind = sessionBlind(s);
+        if (!blind) return Response.json({ error: "Blind test non activé pour cette soirée." }, { status: 403 });
+        if (body.action === "blindReset") {
+          res = await sb.from("jukebox_answers").delete().eq("session_id", s.id);
+          break;
+        }
+        const { data: cur } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing").maybeSingle();
+        if (body.action === "blindAccept") {
+          if (!cur) return Response.json({ error: "Aucun titre en cours." }, { status: 409 });
+          await acceptAnswer(s, cur.id, String(body.participantId || ""), String(body.name || ""));
+          break;
+        }
+        const next = body.action === "blindReveal"
+          ? { ...blind, revealedId: cur?.id || null, revealedAt: Date.now() }
+          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "auto", "reveal", "after"].filter((k) => k in body).map((k) => [k, body[k]])) });
+        res = await update({ options: { ...(s.options || {}), blind: next } });
+        if (!res.error && body.action === "blind") await topUpBlind({ ...s, options: { ...(s.options || {}), blind: next } });
         break;
       }
       case "history":

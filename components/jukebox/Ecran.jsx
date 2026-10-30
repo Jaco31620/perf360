@@ -13,6 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
 import { formatCode } from "./storage";
 import { themeVars } from "@/lib/jukebox";
+import { Leaderboard } from "./Blind";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 
 const MAX_SHOWN = 6;
@@ -79,7 +80,7 @@ export default function Ecran({ code }) {
     const id = setInterval(() => {
       const p = player.current;
       const now = nowRef.current;
-      if (!now) {
+      if (!now || now.hidden) { // rien en cours, ou blind test pas encore dévoilé
         if (loaded.current) { p.stopVideo(); loaded.current = null; }
         return;
       }
@@ -153,8 +154,10 @@ export default function Ecran({ code }) {
   if (missing) return <Center>La soirée {formatCode(code)} n'existe pas (ou plus).</Center>;
   if (!data) return <Center>Chargement…</Center>;
 
-  const { session, now, queue, total } = data;
+  const { session, now, queue, total, blind } = data;
   const theme = session.theme;
+  const hidden = !!now?.hidden;
+  const since = (Date.now() - data.fetchedAt) / 1000;
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
   const cover = now ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
@@ -176,12 +179,23 @@ export default function Ecran({ code }) {
             </div>
           </div>
           {/* toujours monté (sinon le lecteur serait détruit), invisible sans titre */}
-          <div className={now ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
-            style={now ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
+          <div className={now && !hidden ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
+            style={now && !hidden ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
             <div ref={playerEl} className="absolute inset-0" />
             <div className="absolute inset-0" />
           </div>
-          {now ? (
+          {hidden ? (
+            <div className="text-center py-[4vh]">
+              <p className="text-[9vw] leading-none animate-pulse">🕵️</p>
+              <h1 className="mt-[3vh] text-[4.5vw] font-black leading-tight">Quel est ce titre ?</h1>
+              <p className="mt-[1.5vh] text-[2vw] text-white/80">
+                {blind?.mode === "phone" ? "Répondez sur votre téléphone : artiste, titre… ou les deux !" : "À vous de deviner !"}
+              </p>
+              {blind?.revealIn != null && (
+                <p className="mt-[3vh] text-[5vw] font-black tabular-nums text-[var(--jb-light)]">{Math.max(0, Math.ceil(blind.revealIn - since))}</p>
+              )}
+            </div>
+          ) : now ? (
             <>
               <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-[var(--jb-light)]"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
@@ -195,6 +209,13 @@ export default function Ecran({ code }) {
                 </p>
               ) : null}
               {now.dedication && <p className="mt-[1vh] text-[1.7vw] italic text-[var(--jb-light)] line-clamp-2">💌 « {now.dedication} »</p>}
+              {blind?.on && blind.mode === "phone" && (
+                <p className="mt-[1.5vh] text-[1.5vw] text-white/80 line-clamp-2">
+                  {blind.found?.length
+                    ? <>🎯 Trouvé par {blind.found.map((f) => `${f.name}${f.artist && f.title ? "" : f.artist ? " (artiste)" : " (titre)"}`).join(", ")}</>
+                    : "😮 Personne n'a trouvé !"}
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -212,12 +233,16 @@ export default function Ecran({ code }) {
                 <QRCodeSVG value={joinUrl} size={512} style={{ width: "100%", height: "auto" }} fgColor="#0f172a" />
               </div>
             )}
-            <p className="mt-[1.5vh] text-[1.4vw] font-bold">Proposez vos titres</p>
+            <p className="mt-[1.5vh] text-[1.4vw] font-bold">{blind?.on && blind.mode === "phone" ? "Jouez au blind test" : "Proposez vos titres"}</p>
             <p className="text-[1.1vw] text-white/70 break-all">{joinUrl.replace(/^https?:\/\//, "")}</p>
             <p className="text-[1.1vw] text-white/70">code <span className="font-mono font-black text-white text-[2vw]">{formatCode(code)}</span></p>
           </div>
 
-          {showQueue ? (
+          {blind?.on && blind.mode === "phone" ? (
+            <div className="flex-1 min-h-0 bg-white/10 backdrop-blur rounded-[1.5vw] p-[1.5vw] overflow-hidden">
+              {blind.top?.length ? <Leaderboard top={blind.top} big /> : <p className="text-[1.4vw] text-white/70">🏆 Le classement s'affichera dès les premières bonnes réponses.</p>}
+            </div>
+          ) : blind?.on ? null : showQueue ? (
             <div className="flex-1 min-h-0 bg-white/10 backdrop-blur rounded-[1.5vw] p-[1.5vw] overflow-hidden">
               <h2 className="text-[1.5vw] font-bold mb-[1.5vh]">À suivre {total > 0 && <span className="text-white/50 font-normal">({total})</span>}</h2>
               {queue.length === 0 ? (

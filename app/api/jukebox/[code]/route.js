@@ -9,6 +9,9 @@
  *            Chaque titre porte `ahead` (titres avant lui) ; `total` = taille
  *            de la file complète. `playback` (position de la régie, horodatée
  *            par le serveur) + `serverTime` : synchronisation de l'écran.
+ *            Blind test en cours (`blind`) : tant que la réponse n'est pas
+ *            dévoilée, le public ne voit ni le titre en cours (now.hidden)
+ *            ni la file ; classement et réponses de l'invité.
  * - POST   : ajout d'un titre { participantId, author, videoId | deezerId, dedication? }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). Placement
  *            en file équitable (alternance des invités) si la régie l'a choisi. La régie
@@ -18,6 +21,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
+import { sessionBlind, blindView } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,8 +53,14 @@ export async function GET(req, { params }) {
       if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
       else if (!session.guestQueue) list = list.filter((t) => t.mine);
     }
-    const nowOut = now ? trackOut(now, me) : null;
+    let nowOut = now ? trackOut(now, me) : null;
     if (!admin) hideAuthors(nowOut, list, now, session.authorReveal);
+    const blind = sessionBlind(s);
+    const blindOut = blind?.on ? await blindView(s, blind, now, { admin, pid: me }) : null;
+    if (blindOut && !admin) {
+      list = []; // la file trahirait les prochains titres
+      if (nowOut && !blindOut.revealed) nowOut = { id: nowOut.id, hidden: true, duration: nowOut.duration };
+    }
     const out = {
       session,
       now: nowOut,
@@ -59,6 +69,7 @@ export async function GET(req, { params }) {
       pending: me ? queue.filter((r) => r.participant_id === me).length : 0,
       playback: s.playback || null,
       serverTime: Date.now(),
+      blind: blindOut,
     };
     if (admin) {
       out.admin = true;
@@ -89,6 +100,7 @@ export async function POST(req, { params }) {
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
     const admin = isAdminReq(req, s);
     if (!admin && s.status !== "open") return Response.json({ error: "Les ajouts de titres sont bloqués pour le moment." }, { status: 403 });
+    if (!admin && sessionBlind(s)?.on) return Response.json({ error: "Blind test en cours : les ajouts reprendront après." }, { status: 403 });
     if (!admin && !author) return Response.json({ error: "Merci d'indiquer votre prénom." }, { status: 400 });
 
     const sb = getSupabaseAdmin();

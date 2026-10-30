@@ -10,6 +10,8 @@ import Link from "next/link";
 import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
+import { MAX_ANSWER_LEN } from "@/lib/jukeboxBlind";
+import { Leaderboard } from "./Blind";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
@@ -23,6 +25,9 @@ export default function Participant({ code }) {
   const [flash, setFlash] = useState("");
   const [dedication, setDedication] = useState("");
   const [picked, setPicked] = useState(null); // titre choisi, en attente de sa dédicace
+  const [answer, setAnswer] = useState(""); // blind test
+  const [verdict, setVerdict] = useState(null); // { ok, text }
+  const [sending, setSending] = useState(false);
   const pid = useRef(null);
 
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
@@ -92,6 +97,34 @@ export default function Participant({ code }) {
     }
   };
 
+  const sendAnswer = async (e) => {
+    e.preventDefault();
+    if (!answer.trim() || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/jukebox/${code}/answer`, {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ participantId: pid.current, author: name, answer }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Réponse non enregistrée.");
+      const found = [d.newArtist && "l'artiste", d.newTitle && "le titre"].filter(Boolean);
+      setVerdict(found.length
+        ? { ok: true, text: `🎯 Bravo, vous avez trouvé ${found.join(" et ")} ! +${d.gained} pts` }
+        : { ok: false, text: `Raté… ${d.attemptsLeft > 0 ? `encore ${d.attemptsLeft} essai${d.attemptsLeft > 1 ? "s" : ""}` : "plus d'essai pour ce titre"}` });
+      setAnswer("");
+      refresh();
+    } catch (err) {
+      setVerdict({ ok: false, text: err.message });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // nouveau titre : on efface le verdict du précédent
+  const nowId = data?.now?.id;
+  useEffect(() => { setVerdict(null); }, [nowId]);
+
   const withdraw = async (t) => {
     if (!confirm(`Retirer « ${t.title} » de la file ?`)) return;
     await fetch(`/api/jukebox/${code}`, {
@@ -141,6 +174,9 @@ export default function Participant({ code }) {
               C'est parti
             </button>
           </form>
+        ) : data.blind?.on && !admin ? (
+          <BlindGuest blind={data.blind} now={now} name={name} answer={answer} setAnswer={setAnswer}
+            onSubmit={sendAnswer} sending={sending} verdict={verdict} />
         ) : !open && !admin ? (
           <p className="text-center bg-gray-100 text-gray-600 rounded-2xl py-4 font-medium">🔒 Les ajouts de titres sont bloqués pour le moment.</p>
         ) : full ? (
@@ -198,7 +234,9 @@ export default function Participant({ code }) {
       </div>
 
       <div className="mt-5 bg-white/95 rounded-3xl p-6 shadow-xl">
-        {now ? (
+        {now?.hidden ? (
+          <p className="text-sm text-gray-500 mb-4">🤫 Titre mystère en cours…</p>
+        ) : now ? (
           <div className="flex items-center gap-3 mb-4">
             {now.thumb && <img src={now.thumb} alt="" className="w-24 h-[54px] object-cover rounded-lg shrink-0" />}
             <div className="min-w-0">
@@ -240,7 +278,7 @@ export default function Participant({ code }) {
         ) : (<>
         <h2 className="font-bold text-gray-900 mb-2">À suivre {queue.length > 0 && <span className="text-gray-400 font-normal">({queue.length})</span>}</h2>
         {queue.length === 0 ? (
-          <p className="text-sm text-gray-500">La file est vide : proposez un titre !</p>
+          <p className="text-sm text-gray-500">{data.blind?.on ? "Surprise… 🤫" : "La file est vide : proposez un titre !"}</p>
         ) : (
           <ol className="space-y-2">
             {queue.map((t, i) => (
@@ -287,6 +325,57 @@ export default function Participant({ code }) {
         </div>
       )}
     </Shell>
+  );
+}
+
+/* Blind test, côté invité : saisie de la réponse (mode téléphone), points,
+ * classement. */
+function BlindGuest({ blind, now, name, answer, setAnswer, onSubmit, sending, verdict }) {
+  const phone = blind.mode === "phone";
+  const round = blind.me?.round;
+  const done = round?.artist && round?.title;
+  return (
+    <div className="space-y-4">
+      <p className="text-center font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-3">🕵️ Blind test en cours !</p>
+      {!now ? (
+        <p className="text-center text-gray-500">Le prochain titre arrive…</p>
+      ) : now.hidden ? (
+        phone ? (
+          done ? (
+            <p className="text-center text-green-600 font-semibold">🎯 Artiste et titre trouvés ! Attendez la réponse…</p>
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-2">
+              <p className="text-gray-600 text-sm">
+                Artiste, titre… ou les deux ! {round?.artist ? "✓ Artiste trouvé, il reste le titre." : round?.title ? "✓ Titre trouvé, il reste l'artiste." : ""}
+              </p>
+              <div className="flex gap-2">
+                <input value={answer} onChange={(e) => setAnswer(e.target.value)} maxLength={MAX_ANSWER_LEN} autoComplete="off" enterKeyHint="send"
+                  placeholder="Votre réponse" className="flex-1 min-w-0 text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-[var(--jb-accent)] outline-none" />
+                <button disabled={sending || !answer.trim()} className="shrink-0 bg-[var(--jb-accent)] hover:brightness-110 disabled:opacity-40 text-white font-bold px-5 rounded-2xl">
+                  {sending ? "…" : "OK"}
+                </button>
+              </div>
+            </form>
+          )
+        ) : (
+          <p className="text-center text-gray-600">À vous de deviner ! La réponse arrive sur l'écran.</p>
+        )
+      ) : (
+        <p className="text-center text-gray-600">
+          C'était <b>{now.title}</b>{now.channel ? <> — {now.channel}</> : null}
+          {phone && round && (round.artist || round.title) ? <span className="block text-green-600 font-semibold mt-1">+{round.points} pts pour vous !</span> : null}
+        </p>
+      )}
+      {verdict && <p className={`text-center text-sm font-semibold ${verdict.ok ? "text-green-600" : "text-gray-500"}`}>{verdict.text}</p>}
+      {phone && (
+        <div className="bg-gray-50 rounded-2xl p-4">
+          <p className="text-sm text-gray-600 mb-2">
+            {name} : <b className="text-gray-900">{blind.me?.points || 0} pts</b>{blind.me?.rank ? ` · ${blind.me.rank}${blind.me.rank === 1 ? "er" : "e"}` : ""}
+          </p>
+          <Leaderboard top={blind.top} light />
+        </div>
+      )}
+    </div>
   );
 }
 

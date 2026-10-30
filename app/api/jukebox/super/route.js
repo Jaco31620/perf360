@@ -11,15 +11,16 @@
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
+ *     blindSong { key, blind } → titre utilisable par le blind test automatique
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
- *     prefill { lines?, chart?, modes[] } → titres à pré-chercher (cron de 6 h)
+ *     prefill { lines?, chart?, modes[], blind? } → titres à pré-chercher (cron de 6 h)
  *     clearPrefill → vider la file de pré-remplissage
  *     password { current, next } → changer le mot de passe super-admin
  *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
 import { prefillState, prefillFromLines, prefillFromChart, clearPrefill } from "@/lib/jukeboxPrefill";
@@ -69,11 +70,14 @@ export async function POST(req) {
         if (err) return Response.json({ error: err }, { status: 422 });
         return Response.json({ ok: true });
       }
+      case "blindSong":
+        await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
       case "validateSong":
         await validateSong(body.key, body.validated);
         return Response.json({ ok: true });
       case "prefill":
-        return Response.json({ ok: true, ...(body.chart ? await prefillFromChart(body.modes) : await prefillFromLines(body.lines, body.modes)) });
+        return Response.json({ ok: true, ...(body.chart ? await prefillFromChart(body.modes, !!body.blind) : await prefillFromLines(body.lines, body.modes, !!body.blind)) });
       case "clearPrefill":
         await clearPrefill();
         return Response.json({ ok: true });

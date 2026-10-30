@@ -377,7 +377,7 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["ok", "Validés"], ["all", "Tous"]];
+const STATUS_FILTERS = [["todo", "À vérifier"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
 const MODE_TAG = {
   normal: "bg-sky-100 text-sky-700",
   paroles: "bg-amber-100 text-amber-700",
@@ -453,7 +453,7 @@ function SongMemory({ call, total }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
@@ -466,6 +466,11 @@ function SongMemory({ call, total }) {
                       {s.validated
                         ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ Validé</span>
                         : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">À vérifier</span>}
+                      <button onClick={() => run({ action: "blindSong", key: s.key, blind: !s.blind })}
+                        title={s.blind ? "Retirer du blind test automatique" : "Utiliser dans le blind test automatique"}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        🕵️ Blind test{s.blind ? "" : " ?"}
+                      </button>
                       <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
                     </div>
                   </div>
@@ -504,6 +509,7 @@ function Prefill({ call, state, onChanged }) {
   const [open, setOpen] = useState(false);
   const [lines, setLines] = useState("");
   const [modes, setModes] = useState(["normal"]);
+  const [blind, setBlind] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -512,7 +518,7 @@ function Prefill({ call, state, onChanged }) {
     setBusy(true);
     setMsg(null);
     try {
-      const d = await call("POST", { action: "prefill", modes, ...body });
+      const d = await call("POST", { action: "prefill", modes, blind, ...body });
       setMsg({ ok: true, text: `${d.added} ajouté${d.added > 1 ? "s" : ""} à la file${d.skipped ? `, ${d.skipped} déjà en mémoire ou en attente` : ""}.`, notFound: d.notFound });
       if (!body.chart) setLines("");
       onChanged();
@@ -552,6 +558,10 @@ function Prefill({ call, state, onChanged }) {
               </button>
             ))}
           </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="w-4 h-4 accent-violet-600" />
+            <span>Marquer ces titres <b>🕵️ Blind test</b> (pioche automatique ; mode Normale conseillé, les paroles trahiraient le titre)</span>
+          </label>
           <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={6}
             placeholder={"Un titre par ligne, par exemple :\nQueen - Bohemian Rhapsody\nAngèle - Balance ton quoi"}
             className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:border-fuchsia-500 outline-none" />

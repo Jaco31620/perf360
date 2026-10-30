@@ -98,3 +98,29 @@ alter table public.jukebox_songs
 -- v9 (30/10/2026) : vidéos validées à la main (super-admin / régie).
 alter table public.jukebox_songs
   add column if not exists validated boolean not null default false;
+
+-- v10 (31/10/2026) : blind test.
+-- Titres de la mémoire utilisables en blind test automatique.
+alter table public.jukebox_songs
+  add column if not exists blind boolean not null default false;
+-- Réponses des invités (une ligne par invité et par titre).
+create table if not exists public.jukebox_answers (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null
+    references public.jukebox_sessions(id)
+    on delete cascade,
+  track_id uuid not null,
+  participant_id text not null,
+  author text not null,
+  artist_ok boolean not null default false,
+  title_ok boolean not null default false,
+  points int not null default 0,
+  attempts int not null default 0,
+  last_answer text,
+  created_at timestamptz not null default now(),
+  unique (track_id, participant_id)
+);
+create index if not exists jukebox_answers_session_idx
+  on public.jukebox_answers(session_id);
+alter table public.jukebox_answers enable row level security;
+grant all on public.jukebox_answers to service_role;
