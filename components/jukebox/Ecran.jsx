@@ -160,7 +160,7 @@ export default function Ecran({ code }) {
   const since = (Date.now() - data.fetchedAt) / 1000;
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
-  const cover = now ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
+  const cover = now && !hidden ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
 
   return (
     <div className="relative h-screen overflow-hidden bg-gray-950 text-white select-none" style={themeVars(theme)}>
@@ -186,7 +186,7 @@ export default function Ecran({ code }) {
           </div>
           {hidden ? (
             <div className="text-center py-[4vh]">
-              <p className="text-[9vw] leading-none animate-pulse">🕵️</p>
+              <p className="text-[9vw] leading-none">🕵️</p>
               <h1 className="mt-[3vh] text-[4.5vw] font-black leading-tight">Quel est ce titre ?</h1>
               <p className="mt-[1.5vh] text-[2vw] text-white/80">
                 {blind?.mode === "phone" ? "Répondez sur votre téléphone : artiste, titre… ou les deux !" : "À vous de deviner !"}

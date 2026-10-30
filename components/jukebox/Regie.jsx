@@ -391,7 +391,7 @@ export default function Regie({ code }) {
           <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
             {[0, 1].map((i) => (
               <div key={i} ref={playerEls[i]}
-                className={`absolute transition-opacity duration-1000 ${started && masked ? "right-2 top-2 w-[356px] h-[200px] rounded-lg overflow-hidden" : "inset-0"} ${i === activeIdx ? `opacity-100 ${started && masked ? "z-30" : "z-10"}` : "opacity-0 pointer-events-none"}`} />
+                className={`absolute inset-0 transition-opacity duration-1000 ${i === activeIdx ? "opacity-100 z-10" : "opacity-0 pointer-events-none"}`} />
             ))}
             {!started && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 text-center px-6">
@@ -405,11 +405,10 @@ export default function Regie({ code }) {
               </div>
             )}
             {started && masked && (
-              // Miniature en haut à droite, jamais sous 356×200 (en dessous, ou
-              // entièrement recouvert, le lecteur YouTube peut rester bloqué).
-              <div className="absolute inset-0 z-20 flex flex-col items-start justify-end gap-1 bg-gray-950 p-3 text-sm">
-                <p className="text-white/70">🕵️ Blind test : écran masqué jusqu'à la réponse.</p>
-                <button onClick={() => setPeek(now.id)} className="text-white/50 underline">Afficher en grand (régie)</button>
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-950 text-center px-6">
+                <p className="text-5xl">🕵️</p>
+                <p className="text-white/70">Blind test : vidéo masquée jusqu'à la réponse.</p>
+                <button onClick={() => setPeek(now.id)} className="text-sm text-white/50 underline">Afficher quand même (régie)</button>
               </div>
             )}
             {started && !now && (
