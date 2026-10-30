@@ -203,6 +203,34 @@ export function VideoPicker({ code, track, onClose, onDone }) {
   );
 }
 
+/* Aperçu d'une vidéo YouTube dans la page (lecteur intégré, son compris). */
+export function VideoPreview({ videoId, onClose }) {
+  return (
+    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
+      <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`} title="Aperçu"
+        allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="absolute inset-0 w-full h-full" />
+      {onClose && (
+        <button onClick={onClose} aria-label="Fermer l'aperçu"
+          className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5"><X size={16} /></button>
+      )}
+    </div>
+  );
+}
+
+/* Miniature cliquable : lance l'aperçu. */
+export function PreviewThumb({ videoId, src, active, onClick, className = "w-24" }) {
+  return (
+    <button type="button" onClick={onClick} title="Aperçu" className={`relative shrink-0 group ${className}`}>
+      <img src={src || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`} alt="" className="w-full aspect-video object-cover rounded-lg" />
+      <span className={`absolute inset-0 flex items-center justify-center rounded-lg transition ${active ? "bg-black/50" : "bg-black/0 group-hover:bg-black/40"}`}>
+        <span className={`rounded-full bg-white/90 text-gray-900 p-1.5 transition ${active ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+          <Play size={14} fill="currentColor" strokeWidth={0} />
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /* Fenêtre générique : load() → { current, candidates } ; choose(videoId). */
 export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone }) {
   const [list, setList] = useState(null);
@@ -210,6 +238,7 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [link, setLink] = useState("");
+  const [preview, setPreview] = useState(null); // vidéo en aperçu
 
   useEffect(() => {
     load()
@@ -246,7 +275,8 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
           </div>
           <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
         </div>
-        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre et sera retenue pour les prochaines soirées.</p>
+        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre et sera retenue pour les prochaines soirées. Cliquez une miniature pour l'écouter.</p>
+        {preview && <VideoPreview videoId={preview} onClose={() => setPreview(null)} />}
 
         {list === null ? (
           <p className="text-white/60 text-sm py-4 text-center">Recherche des autres versions…</p>
@@ -254,7 +284,7 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
           <ul className="space-y-2">
             {list.map((v) => (
               <li key={v.id} className={`flex items-center gap-3 rounded-xl p-2 ${v.id === current ? "bg-fuchsia-600/20 ring-1 ring-fuchsia-500/50" : "bg-white/5"}`}>
-                <img src={v.thumb || `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`} alt="" className="w-24 aspect-video object-cover rounded-lg shrink-0" />
+                <PreviewThumb videoId={v.id} src={v.thumb} active={preview === v.id} onClick={() => setPreview(preview === v.id ? null : v.id)} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold leading-snug line-clamp-2">{v.title}</p>
                   <p className="text-xs text-white/50 truncate">{v.channel} · {formatDuration(v.duration)}</p>
@@ -278,6 +308,8 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
         <div className="flex gap-2">
           <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="… ou collez un lien YouTube"
             className="flex-1 min-w-0 bg-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-fuchsia-500" />
+          <button onClick={() => linkId && setPreview(linkId)} disabled={!linkId}
+            className="shrink-0 bg-white/10 hover:bg-white/20 disabled:opacity-30 text-sm font-bold px-3 rounded-xl">Écouter</button>
           <button onClick={() => linkId && choose(linkId)} disabled={!linkId || !!busy}
             className="shrink-0 bg-white/15 hover:bg-white/25 disabled:opacity-30 text-sm font-bold px-3 rounded-xl">
             {busy && busy === linkId ? "…" : "Utiliser"}

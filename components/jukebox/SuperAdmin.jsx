@@ -10,7 +10,7 @@ import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
-import { VideoChooser } from "./Controls";
+import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
 import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
@@ -300,6 +300,7 @@ function SongMemory({ call, total }) {
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
   const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
+  const [preview, setPreview] = useState(null); // clé du titre en aperçu
 
   const load = useCallback(async () => {
     try {
@@ -336,7 +337,7 @@ function SongMemory({ call, total }) {
       {open && (
         <div className="px-5 pb-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour la voir). <b>Valider</b> confirme
+            Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
             qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre (validée d'office, comme « Mauvaise vidéo ? » en régie) ;
             <b> Oublier</b> la fera rechercher à nouveau au prochain ajout.
           </p>
@@ -364,9 +365,7 @@ function SongMemory({ call, total }) {
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
                 <li key={s.key} className="flex flex-wrap items-center gap-3 py-2.5">
-                  <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer" className="shrink-0" title="Voir la vidéo sur YouTube">
-                    <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="w-24 aspect-video object-cover rounded-lg" />
-                  </a>
+                  <PreviewThumb videoId={s.videoId} active={preview === s.key} onClick={() => setPreview(preview === s.key ? null : s.key)} />
                   <div className="flex-1 min-w-[160px]">
                     <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -386,9 +385,14 @@ function SongMemory({ call, total }) {
                         className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">✓ Valider</button>
                     )}
                     <button onClick={() => setFixing(s)} className="text-xs font-bold bg-gray-100 px-3 py-1.5 rounded-full">Changer la vidéo</button>
+                    <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer"
+                      className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">YouTube ↗</a>
                     <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)}
                       className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
                   </div>
+                  {preview === s.key && (
+                    <div className="w-full max-w-xl"><VideoPreview videoId={s.videoId} onClose={() => setPreview(null)} /></div>
+                  )}
                 </li>
               ))}
             </ul>
