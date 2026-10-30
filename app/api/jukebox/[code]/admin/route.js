@@ -23,6 +23,8 @@
  *                            cours) et corriger la mémoire des titres
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (titre en cours compris ; l'historique reste)
+ *   theme { palette?, title?, message? } → thème de la soirée (fonction « thème »)
+ *   logo { dataUrl | null } → logo du thème (image ≤ 400 Ko, en data URL)
  *   history                → titres joués (fonction « historique »)
  *   replay { id }          → remettre un titre joué en fin de file
  *   clearHistory           → effacer l'historique
@@ -30,7 +32,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax, normalizeMode } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 
@@ -160,6 +162,29 @@ export async function POST(req, { params }) {
       case "reset":
         res = await tracks().delete().eq("session_id", s.id).in("status", ["queued", "playing"]);
         break;
+      case "theme":
+      case "logo": {
+        if (!publicSession(s).features.theme) return Response.json({ error: "Thème non activé pour cette soirée." }, { status: 403 });
+        const theme = normalizeTheme(s.options?.theme);
+        if (body.action === "theme") {
+          for (const k of ["palette", "title", "message"]) if (k in body) theme[k] = body[k];
+        } else {
+          const key = `logo:${s.id}`;
+          if (body.dataUrl) {
+            const url = String(body.dataUrl);
+            if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.length * 0.75 > MAX_LOGO_BYTES)
+              return Response.json({ error: "Image invalide ou trop lourde." }, { status: 400 });
+            const { error } = await sb.from("jukebox_config").upsert({ key, value: url });
+            if (error) throw error;
+            theme.logo = Date.now();
+          } else {
+            await sb.from("jukebox_config").delete().eq("key", key);
+            theme.logo = null;
+          }
+        }
+        res = await update({ options: { ...(s.options || {}), theme: normalizeTheme(theme) } });
+        break;
+      }
       case "history":
       case "replay":
       case "clearHistory": {

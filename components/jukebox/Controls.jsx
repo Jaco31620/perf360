@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
 import { authHeaders } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export function Settings({ session, act }) {
   const open = session.status === "open";
@@ -60,7 +60,81 @@ export function Settings({ session, act }) {
       <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
       <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
         hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
+      {session.theme && <ThemeSettings code={session.code} theme={session.theme} act={act} />}
     </>
+  );
+}
+
+/* Image choisie → data URL réduite (512 px max, WebP) pour le logo du thème. */
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 512 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      let url = c.toDataURL("image/webp", 0.85);
+      if (!url.startsWith("data:image/webp")) url = c.toDataURL("image/png"); // navigateur sans WebP
+      resolve(url);
+    };
+    img.onerror = () => reject(new Error("Image illisible."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* Thème de la soirée (si le super-admin l'a activé) : ambiance, titre,
+ * message d'accueil, logo. */
+export function ThemeSettings({ code, theme, act }) {
+  const [title, setTitle] = useState(theme.title);
+  const [message, setMessage] = useState(theme.message);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setTitle(theme.title); setMessage(theme.message); }, [theme.title, theme.message]);
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    try {
+      const dataUrl = await shrinkImage(file);
+      if (dataUrl.length * 0.75 > MAX_LOGO_BYTES) throw new Error("Image trop lourde, même réduite.");
+      await act("logo", { dataUrl });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const field = "w-full bg-gray-900 border border-white/20 rounded-lg px-2.5 py-1.5";
+
+  return (
+    <div className="space-y-2.5 pt-3 border-t border-white/10">
+      <p className="font-bold">🎨 Thème de la soirée</p>
+      <div className="grid grid-cols-3 gap-1.5">
+        {THEMES.map((t) => (
+          <button key={t.id} onClick={() => t.id !== theme.palette && act("theme", { palette: t.id })}
+            className={`rounded-lg py-2 text-xs font-bold text-white ring-2 ${t.id === theme.palette ? "ring-white" : "ring-transparent opacity-70 hover:opacity-100"}`}
+            style={{ background: t.guestBg }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => title !== theme.title && act("theme", { title })}
+        maxLength={MAX_THEME_TITLE_LEN} placeholder="Titre affiché (sinon le nom de la soirée)" className={field} />
+      <textarea value={message} onChange={(e) => setMessage(e.target.value)} onBlur={() => message !== theme.message && act("theme", { message })}
+        maxLength={MAX_THEME_MESSAGE_LEN} rows={2} placeholder="Message d'accueil (écran et invités)" className={`${field} resize-none`} />
+      <div className="flex items-center gap-3">
+        {theme.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="Logo" className="h-10 max-w-[96px] object-contain rounded bg-white/10" />}
+        <label className={`font-bold bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 cursor-pointer ${busy ? "opacity-40 pointer-events-none" : ""}`}>
+          {busy ? "Envoi…" : theme.logo ? "Changer le logo" : "Ajouter un logo"}
+          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={upload} className="hidden" />
+        </label>
+        {theme.logo && <button onClick={() => confirm("Retirer le logo ?") && act("logo", { dataUrl: null })} className="text-white/50 hover:text-red-400">Retirer</button>}
+      </div>
+    </div>
   );
 }
 

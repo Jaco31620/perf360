@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
 import { formatCode } from "./storage";
+import { themeVars } from "@/lib/jukebox";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 
 const MAX_SHOWN = 6;
@@ -153,20 +154,27 @@ export default function Ecran({ code }) {
   if (!data) return <Center>Chargement…</Center>;
 
   const { session, now, queue, total } = data;
+  const theme = session.theme;
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
   const cover = now ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
 
   return (
-    <div className="relative h-screen overflow-hidden bg-gray-950 text-white select-none">
+    <div className="relative h-screen overflow-hidden bg-gray-950 text-white select-none" style={themeVars(theme)}>
       {cover && (
         <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-3xl opacity-40" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-900/40 via-transparent to-indigo-950/70" />
+      <div className="absolute inset-0" style={{ background: "var(--jb-screen-bg)" }} />
 
       <div className="relative h-full flex flex-col lg:flex-row gap-[3vw] p-[3vw]">
         <main className="flex-1 min-w-0 flex flex-col justify-center">
-          <p className="text-[1.4vw] font-bold tracking-[0.2em] uppercase text-white/60 mb-[1.5vh]">{session.name}</p>
+          <div className="flex items-center gap-[1.2vw] mb-[1.5vh]">
+            {theme?.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="" className="h-[7vh] max-w-[14vw] object-contain shrink-0" />}
+            <div className="min-w-0">
+              <p className="text-[1.4vw] font-bold tracking-[0.2em] uppercase text-white/70 truncate">{theme?.title || session.name}</p>
+              {theme?.message && <p className="text-[1.2vw] text-white/70 line-clamp-2">{theme.message}</p>}
+            </div>
+          </div>
           {/* toujours monté (sinon le lecteur serait détruit), invisible sans titre */}
           <div className={now ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
             style={now ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
@@ -175,7 +183,7 @@ export default function Ecran({ code }) {
           </div>
           {now ? (
             <>
-              <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-fuchsia-300"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
+              <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-[var(--jb-light)]"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
               {now.author ? (
                 <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
@@ -186,7 +194,7 @@ export default function Ecran({ code }) {
                   </span>
                 </p>
               ) : null}
-              {now.dedication && <p className="mt-[1vh] text-[1.7vw] italic text-fuchsia-200 line-clamp-2">💌 « {now.dedication} »</p>}
+              {now.dedication && <p className="mt-[1vh] text-[1.7vw] italic text-[var(--jb-light)] line-clamp-2">💌 « {now.dedication} »</p>}
             </>
           ) : (
             <>
@@ -218,12 +226,12 @@ export default function Ecran({ code }) {
                 <ol className="space-y-[1.2vh]">
                   {queue.slice(0, MAX_SHOWN).map((t, i) => (
                     <li key={t.id} className="flex items-center gap-[1vw]">
-                      <span className="w-[2vw] text-right text-[1.4vw] font-black text-fuchsia-300 shrink-0">{i + 1}</span>
+                      <span className="w-[2vw] text-right text-[1.4vw] font-black text-[var(--jb-light)] shrink-0">{i + 1}</span>
                       {t.thumb && <img src={t.thumb} alt="" className="w-[5vw] aspect-video object-cover rounded-[0.4vw] shrink-0" />}
                       <div className="min-w-0">
                         <p className="text-[1.15vw] font-semibold truncate">{t.title}</p>
                         {t.author && <p className="text-[0.95vw] text-white/60 truncate">{t.author}</p>}
-                        {t.dedication && <p className="text-[0.95vw] text-fuchsia-200 italic truncate">💌 « {t.dedication} »</p>}
+                        {t.dedication && <p className="text-[0.95vw] text-[var(--jb-light)] italic truncate">💌 « {t.dedication} »</p>}
                       </div>
                     </li>
                   ))}

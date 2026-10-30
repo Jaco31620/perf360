@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
-import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration } from "@/lib/jukebox";
+import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
@@ -109,7 +109,7 @@ export default function Participant({ code }) {
           <p className="text-4xl mb-3">🤔</p>
           <h1 className="text-xl font-bold text-gray-900 mb-2">Soirée introuvable</h1>
           <p className="text-gray-500 mb-6">Le code {formatCode(code)} ne correspond à aucune soirée.</p>
-          <Link href="/jukebox" className="inline-block bg-fuchsia-600 text-white font-bold px-6 py-3 rounded-full">Saisir un autre code</Link>
+          <Link href="/jukebox" className="inline-block bg-[var(--jb-accent)] text-white font-bold px-6 py-3 rounded-full">Saisir un autre code</Link>
         </div>
       </Shell>
     );
@@ -121,20 +121,23 @@ export default function Participant({ code }) {
   const full = !admin && pending >= limit;
   const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId)]);
 
+  const theme = session.theme;
   return (
-    <Shell>
+    <Shell theme={theme}>
       <div className="bg-white rounded-3xl p-6 shadow-xl">
+        {theme?.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="" className="max-h-24 max-w-[70%] object-contain mx-auto mb-4" />}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Jukebox · {formatCode(code)}</p>
-        <h1 className="text-2xl font-extrabold text-gray-900 leading-tight mb-5">{session.name}</h1>
+        <h1 className={`text-2xl font-extrabold text-gray-900 leading-tight ${theme?.message ? "mb-1" : "mb-5"}`}>{theme?.title || session.name}</h1>
+        {theme?.message && <p className="text-gray-600 whitespace-pre-line mb-5">{theme.message}</p>}
 
         {!name && !admin ? (
           <form onSubmit={saveName} className="space-y-3">
             <p className="text-gray-600">Votre prénom, pour que l'on sache qui a mis ce titre :</p>
             <input autoFocus maxLength={MAX_AUTHOR_LEN} value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
               placeholder="Prénom" autoComplete="given-name" enterKeyHint="done"
-              className="w-full text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-fuchsia-500 outline-none" />
+              className="w-full text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-[var(--jb-accent)] outline-none" />
             <button disabled={!nameDraft.trim()}
-              className="w-full bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-white font-bold py-3 rounded-full">
+              className="w-full bg-[var(--jb-accent)] hover:brightness-110 disabled:opacity-40 text-white font-bold py-3 rounded-full">
               C'est parti
             </button>
           </form>
@@ -147,16 +150,16 @@ export default function Participant({ code }) {
         ) : (
           <>
             {session.searchMode !== "normal" && (
-              <p className="text-sm font-semibold text-fuchsia-700 bg-fuchsia-50 rounded-xl px-3 py-2 mb-3">
+              <p className="text-sm font-semibold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl px-3 py-2 mb-3">
                 {session.searchMode === "karaoke" ? "🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké." : "📝 La recherche propose en priorité les versions avec les paroles à l'écran."}
               </p>
             )}
             <form onSubmit={search} className="flex gap-2">
               <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} enterKeyHint="search"
                 placeholder="Artiste, titre… ou lien YouTube" autoComplete="off"
-                className="flex-1 min-w-0 text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-fuchsia-500 outline-none" />
+                className="flex-1 min-w-0 text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-[var(--jb-accent)] outline-none" />
               <button disabled={searching || q.trim().length < 2}
-                className="shrink-0 bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-white font-bold px-5 rounded-2xl">
+                className="shrink-0 bg-[var(--jb-accent)] hover:brightness-110 disabled:opacity-40 text-white font-bold px-5 rounded-2xl">
                 {searching ? "…" : "🔍"}
               </button>
             </form>
@@ -179,7 +182,7 @@ export default function Participant({ code }) {
                       <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
                     ) : (
                       <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding}
-                        className="shrink-0 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
+                        className="shrink-0 bg-[var(--jb-accent2)] hover:brightness-110 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
                         {adding === v.id ? "…" : "+ Ajouter"}
                       </button>
                     )}
@@ -199,14 +202,14 @@ export default function Participant({ code }) {
           <div className="flex items-center gap-3 mb-4">
             {now.thumb && <img src={now.thumb} alt="" className="w-24 h-[54px] object-cover rounded-lg shrink-0" />}
             <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-600 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment</p>
+              <p className="flex items-center gap-1.5 text-xs font-bold text-[var(--jb-accent)] uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment</p>
               <p className="font-bold text-gray-900 leading-snug line-clamp-2">{now.title}</p>
               {now.mine || now.author ? (
                 <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>
               ) : now.revealIn ? (
                 <p className="text-xs text-gray-500">🤫 Qui l'a choisi ? Réponse dans quelques instants…</p>
               ) : null}
-              {now.dedication && <p className="text-sm text-fuchsia-700 italic mt-0.5">💌 « {now.dedication} »</p>}
+              {now.dedication && <p className="text-sm text-[var(--jb-accent)] italic mt-0.5">💌 « {now.dedication} »</p>}
             </div>
           </div>
         ) : (
@@ -221,10 +224,10 @@ export default function Participant({ code }) {
             ) : (
               <ul className="space-y-2">
                 {queue.map((t) => (
-                  <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 bg-fuchsia-50">
+                  <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 bg-[var(--jb-soft)]">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
-                      <p className="text-xs font-semibold text-fuchsia-700">
+                      <p className="text-xs font-semibold text-[var(--jb-accent)]">
                         {t.ahead === 0 ? "🔜 C'est le prochain !" : `${t.ahead} titre${t.ahead > 1 ? "s" : ""} avant le vôtre`}
                       </p>
                     </div>
@@ -241,12 +244,12 @@ export default function Participant({ code }) {
         ) : (
           <ol className="space-y-2">
             {queue.map((t, i) => (
-              <li key={t.id} className={`flex items-center gap-3 rounded-xl px-2 py-1.5 ${t.mine ? "bg-fuchsia-50" : ""}`}>
+              <li key={t.id} className={`flex items-center gap-3 rounded-xl px-2 py-1.5 ${t.mine ? "bg-[var(--jb-soft)]" : ""}`}>
                 <span className="w-5 text-right text-sm font-bold text-gray-400 shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
                   {(t.mine || t.author) && <p className="text-xs text-gray-500">{t.mine ? "vous" : t.author}</p>}
-                  {t.dedication && <p className="text-xs text-fuchsia-700 italic truncate">💌 « {t.dedication} »</p>}
+                  {t.dedication && <p className="text-xs text-[var(--jb-accent)] italic truncate">💌 « {t.dedication} »</p>}
                 </div>
                 {t.mine && <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>}
               </li>
@@ -269,14 +272,14 @@ export default function Participant({ code }) {
             <div>
               <textarea autoFocus rows={2} value={dedication} onChange={(e) => setDedication(e.target.value)} maxLength={MAX_DEDICATION_LEN}
                 placeholder="💌 Une dédicace ? (facultatif)"
-                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-fuchsia-500 outline-none resize-none" />
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-[var(--jb-accent)] outline-none resize-none" />
               <p className="text-xs text-gray-400 text-right">{dedication.length}/{MAX_DEDICATION_LEN}</p>
             </div>
             {error && <p className="text-center text-red-600 text-sm">{error}</p>}
             <div className="flex gap-2">
               <button type="button" onClick={() => setPicked(null)} disabled={!!adding}
                 className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-full">Annuler</button>
-              <button disabled={!!adding} className="flex-[2] bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-3 rounded-full">
+              <button disabled={!!adding} className="flex-[2] bg-[var(--jb-accent2)] hover:brightness-110 disabled:opacity-40 text-white font-bold py-3 rounded-full">
                 {adding ? "Ajout…" : "Ajouter à la file"}
               </button>
             </div>
@@ -287,9 +290,9 @@ export default function Participant({ code }) {
   );
 }
 
-function Shell({ children }) {
+function Shell({ theme, children }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-fuchsia-600 via-purple-700 to-indigo-900 px-4 py-8">
+    <div className="min-h-screen px-4 py-8" style={{ ...themeVars(theme), background: "var(--jb-guest-bg)" }}>
       <div className="max-w-md mx-auto">{children}</div>
     </div>
   );
