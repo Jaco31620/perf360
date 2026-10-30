@@ -3,7 +3,7 @@
  * Body : { action, ... }
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
- *   karaoke { on }         → versions karaoké en priorité dans la recherche
+ *   searchMode { mode }    → recherche normale | paroles | karaoke
  *   options { screenQueue?, guestQueue? } → file visible sur l'écran / chez les invités
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
@@ -16,7 +16,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, checkToken } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeMode } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 
@@ -50,8 +50,8 @@ export async function POST(req, { params }) {
       case "max":
         res = await update({ max_per_participant: normalizeMax(body.max) });
         break;
-      case "karaoke":
-        res = await update({ karaoke: !!body.on });
+      case "searchMode":
+        res = await update({ options: { ...(s.options || {}), searchMode: normalizeMode(body.mode) }, karaoke: false });
         break;
       case "options": {
         const options = { ...(s.options || {}) };

@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { getAdminToken, setAdminToken, rememberParty, forgetParty, formatCode } from "./storage";
-import { MAX_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -268,7 +268,17 @@ export default function Regie({ code }) {
                 {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
               </select>
             </label>
-            <Toggle label="🎤 Titres karaoké en priorité" on={session.karaoke} onClick={() => act("karaoke", { on: !session.karaoke })} />
+            <div className="space-y-1.5">
+              <span className="text-white/70">🔎 Versions proposées</span>
+              <div className="flex bg-white/10 rounded-full p-0.5">
+                {SEARCH_MODES.map((m) => (
+                  <button key={m.id} onClick={() => m.id !== session.searchMode && act("searchMode", { mode: m.id })}
+                    className={`flex-1 px-2 py-1 rounded-full font-bold ${m.id === session.searchMode ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
             <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
               hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
