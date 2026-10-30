@@ -69,6 +69,7 @@ export default function Regie({ code }) {
       if (res.status === 404) return setMissing(true);
       if (res.ok) {
         const d = await res.json();
+        d.fetchedAt = Date.now();
         setData(d);
         if (d.admin) rememberParty(code, d.session.name);
       }
@@ -257,13 +258,28 @@ export default function Regie({ code }) {
     return () => clearInterval(id);
   }, [started, ready, advance]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reprise après rechargement : le titre en cours repart là où la régie en
+  // était (dernière position envoyée, + temps écoulé s'il était en lecture).
+  const resumeAt = (d) => {
+    const pb = d.playback;
+    if (!pb || pb.id !== d.now.id) return 0;
+    const elapsed = pb.playing ? (d.serverTime - pb.at + (Date.now() - d.fetchedAt)) / 1000 : 0;
+    const pos = pb.pos + elapsed;
+    return d.now.duration && pos > d.now.duration - 3 ? 0 : Math.max(0, pos);
+  };
+
   const start = () => {
     setStarted(true);
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       loaded.current = data.now.id;
-      cur().loadVideoById(data.now.videoId);
+      cur().loadVideoById({ videoId: data.now.videoId, startSeconds: resumeAt(data) });
     }
+  };
+
+  const playNow = (t) => {
+    if (data.now && !confirm(`Lancer « ${t.title} » maintenant ?\nLe titre en cours sera interrompu.`)) return;
+    act("playnow", { id: t.id });
   };
 
   const togglePlay = () => (playing ? cur()?.pauseVideo() : cur()?.playVideo());
@@ -417,6 +433,8 @@ export default function Regie({ code }) {
                 {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
               </select>
             </label>
+            <Toggle label="⚖️ File équitable" on={session.fairQueue} onClick={() => act("options", { fairQueue: !session.fairQueue })}
+              hint={session.fairQueue ? "Les nouveaux titres alternent entre les invités." : "Les titres passent dans l'ordre d'arrivée."} />
             <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
             <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
               hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
@@ -442,6 +460,7 @@ export default function Regie({ code }) {
                       <p className="text-xs text-white/50 truncate">{t.author} · {formatDuration(t.duration)}</p>
                     </div>
                     <div className="flex shrink-0 text-white/50">
+                      <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}>▶</IconBtn>
                       <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}>⤒</IconBtn>
                       <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}>↑</IconBtn>
                       <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}>↓</IconBtn>

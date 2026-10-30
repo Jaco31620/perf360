@@ -4,7 +4,7 @@
  *   open | close           → ouvrir / fermer les propositions
  *   max { max }            → titres en attente par participant (0 = illimité)
  *   searchMode { mode }    → recherche normale | paroles | karaoke
- *   options { screenQueue?, guestQueue?, fade? } → file visible sur l'écran /
+ *   options { screenQueue?, guestQueue?, fairQueue?, fade? } → file visible sur l'écran /
  *                            chez les invités, durée du fondu enchaîné
  *   name { name }          → renommer la soirée
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
@@ -12,6 +12,8 @@
  *                            le cas, rien ne bouge (double appel, 2e onglet…)
  *   playback { id, pos, playing } → position de lecture de la régie (pour
  *                            l'écran d'affichage), horodatée par le serveur
+ *   playnow { id }         → lancer tout de suite un titre de la file (le titre
+ *                            en cours est interrompu)
  *   move { id, dir }       → up | down | top dans la file
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (et l'historique)
@@ -59,7 +61,7 @@ export async function POST(req, { params }) {
         break;
       case "options": {
         const options = { ...(s.options || {}) };
-        for (const k of ["screenQueue", "guestQueue"]) if (k in body) options[k] = !!body[k];
+        for (const k of ["screenQueue", "guestQueue", "fairQueue"]) if (k in body) options[k] = !!body[k];
         if ("fade" in body) options.fade = normalizeFade(body.fade);
         res = await update({ options });
         break;
@@ -88,6 +90,15 @@ export async function POST(req, { params }) {
         if (typeof body.id !== "string" || !Number.isFinite(pos) || pos < 0 || pos > 86400)
           return Response.json({ error: "Position invalide." }, { status: 400 });
         res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt } });
+        break;
+      }
+      case "playnow": {
+        const { data: t, error } = await tracks().select("id")
+          .eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued").maybeSingle();
+        if (error) throw error;
+        if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+        res = await tracks().update({ status: "skipped" }).eq("session_id", s.id).eq("status", "playing");
+        if (!res.error) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", t.id);
         break;
       }
       case "move": {

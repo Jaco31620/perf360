@@ -10,12 +10,13 @@
  *            de la file complète. `playback` (position de la régie, horodatée
  *            par le serveur) + `serverTime` : synchronisation de l'écran.
  * - POST   : ajout d'un titre { participantId, author, videoId }. Les infos
- *            sont relues chez YouTube (pas de confiance au client). La régie
+ *            sont relues chez YouTube (pas de confiance au client). Placement
+ *            en file équitable (alternance des invités) si la régie l'a choisi. La régie
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, fairPosition, trackOut, ytVideos, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -100,7 +101,8 @@ export async function POST(req, { params }) {
 
     const { error } = await sb.from("jukebox_tracks").insert({
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,
-      duration: v.duration, participant_id: pid, author: author || "Régie", position: Date.now(),
+      duration: v.duration, participant_id: pid, author: author || "Régie",
+      position: publicSession(s).fairQueue ? fairPosition(rows.filter((r) => r.status === "queued"), pid) : Date.now(),
     });
     if (error) throw error;
     return Response.json({ ok: true });
