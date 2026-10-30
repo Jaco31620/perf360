@@ -59,7 +59,10 @@ export async function GET(req, { params }) {
       playback: s.playback || null,
       serverTime: Date.now(),
     };
-    if (admin) out.admin = true;
+    if (admin) {
+      out.admin = true;
+      out.command = s.command || null; // dernier ordre de la télécommande
+    }
     return Response.json(out, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     console.error("jukebox GET:", e);

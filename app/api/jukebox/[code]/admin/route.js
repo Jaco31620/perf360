@@ -10,8 +10,10 @@
  *   next { from, skip }    → titre suivant. `from` = id du titre que la régie
  *                            croit en cours (null si aucun) : si ce n'est plus
  *                            le cas, rien ne bouge (double appel, 2e onglet…)
- *   playback { id, pos, playing } → position de lecture de la régie (pour
- *                            l'écran d'affichage), horodatée par le serveur
+ *   playback { id, pos, playing, volume } → état de lecture de la régie (pour
+ *                            l'écran et la télécommande), horodaté par le serveur
+ *   command { type, value } → ordre de la télécommande à la régie :
+ *                            pause | play | volume (0-100)
  *   playnow { id }         → lancer tout de suite un titre de la file (le titre
  *                            en cours est interrompu)
  *   move { id, dir }       → up | down | top dans la file
@@ -89,7 +91,15 @@ export async function POST(req, { params }) {
         const pos = Number(body.pos);
         if (typeof body.id !== "string" || !Number.isFinite(pos) || pos < 0 || pos > 86400)
           return Response.json({ error: "Position invalide." }, { status: 400 });
-        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt } });
+        const volume = Math.min(100, Math.max(0, Math.round(Number(body.volume))));
+        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}) } });
+        break;
+      }
+      case "command": {
+        if (!["pause", "play", "volume"].includes(body.type))
+          return Response.json({ error: "Commande inconnue." }, { status: 400 });
+        const value = body.type === "volume" ? Math.min(100, Math.max(0, Math.round(Number(body.value) || 0))) : null;
+        res = await update({ command: { id: `${receivedAt}-${Math.random().toString(36).slice(2, 8)}`, type: body.type, value } });
         break;
       }
       case "playnow": {

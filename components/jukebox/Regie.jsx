@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { Settings, QueueList } from "./Controls";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -29,6 +29,7 @@ export default function Regie({ code }) {
   const [activeIdx, setActiveIdx] = useState(0); // lecteur visible
   const [bigQr, setBigQr] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [remoteQr, setRemoteQr] = useState(false);
   const token = useRef(null);
   // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
   // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
@@ -78,7 +79,7 @@ export default function Regie({ code }) {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 2000);
+    const id = setInterval(refresh, 1500);
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -108,7 +109,7 @@ export default function Regie({ code }) {
     fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders(code) },
-      body: JSON.stringify({ action: "playback", id: loaded.current, pos: p.getCurrentTime(), playing: p.getPlayerState() === 1 }),
+      body: JSON.stringify({ action: "playback", id: loaded.current, pos: p.getCurrentTime(), playing: p.getPlayerState() === 1, volume: master.current }),
     }).catch(() => {});
   }, [code]);
 
@@ -283,11 +284,28 @@ export default function Regie({ code }) {
   };
 
   const togglePlay = () => (playing ? cur()?.pauseVideo() : cur()?.playVideo());
+  const volumeReport = useRef(null);
   const changeVolume = (v) => {
     setVolume(v);
     master.current = v;
     if (!fading.current) cur()?.setVolume(v);
+    clearTimeout(volumeReport.current);
+    volumeReport.current = setTimeout(report, 400); // la télécommande affiche le volume
   };
+
+  // Ordres de la télécommande. Celui déjà présent à l'ouverture est ignoré.
+  const lastCommand = useRef(undefined);
+  useEffect(() => {
+    if (!data?.admin) return;
+    const c = data.command;
+    if (lastCommand.current === undefined) { lastCommand.current = c?.id ?? null; return; }
+    if (!c || c.id === lastCommand.current) return;
+    lastCommand.current = c.id;
+    if (!started || !ready) return;
+    if (c.type === "pause") cur().pauseVideo();
+    else if (c.type === "play") cur().playVideo();
+    else if (c.type === "volume") changeVolume(c.value);
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const copyRegieLink = async () => {
     try {
@@ -401,43 +419,12 @@ export default function Regie({ code }) {
           </div>
 
           <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-white/70">Ajouts des invités</span>
-              <button onClick={() => act(open ? "close" : "open")}
-                className={`font-bold px-3 py-1.5 rounded-full ${open ? "bg-white/10 hover:bg-white/20" : "bg-green-600 hover:bg-green-700"}`}>
-                {open ? "Bloquer" : "Autoriser"}
+            <Settings session={session} act={act} />
+            {token.current && (
+              <button onClick={() => setRemoteQr(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+                📱 Télécommande sur téléphone
               </button>
-            </div>
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-white/70">Titres en attente par invité</span>
-              <select value={session.maxPerParticipant} onChange={(e) => act("max", { max: Number(e.target.value) })}
-                className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold">
-                {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
-              </select>
-            </label>
-            <div className="space-y-1.5">
-              <span className="text-white/70">🔎 Versions proposées</span>
-              <div className="flex bg-white/10 rounded-full p-0.5">
-                {SEARCH_MODES.map((m) => (
-                  <button key={m.id} onClick={() => m.id !== session.searchMode && act("searchMode", { mode: m.id })}
-                    className={`flex-1 px-2 py-1 rounded-full font-bold ${m.id === session.searchMode ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-white/70">🎚️ Fondu enchaîné</span>
-              <select value={session.fade} onChange={(e) => act("options", { fade: Number(e.target.value) })}
-                className="bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold">
-                {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
-              </select>
-            </label>
-            <Toggle label="⚖️ File équitable" on={session.fairQueue} onClick={() => act("options", { fairQueue: !session.fairQueue })}
-              hint={session.fairQueue ? "Les nouveaux titres alternent entre les invités." : "Les titres passent dans l'ordre d'arrivée."} />
-            <Toggle label="📺 File à suivre sur l'écran" on={session.screenQueue} onClick={() => act("options", { screenQueue: !session.screenQueue })} />
-            <Toggle label="📱 Invités : voir toute la file" on={session.guestQueue} onClick={() => act("options", { guestQueue: !session.guestQueue })}
-              hint={session.guestQueue ? null : "Ils ne voient que leurs titres et le nombre de titres avant eux."} />
+            )}
             <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
               📺 Ouvrir l'écran d'affichage
             </Link>
@@ -446,31 +433,7 @@ export default function Regie({ code }) {
             </Link>
           </div>
 
-          <div className="bg-white/5 rounded-2xl p-4">
-            <h2 className="font-bold mb-3">À suivre <span className="text-white/40 font-normal">({queue.length})</span></h2>
-            {queue.length === 0 ? (
-              <p className="text-sm text-white/50">La file est vide.</p>
-            ) : (
-              <ol className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                {queue.map((t, i) => (
-                  <li key={t.id} className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
-                    {t.thumb && <img src={t.thumb} alt="" className="w-14 h-8 object-cover rounded shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{t.title}</p>
-                      <p className="text-xs text-white/50 truncate">{t.author} · {formatDuration(t.duration)}</p>
-                    </div>
-                    <div className="flex shrink-0 text-white/50">
-                      <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}>▶</IconBtn>
-                      <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}>⤒</IconBtn>
-                      <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}>↑</IconBtn>
-                      <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}>↓</IconBtn>
-                      <IconBtn label="Retirer" danger onClick={() => confirm(`Retirer « ${t.title} » ?`) && act("remove", { id: t.id })}>✕</IconBtn>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
+          <QueueList queue={queue} act={act} playNow={playNow} />
 
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
             {token.current && <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>}
@@ -483,6 +446,15 @@ export default function Regie({ code }) {
         </aside>
       </div>
 
+      {remoteQr && (
+        <div onClick={() => setRemoteQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 cursor-pointer text-center">
+          <p className="text-2xl font-bold">📱 Télécommande</p>
+          <div className="bg-white p-4 rounded-3xl"><QRCodeSVG value={`${origin}/jukebox/${code}/telecommande#t=${token.current}`} size={280} /></div>
+          <p className="text-white/70 max-w-sm">Scannez avec votre téléphone pour piloter la soirée : lecture, volume, file et réglages.</p>
+          <p className="text-amber-300 text-sm max-w-sm">⚠️ Ce QR code donne le contrôle de la soirée : ne le montrez pas aux invités.</p>
+        </div>
+      )}
+
       {bigQr && (
         <div onClick={() => setBigQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-6 p-6 cursor-pointer">
           <div className="bg-white p-5 rounded-3xl"><QRCodeSVG value={joinUrl} size={360} /></div>
@@ -491,30 +463,6 @@ export default function Regie({ code }) {
         </div>
       )}
     </div>
-  );
-}
-
-function Toggle({ label, on, onClick, hint }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-white/70">{label}</span>
-        <button onClick={onClick} role="switch" aria-checked={on}
-          className={`font-bold px-3 py-1.5 rounded-full shrink-0 ${on ? "bg-fuchsia-600 hover:bg-fuchsia-700" : "bg-white/10 hover:bg-white/20"}`}>
-          {on ? "Oui" : "Non"}
-        </button>
-      </div>
-      {hint && <p className="text-xs text-white/40 mt-1">{hint}</p>}
-    </div>
-  );
-}
-
-function IconBtn({ label, onClick, disabled, danger, children }) {
-  return (
-    <button onClick={onClick} disabled={disabled} aria-label={label} title={label}
-      className={`w-7 h-7 rounded-lg disabled:opacity-20 ${danger ? "hover:text-red-400" : "hover:text-white"} hover:bg-white/10`}>
-      {children}
-    </button>
   );
 }
 

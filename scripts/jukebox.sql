@@ -69,3 +69,7 @@ alter table public.jukebox_sessions
 -- v4 (30/10/2026) : position de lecture de la régie (écran synchronisé).
 alter table public.jukebox_sessions
   add column if not exists playback jsonb;
+
+-- v5 (30/10/2026) : ordres de la télécommande (pause, lecture, volume).
+alter table public.jukebox_sessions
+  add column if not exists command jsonb;
