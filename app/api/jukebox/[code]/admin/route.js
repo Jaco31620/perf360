@@ -22,12 +22,15 @@
  *   replaceVideo { id, videoId } → changer la vidéo d'un titre (en attente ou en
  *                            cours) et corriger la mémoire des titres
  *   remove { id }          → retirer un titre en attente
- *   reset                  → vider la file (et l'historique)
+ *   reset                  → vider la file (titre en cours compris ; l'historique reste)
+ *   history                → titres joués (fonction « historique »)
+ *   replay { id }          → remettre un titre joué en fin de file
+ *   clearHistory           → effacer l'historique
  *   delete                 → supprimer la soirée
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax, normalizeMode, normalizeFade, normalizeReveal } from "@/lib/jukebox";
+import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { MAX_NAME_LEN, normalizeMax, normalizeMode } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
 
@@ -66,11 +69,8 @@ export async function POST(req, { params }) {
         res = await update({ options: { ...(s.options || {}), searchMode: normalizeMode(body.mode) }, karaoke: false });
         break;
       case "options": {
-        const options = { ...(s.options || {}) };
-        for (const k of ["screenQueue", "guestQueue", "fairQueue", "dedications"]) if (k in body) options[k] = !!body[k];
-        if ("fade" in body) options.fade = normalizeFade(body.fade);
-        if ("authorReveal" in body) options.authorReveal = normalizeReveal(body.authorReveal);
-        res = await update({ options });
+        const { searchMode, ...rest } = body; // le mode a sa propre action
+        res = await update({ options: regieOptions(rest, s.options || {}) });
         break;
       }
       case "name": {
@@ -158,8 +158,36 @@ export async function POST(req, { params }) {
         res = await tracks().delete().eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued");
         break;
       case "reset":
-        res = await tracks().delete().eq("session_id", s.id);
+        res = await tracks().delete().eq("session_id", s.id).in("status", ["queued", "playing"]);
         break;
+      case "history":
+      case "replay":
+      case "clearHistory": {
+        if (!publicSession(s).features.history) return Response.json({ error: "Historique non activé pour cette soirée." }, { status: 403 });
+        const played = () => tracks().select("*").eq("session_id", s.id).in("status", ["played", "skipped"]);
+        if (body.action === "clearHistory") {
+          res = await tracks().delete().eq("session_id", s.id).in("status", ["played", "skipped"]);
+          break;
+        }
+        if (body.action === "history") {
+          const { data, error } = await played().order("played_at", { ascending: false }).limit(500);
+          if (error) throw error;
+          return Response.json({ ok: true, history: data.map((t) => ({
+            id: t.id, videoId: t.video_id, title: t.title, channel: t.channel, thumb: t.thumb, duration: t.duration,
+            author: t.author, dedication: t.dedication || null, playedAt: t.played_at, skipped: t.status === "skipped",
+          })) });
+        }
+        const { data: t, error } = await played().eq("id", String(body.id || "")).maybeSingle();
+        if (error) throw error;
+        if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+        const { data: active } = await tracks().select("id").eq("session_id", s.id).eq("video_id", t.video_id).in("status", ["queued", "playing"]);
+        if (active?.length) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
+        res = await tracks().insert({
+          session_id: s.id, video_id: t.video_id, title: t.title, channel: t.channel, thumb: t.thumb,
+          duration: t.duration, participant_id: "regie-replay", author: t.author, position: Date.now(),
+        });
+        break;
+      }
       case "delete":
         res = await sb.from("jukebox_sessions").delete().eq("id", s.id);
         break;

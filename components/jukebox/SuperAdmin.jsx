@@ -12,7 +12,7 @@ import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
-import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, FADE_CHOICES, DEFAULT_FADE, AUTHOR_REVEAL_CHOICES, FEATURES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const CREATION_MODES = [
@@ -120,7 +120,7 @@ export default function SuperAdmin() {
               <div className={`h-full ${data.searches >= SEARCH_QUOTA * 0.8 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${Math.min(100, (data.searches / SEARCH_QUOTA) * 100)}%` }} />
             </div>
             <p className="text-sm mt-3"><span className="font-semibold">Titres en mémoire :</span> {data.songs}</p>
-            <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à 9 h (heure de Paris). Les recherches déjà faites (30 j) et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.</p>
+            <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à minuit heure du Pacifique (8 h ou 9 h à Paris selon la saison). Les recherches déjà faites (30 j) et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-3 text-sm">
@@ -169,14 +169,19 @@ export default function SuperAdmin() {
                   className="ml-auto text-xs text-fuchsia-600 underline">Nouveau code</button>
               </div>
             )}
+            <div className="pt-2 border-t border-gray-100">
+              <p className="font-semibold mb-1">Fonctions des soirées créées par d'autres</p>
+              <p className="text-xs text-gray-400 mb-2">Valeurs par défaut ; modifiables ensuite pour chaque soirée, dans la liste ci-dessous.</p>
+              <FeatureToggles value={cfg.defaultFeatures} onChange={(f) => action({ action: "settings", defaultFeatures: f })} />
+            </div>
           </div>
         </div>
       )}
 
-      <CreateForm token={token} onCreated={(code, adminToken, name) => {
+      <CreateForm token={token} defaults={cfg?.defaultFeatures} onCreated={(code, adminToken, name) => {
         setAdminToken(code, adminToken);
         rememberParty(code, name);
-        setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}` });
+        setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}`, joinUrl: `${origin}/jukebox/${code}` });
         load();
       }} />
 
@@ -195,13 +200,25 @@ export default function SuperAdmin() {
                 Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
               </p>
               <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {FEATURES.map((f) => {
+                  const on = s.features?.[f.id];
+                  return (
+                    <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
+                      onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
+                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
+                      {f.icon} {f.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
               <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">Régie</Link>
               <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Écran</Link>
               <button onClick={async () => {
                 const d = await action({ action: "regie", code: s.code }, `Créer un nouveau lien régie pour « ${s.name} » ?\nL'ancien lien régie ne fonctionnera plus.`);
-                if (d?.adminToken) { setAdminToken(s.code, d.adminToken); setLink({ name: s.name, url: `${origin}/jukebox/${s.code}/regie#t=${d.adminToken}` }); }
+                if (d?.adminToken) { setAdminToken(s.code, d.adminToken); setLink({ name: s.name, url: `${origin}/jukebox/${s.code}/regie#t=${d.adminToken}`, joinUrl: `${origin}/jukebox/${s.code}` }); }
               }} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Nouveau lien régie</button>
               <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
                 className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
@@ -213,10 +230,20 @@ export default function SuperAdmin() {
   );
 }
 
-function CreateForm({ token, onCreated }) {
+/* Création d'une soirée déjà configurée : fonctions activées et réglages de
+ * la régie (modifiables ensuite par la régie, sauf les fonctions). */
+function CreateForm({ token, defaults, onCreated }) {
   const [name, setName] = useState("");
   const [max, setMax] = useState(DEFAULT_MAX_PER_PARTICIPANT);
   const [busy, setBusy] = useState(false);
+  const [more, setMore] = useState(false);
+  const [features, setFeatures] = useState(null);
+  const [opts, setOpts] = useState({
+    searchMode: "normal", fade: DEFAULT_FADE, dedications: false, authorReveal: 0,
+    fairQueue: true, screenQueue: true, guestQueue: true,
+  });
+  const feats = features || defaults || {};
+  const set = (k, v) => setOpts((o) => ({ ...o, [k]: v }));
 
   const create = async (e) => {
     e.preventDefault();
@@ -226,7 +253,7 @@ function CreateForm({ token, onCreated }) {
       const res = await fetch("/api/jukebox", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-jukebox-super": token },
-        body: JSON.stringify({ name, maxPerParticipant: max }),
+        body: JSON.stringify({ name, maxPerParticipant: max, features: feats, options: opts }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Création impossible.");
@@ -239,25 +266,83 @@ function CreateForm({ token, onCreated }) {
     }
   };
 
+  const check = "flex items-center justify-between gap-3";
+  const select = "border-2 border-gray-200 rounded-xl px-2 py-1 font-semibold";
   return (
-    <form onSubmit={create} className="bg-white rounded-2xl border border-purple-100 p-4 flex flex-wrap items-center gap-3">
-      <input maxLength={MAX_NAME_LEN} placeholder="Nom d'une nouvelle soirée" value={name} onChange={(e) => setName(e.target.value)}
-        className="flex-1 min-w-[200px] border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-fuchsia-500 outline-none" />
-      <label className="flex items-center gap-2 text-sm text-gray-600">
-        Titres en attente / invité
-        <select value={max} onChange={(e) => setMax(Number(e.target.value))} className="border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold">
-          {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
-        </select>
-      </label>
-      <button disabled={busy || !name.trim()} className="bg-fuchsia-600 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-full">
-        {busy ? "Création…" : "+ Créer la soirée"}
-      </button>
+    <form onSubmit={create} className="bg-white rounded-2xl border border-purple-100 p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <input maxLength={MAX_NAME_LEN} placeholder="Nom d'une nouvelle soirée" value={name} onChange={(e) => setName(e.target.value)}
+          className="flex-1 min-w-[200px] border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-fuchsia-500 outline-none" />
+        <button type="button" onClick={() => setMore((v) => !v)} className="text-sm font-bold text-fuchsia-600">
+          ⚙️ Configuration {more ? "▲" : "▼"}
+        </button>
+        <button disabled={busy || !name.trim()} className="bg-fuchsia-600 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-full">
+          {busy ? "Création…" : "+ Créer la soirée"}
+        </button>
+      </div>
+      {more && (
+        <div className="grid gap-5 md:grid-cols-2 text-sm pt-2 border-t border-gray-100">
+          <div className="space-y-2">
+            <p className="font-bold text-gray-900">Fonctions de la soirée</p>
+            <p className="text-xs text-gray-400 -mt-1">La régie ne peut pas les changer.</p>
+            <FeatureToggles value={feats} onChange={(f) => setFeatures(f)} />
+          </div>
+          <div className="space-y-2.5">
+            <p className="font-bold text-gray-900">Réglages de départ de la régie</p>
+            <label className={check}><span>Titres en attente / invité</span>
+              <select value={max} onChange={(e) => setMax(Number(e.target.value))} className={select}>
+                {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
+              </select>
+            </label>
+            <label className={check}><span>Versions proposées</span>
+              <select value={opts.searchMode} onChange={(e) => set("searchMode", e.target.value)} className={select}>
+                {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+            <label className={check}><span>Fondu enchaîné</span>
+              <select value={opts.fade} onChange={(e) => set("fade", Number(e.target.value))} className={select}>
+                {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
+              </select>
+            </label>
+            <label className={check}><span>Nom de l'invité</span>
+              <select value={opts.authorReveal} onChange={(e) => set("authorReveal", Number(e.target.value))} className={select}>
+                {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+              </select>
+            </label>
+            {[["dedications", "Dédicaces"], ["fairQueue", "File équitable"], ["screenQueue", "File à suivre sur l'écran"], ["guestQueue", "Invités : voir toute la file"]].map(([k, label]) => (
+              <label key={k} className={check}><span>{label}</span>
+                <input type="checkbox" checked={opts[k]} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </form>
   );
 }
 
-function LinkBox({ name, url, onClose }) {
+/* Interrupteurs des fonctions (historique, thème, blind test). */
+function FeatureToggles({ value, onChange }) {
+  return (
+    <div className="space-y-2">
+      {FEATURES.map((f) => (
+        <label key={f.id} className="flex items-start gap-2.5 cursor-pointer">
+          <input type="checkbox" checked={!!value?.[f.id]} onChange={(e) => onChange({ ...value, [f.id]: e.target.checked })}
+            className="w-5 h-5 mt-0.5 accent-fuchsia-600 shrink-0" />
+          <span><span className="font-semibold">{f.icon} {f.label}</span><span className="block text-xs text-gray-400">{f.hint}</span></span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/* Lien régie à transmettre : copie, partage (téléphone) ou e-mail. */
+function LinkBox({ name, url, joinUrl, onClose }) {
   const [copied, setCopied] = useState(false);
+  const message = `Voici le lien de la régie de votre soirée « ${name} » (à ouvrir sur le PC branché à la sono) :\n${url}\n\nNe le partagez pas avec les invités : ils proposent leurs titres ici : ${joinUrl}`;
+  const share = async () => {
+    try { await navigator.share({ title: `Régie « ${name} »`, text: message }); } catch (e) { /* annulé */ }
+  };
   return (
     <div className="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4">
       <p className="font-bold text-gray-900 mb-1">Lien régie de « {name} » — à transmettre à l'organisateur</p>
@@ -266,6 +351,11 @@ function LinkBox({ name, url, onClose }) {
         <code className="flex-1 min-w-0 break-all bg-white rounded-lg px-3 py-2 text-xs">{url}</code>
         <button onClick={async () => { try { await navigator.clipboard.writeText(url); setCopied(true); } catch (e) { /* ignoré */ } }}
           className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copié" : "Copier"}</button>
+        {typeof navigator !== "undefined" && navigator.share && (
+          <button onClick={share} className="bg-fuchsia-600 text-white text-sm font-bold px-4 py-2 rounded-full">Partager…</button>
+        )}
+        <a href={`mailto:?subject=${encodeURIComponent(`Régie de la soirée « ${name} »`)}&body=${encodeURIComponent(message)}`}
+          className="bg-white border border-gray-200 text-sm font-bold px-4 py-2 rounded-full">✉️ E-mail</a>
         <button onClick={onClose} className="text-sm text-gray-400 underline">Fermer</button>
       </div>
     </div>

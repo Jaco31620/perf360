@@ -17,6 +17,7 @@ import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
+import History from "./History";
 
 export default function Regie({ code }) {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function Regie({ code }) {
   const [copied, setCopied] = useState(false);
   const [remoteQr, setRemoteQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
+  const [historyOpen, setHistoryOpen] = useState(false);
   const token = useRef(null);
   // Deux lecteurs qui se relaient : l'actif joue, l'autre précharge le titre
   // suivant (sans blanc entre les titres) et sert au fondu enchaîné.
@@ -445,9 +447,15 @@ export default function Regie({ code }) {
 
           <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
 
+          {session.features.history && (
+            <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">
+              🕘 Historique de la soirée
+            </button>
+          )}
+
           <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-white/50">
             {token.current && <button onClick={copyRegieLink} className="hover:text-white">{copied ? "✓ Lien copié" : "Copier le lien régie (autre appareil)"}</button>}
-            <button onClick={() => confirm("Vider la file et le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
+            <button onClick={() => confirm("Vider la file et arrêter le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
             <button onClick={async () => {
               if (!confirm("Supprimer définitivement cette soirée ?")) return;
               if (await act("delete")) { forgetParty(code); router.push("/jukebox"); }
@@ -457,6 +465,7 @@ export default function Regie({ code }) {
       </div>
 
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
+      {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 
       {remoteQr && (
         <div onClick={() => setRemoteQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 cursor-pointer text-center">

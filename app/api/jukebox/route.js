@@ -4,11 +4,14 @@
  * fois, seul son hash est stocké).
  * Création selon le réglage super-admin : ouverte à tous, sur code de
  * création, ou réservée au super-admin (en-tête x-jukebox-super).
+ * Fonctions (historique, thème, blind test) : celles choisies par le
+ * super-admin à la création, sinon ses valeurs par défaut. Le super-admin
+ * peut aussi fixer les réglages de la régie ({ options }).
  * GET : mode de création en vigueur (pour l'accueil).
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { newAdminToken, hashToken } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax } from "@/lib/jukebox";
+import { newAdminToken, hashToken, regieOptions } from "@/lib/jukeboxServer";
+import { MAX_NAME_LEN, normalizeMax, normalizeFeatures } from "@/lib/jukebox";
 import { loadConfig, isJukeboxSuper, sameCode } from "@/lib/jukeboxAdmin";
 
 export const runtime = "nodejs";
@@ -33,8 +36,14 @@ export async function POST(req) {
 
   const token = newAdminToken();
   try {
-    if (!isJukeboxSuper(req)) {
-      const { creationMode, creationCode } = await loadConfig();
+    const config = await loadConfig();
+    const isSuper = isJukeboxSuper(req);
+    const options = {
+      ...(isSuper && body?.options && typeof body.options === "object" ? regieOptions(body.options) : {}),
+      features: isSuper ? normalizeFeatures(body?.features, config.defaultFeatures) : config.defaultFeatures,
+    };
+    if (!isSuper) {
+      const { creationMode, creationCode } = config;
       if (creationMode === "super")
         return Response.json({ error: "La création de soirées est réservée à l'administrateur." }, { status: 403 });
       if (creationMode === "code" && !sameCode(body?.creationCode, creationCode))
@@ -44,7 +53,7 @@ export async function POST(req) {
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const { error } = await sb.from("jukebox_sessions").insert({
-        code, name, admin_hash: hashToken(token), max_per_participant: max,
+        code, name, admin_hash: hashToken(token), max_per_participant: max, options,
       });
       if (!error) return Response.json({ code, adminToken: token });
       if (error.code !== "23505") throw error; // 23505 = code déjà pris → on retente

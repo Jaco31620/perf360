@@ -4,7 +4,8 @@
  *          réglages, recherches YouTube du jour.
  *          ?songs=1&q=…&status=all|todo|ok&mode=… : mémoire des titres.
  * - POST : { action, ... }
- *     settings { retentionDays?, creationMode?, creationCode? }
+ *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures? }
+ *     features { code, features } → fonctions activées pour une soirée
  *     regie { code }   → nouveau lien régie (l'ancien ne fonctionne plus)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
@@ -20,6 +21,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
+import { normalizeFeatures } from "@/lib/jukebox";
 import { prefillState, prefillFromLines, prefillFromChart, clearPrefill } from "@/lib/jukeboxPrefill";
 
 export const runtime = "nodejs";
@@ -87,10 +89,17 @@ export async function POST(req) {
         return Response.json({ ok: true });
       }
       case "regie":
+      case "features":
       case "delete": {
         const s = await loadSession(body.code);
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
         const sb = getSupabaseAdmin();
+        if (body.action === "features") {
+          const options = { ...(s.options || {}), features: normalizeFeatures(body.features, normalizeFeatures(s.options?.features)) };
+          const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
+          if (error) throw error;
+          return Response.json({ ok: true });
+        }
         if (body.action === "delete") {
           const { error } = await sb.from("jukebox_sessions").delete().eq("id", s.id);
           if (error) throw error;

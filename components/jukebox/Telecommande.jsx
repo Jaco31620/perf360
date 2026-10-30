@@ -14,6 +14,7 @@ import Link from "next/link";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
+import History from "./History";
 
 export default function Telecommande({ code }) {
   const [data, setData] = useState(null);
@@ -21,6 +22,7 @@ export default function Telecommande({ code }) {
   const [volume, setVolume] = useState(null); // valeur du curseur pendant qu'on le bouge
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
   const volumeTimer = useRef(null);
@@ -171,6 +173,11 @@ export default function Telecommande({ code }) {
         </Link>
 
         <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+
+        {session.features.history && (
+          <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 active:bg-white/20 rounded-full py-3">🕘 Historique</button>
+        )}
+        {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 
         {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
 
