@@ -111,10 +111,26 @@ export default function SuperAdmin() {
             <div className="h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
               <div className={`h-full ${data.searches >= SEARCH_QUOTA * 0.8 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${Math.min(100, (data.searches / SEARCH_QUOTA) * 100)}%` }} />
             </div>
-            <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à 9 h (heure de Paris). Les recherches déjà faites (7 j) et les liens collés ne comptent pas.</p>
+            <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à 9 h (heure de Paris). Les recherches déjà faites (30 j) et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.</p>
           </div>
 
           <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-3 text-sm">
+            <div>
+              <p className="font-semibold mb-1.5">Moteur de recherche des invités</p>
+              <div className="flex bg-gray-100 rounded-full p-0.5">
+                {[["deezer", "Deezer (sans quota)"], ["youtube", "YouTube"]].map(([id, label]) => (
+                  <button key={id} onClick={() => id !== cfg.searchEngine && action({ action: "settings", searchEngine: id })}
+                    className={`flex-1 px-2 py-1.5 rounded-full font-bold ${id === cfg.searchEngine ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                {cfg.searchEngine === "deezer"
+                  ? "Les invités cherchent dans le catalogue Deezer ; la vidéo YouTube n'est cherchée qu'à l'ajout (gardée 30 j, partagée entre soirées)."
+                  : "Chaque recherche d'invité consomme le quota YouTube (~100 recherches nouvelles par jour)."}
+              </p>
+            </div>
             <label className="flex items-center justify-between gap-3">
               <span className="font-semibold">Suppression après inactivité</span>
               <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}

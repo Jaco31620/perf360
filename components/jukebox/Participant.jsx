@@ -73,7 +73,7 @@ export default function Participant({ code }) {
     try {
       const res = await fetch(`/api/jukebox/${code}`, {
         method: "POST", headers: headers(),
-        body: JSON.stringify({ participantId: pid.current, author: name, videoId: v.id, dedication }),
+        body: JSON.stringify({ participantId: pid.current, author: name, dedication, ...(v.deezerId ? { deezerId: v.deezerId } : { videoId: v.id }) }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Ajout impossible.");

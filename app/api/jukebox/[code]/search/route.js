@@ -1,10 +1,12 @@
 /*
- * Recherche de titres pour une soirée : ?q=<texte> (YouTube, catégorie Musique,
+ * Recherche de titres pour une soirée : ?q=<texte> — catalogue Deezer (moteur
+ * « deezer », sans quota) ou YouTube (catégorie Musique,
  * ou versions avec paroles / karaoké selon la régie ; cache 7 jours) ou lien YouTube /
  * YouTube Music collé (1 unité). Invités : chansons uniquement (la régie, non).
  */
-import { loadSession, publicSession, isAdminReq, ytSearch, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, ytSearch, ytVideo, deezerSearch, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_QUERY_LEN, parseVideoId } from "@/lib/jukebox";
+import { loadConfig } from "@/lib/jukeboxAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +24,10 @@ export async function GET(req, { params }) {
       const { video, reason } = await ytVideo(id, { musicOnly: !isAdminReq(req, s) });
       return Response.json(video ? { results: [video] } : { results: [], error: REJECT_MESSAGES[reason] });
     }
-    return Response.json({ results: await ytSearch(q.slice(0, MAX_QUERY_LEN), publicSession(s).searchMode) });
+    const query = q.slice(0, MAX_QUERY_LEN);
+    const { searchEngine } = await loadConfig();
+    if (searchEngine === "deezer") return Response.json({ results: await deezerSearch(query) });
+    return Response.json({ results: await ytSearch(query, publicSession(s).searchMode) });
   } catch (e) {
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox search:", e);

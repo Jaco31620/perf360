@@ -9,14 +9,14 @@
  *            Chaque titre porte `ahead` (titres avant lui) ; `total` = taille
  *            de la file complète. `playback` (position de la régie, horodatée
  *            par le serveur) + `serverTime` : synchronisation de l'écran.
- * - POST   : ajout d'un titre { participantId, author, videoId, dedication? }. Les infos
+ * - POST   : ajout d'un titre { participantId, author, videoId | deezerId, dedication? }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). Placement
  *            en file équitable (alternance des invités) si la régie l'a choisi. La régie
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -79,9 +79,10 @@ export async function POST(req, { params }) {
   const pid = body?.participantId;
   const author = String(body?.author || "").replace(/\s+/g, " ").trim().slice(0, MAX_AUTHOR_LEN);
   const videoId = String(body?.videoId || "");
+  const deezerId = parseInt(body?.deezerId, 10) || 0; // titre trouvé via la recherche Deezer
   const dedication = String(body?.dedication || "").replace(/\s+/g, " ").trim().slice(0, MAX_DEDICATION_LEN);
   if (!validPid(pid)) return Response.json({ error: "Participant invalide." }, { status: 400 });
-  if (!isValidVideoId(videoId)) return Response.json({ error: "Titre invalide." }, { status: 400 });
+  if (!isValidVideoId(videoId) && deezerId <= 0) return Response.json({ error: "Titre invalide." }, { status: 400 });
 
   try {
     const s = await loadSession(code);
@@ -92,8 +93,6 @@ export async function POST(req, { params }) {
 
     const sb = getSupabaseAdmin();
     const rows = await activeTracks(sb, s.id);
-    if (rows.some((r) => r.video_id === videoId))
-      return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
     if (!admin) {
       const mine = rows.filter((r) => r.status === "queued" && r.participant_id === pid).length;
       const limit = s.max_per_participant > 0 ? s.max_per_participant : UNLIMITED_CAP;
@@ -101,9 +100,22 @@ export async function POST(req, { params }) {
         return Response.json({ error: `Vous avez déjà ${mine} titre${mine > 1 ? "s" : ""} en attente : patientez qu'il${mine > 1 ? "s" : ""} passe${mine > 1 ? "nt" : ""}.` }, { status: 429 });
     }
 
-    // chansons uniquement pour les invités ; la régie peut ajouter n'importe quelle vidéo jouable
-    const { video: v, reason } = await ytVideo(videoId, { musicOnly: !admin });
-    if (!v) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
+    let v;
+    if (deezerId > 0) {
+      // titre Deezer → sa vidéo YouTube (affichage : titre, artiste et pochette Deezer)
+      const song = await deezerTrack(deezerId);
+      if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
+      const yt = await youtubeForSong(song, publicSession(s).searchMode);
+      if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
+      v = { id: yt.id, title: song.title, channel: song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration };
+    } else {
+      // chansons uniquement pour les invités ; la régie peut ajouter n'importe quelle vidéo jouable
+      const { video, reason } = await ytVideo(videoId, { musicOnly: !admin });
+      if (!video) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
+      v = video;
+    }
+    if (rows.some((r) => r.video_id === v.id))
+      return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
 
     const { error } = await sb.from("jukebox_tracks").insert({
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,
