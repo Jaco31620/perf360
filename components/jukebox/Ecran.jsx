@@ -15,6 +15,8 @@ export default function Ecran({ code }) {
   const [data, setData] = useState(null);
   const [missing, setMissing] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [mouseActive, setMouseActive] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -30,6 +32,25 @@ export default function Ecran({ code }) {
     const id = setInterval(refresh, 3000);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // Bouton bien visible hors plein écran ; en plein écran, il n'apparaît que
+  // quelques secondes quand on bouge la souris (pour pouvoir en sortir).
+  useEffect(() => {
+    const onFs = () => setFullscreen(!!document.fullscreenElement);
+    let timer;
+    const onMove = () => {
+      setMouseActive(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setMouseActive(false), 3000);
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    window.addEventListener("mousemove", onMove);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      window.removeEventListener("mousemove", onMove);
+      clearTimeout(timer);
+    };
+  }, []);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen?.();
@@ -109,8 +130,10 @@ export default function Ecran({ code }) {
         </aside>
       </div>
 
-      <button onClick={toggleFullscreen} className="absolute bottom-3 right-3 text-sm text-white/0 hover:text-white/80 bg-black/0 hover:bg-black/40 px-3 py-1.5 rounded-full transition-colors">
-        ⛶ Plein écran
+      <button onClick={toggleFullscreen}
+        className={`absolute bottom-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur text-white font-bold px-5 py-2.5 rounded-full border border-white/20 transition-opacity duration-500 ${
+          !fullscreen || mouseActive ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+        {fullscreen ? "✕ Quitter le plein écran" : "⛶ Plein écran"}
       </button>
     </div>
   );
