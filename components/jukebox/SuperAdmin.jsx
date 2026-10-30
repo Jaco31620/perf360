@@ -22,6 +22,7 @@ const CREATION_MODES = [
   { id: "super", label: "Super-admin seul", hint: "Vous créez les soirées ici et transmettez le lien régie." },
 ];
 const SEARCH_QUOTA = 100; // ~10 000 unités / jour, 100 par recherche
+const QUOTA_NOTE = "Remise à zéro chaque jour à minuit heure du Pacifique (8 h ou 9 h à Paris selon la saison). Les recherches déjà faites et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.";
 
 const fmtDate = (ms) => new Date(ms).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 function fmtIn(ms) {
@@ -39,6 +40,14 @@ export default function SuperAdmin() {
   const [data, setData] = useState(null);
   const [origin, setOrigin] = useState("");
   const [link, setLink] = useState(null); // { name, url } lien régie à transmettre
+  const [filter, setFilter] = useState("");
+  const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
+  const matches = (s) => {
+    const q = filter.trim().toLowerCase();
+    return !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, ""));
+  };
 
   useEffect(() => { setToken(getSuperToken()); setOrigin(window.location.origin); }, []);
 
@@ -95,36 +104,108 @@ export default function SuperAdmin() {
   }
 
   const cfg = data?.config;
+  const nSessions = data?.sessions.length ?? 0;
+  const tabs = [
+    { id: "soirees", label: `🎉 Soirées${nSessions ? ` (${nSessions})` : ""}` },
+    { id: "biblio", label: "🎵 Bibliothèque" },
+    { id: "reglages", label: "⚙️ Réglages" },
+  ];
+  const quotaPct = data ? Math.min(100, (data.searches / SEARCH_QUOTA) * 100) : 0;
 
   return (
     <Page>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-600">Super-admin</p>
-          <h1 className="text-3xl font-black text-gray-900">Soirées Jukebox</h1>
+          <h1 className="text-3xl font-black text-gray-900">Jukebox</h1>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <button onClick={() => { setSuperToken(null); setToken(null); }} className="text-sm text-gray-400 underline">Se déconnecter</button>
-          <ChangePasswordForm accent="bg-fuchsia-600" note="Le même mot de passe sert au super-admin Clic-Clac."
-            onSubmit={(current, next) => call("POST", { action: "password", current, next })} />
-        </div>
+        <button onClick={() => { setSuperToken(null); setToken(null); }} className="text-sm text-gray-400 underline">Se déconnecter</button>
       </div>
 
       {data && (
-        <div className="grid gap-4 md:grid-cols-2 mb-5">
-          <div className="bg-white rounded-2xl border border-purple-100 p-5">
-            <div className="flex justify-between text-sm">
-              <span className="font-semibold">Recherches YouTube aujourd'hui</span>
-              <span>{data.searches} / ~{SEARCH_QUOTA}</span>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <Stat label="Recherches YouTube aujourd'hui" value={`${data.searches} / ~${SEARCH_QUOTA}`} title={QUOTA_NOTE}>
+            <div className="h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
+              <div className={`h-full ${quotaPct >= 80 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${quotaPct}%` }} />
             </div>
-            <div className="h-2 bg-gray-100 rounded-full mt-2 overflow-hidden">
-              <div className={`h-full ${data.searches >= SEARCH_QUOTA * 0.8 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${Math.min(100, (data.searches / SEARCH_QUOTA) * 100)}%` }} />
-            </div>
-            <p className="text-sm mt-3"><span className="font-semibold">Titres en mémoire :</span> {data.songs}</p>
-            <p className="text-xs text-gray-400 mt-2">Remise à zéro chaque jour à minuit heure du Pacifique (8 h ou 9 h à Paris selon la saison). Les recherches déjà faites (30 j) et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.</p>
-          </div>
+          </Stat>
+          <Stat label="Titres en mémoire" value={data.songs} onClick={() => chooseTab("biblio")} />
+          <Stat label="En attente de pré-remplissage" value={data.prefill?.pending ?? 0} onClick={() => chooseTab("biblio")} />
+        </div>
+      )}
 
-          <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-3 text-sm">
+      <div className="flex bg-white border border-purple-100 rounded-full p-1 mb-4 w-full sm:w-fit">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => chooseTab(t.id)}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab === t.id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "soirees" && (
+        <>
+          <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name) => {
+            setAdminToken(code, adminToken);
+            rememberParty(code, name);
+            setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}`, joinUrl: `${origin}/jukebox/${code}` });
+            load();
+          }} />
+          {link && <LinkBox {...link} onClose={() => setLink(null)} />}
+          {nSessions > 5 && (
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher une soirée (nom ou code)"
+              className="mt-4 w-full border-2 border-gray-200 bg-white rounded-full px-4 py-2 text-sm focus:border-fuchsia-500 outline-none" />
+          )}
+          <div className="space-y-3 mt-4">
+            {data && nSessions === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
+            {data?.sessions.filter(matches).map((s) => (
+              <div key={s.code} className="bg-white rounded-2xl border border-purple-100 p-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+                <div className="flex-1 min-w-[220px]">
+                  <p className="font-bold text-gray-900">{s.name} <span className="font-mono text-fuchsia-600 text-sm ml-1">{formatCode(s.code)}</span></p>
+                  <p className="text-xs text-gray-500">
+                    Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
+                  </p>
+                  <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {FEATURES.map((f) => {
+                      const on = s.features?.[f.id];
+                      return (
+                        <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
+                          onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
+                          {f.icon} {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">Régie</Link>
+                  <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Écran</Link>
+                  <button onClick={async () => {
+                    const d = await action({ action: "regie", code: s.code }, `Créer un nouveau lien régie pour « ${s.name} » ?\nL'ancien lien régie ne fonctionnera plus.`);
+                    if (d?.adminToken) { setAdminToken(s.code, d.adminToken); setLink({ name: s.name, url: `${origin}/jukebox/${s.code}/regie#t=${d.adminToken}`, joinUrl: `${origin}/jukebox/${s.code}` }); }
+                  }} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Nouveau lien régie</button>
+                  <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
+                    className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === "biblio" && (
+        <>
+          <SongMemory call={call} total={data?.songs} />
+          <Prefill call={call} state={data?.prefill} onChanged={load} />
+        </>
+      )}
+
+      {tab === "reglages" && cfg && (
+        <div className="grid gap-4 md:grid-cols-2 items-start">
+          <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
+            <h2 className="font-bold text-base text-gray-900">Accès et recherche</h2>
             <div>
               <p className="font-semibold mb-1.5">Moteur de recherche des invités</p>
               <div className="flex bg-gray-100 rounded-full p-0.5">
@@ -170,69 +251,41 @@ export default function SuperAdmin() {
                   className="ml-auto text-xs text-fuchsia-600 underline">Nouveau code</button>
               </div>
             )}
-            <div className="pt-2 border-t border-gray-100">
+            <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">Quota YouTube : {QUOTA_NOTE}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
+            <h2 className="font-bold text-base text-gray-900">Nouvelles soirées</h2>
+            <div>
               <p className="font-semibold mb-1">Fonctions des soirées créées par d'autres</p>
-              <p className="text-xs text-gray-400 mb-2">Valeurs par défaut ; modifiables ensuite pour chaque soirée, dans la liste ci-dessous.</p>
+              <p className="text-xs text-gray-400 mb-2">Modifiables ensuite pour chaque soirée, dans l'onglet Soirées.</p>
               <FeatureToggles value={cfg.defaultFeatures} onChange={(f) => action({ action: "settings", defaultFeatures: f })} />
             </div>
-            <div className="pt-2 border-t border-gray-100">
-              <p className="font-semibold mb-1">Réglages de départ des nouvelles soirées</p>
+            <div className="pt-3 border-t border-gray-100">
+              <p className="font-semibold mb-1">Réglages de départ</p>
               <p className="text-xs text-gray-400 mb-2">Pour toutes les soirées créées ensuite (par vous ou par d'autres) ; la régie peut les changer pendant la soirée.</p>
               <SoireeFields value={cfg.defaultOptions} onChange={(patch) => action({ action: "settings", defaultOptions: patch })} />
             </div>
           </div>
+          <div className="bg-white rounded-2xl border border-purple-100 p-5 text-sm">
+            <h2 className="font-bold text-base text-gray-900 mb-2">Mot de passe</h2>
+            <ChangePasswordForm accent="bg-fuchsia-600" note="Le même mot de passe sert au super-admin Clic-Clac."
+              onSubmit={(current, next) => call("POST", { action: "password", current, next })} />
+          </div>
         </div>
       )}
-
-      <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name) => {
-        setAdminToken(code, adminToken);
-        rememberParty(code, name);
-        setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}`, joinUrl: `${origin}/jukebox/${code}` });
-        load();
-      }} />
-
-      {link && <LinkBox {...link} onClose={() => setLink(null)} />}
-
-      <SongMemory call={call} total={data?.songs} />
-      <Prefill call={call} state={data?.prefill} onChanged={load} />
-
-      <div className="space-y-3 mt-5">
-        {data?.sessions.length === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
-        {data?.sessions.map((s) => (
-          <div key={s.code} className="bg-white rounded-2xl border border-purple-100 p-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-            <div className="flex-1 min-w-[220px]">
-              <p className="font-bold text-gray-900">{s.name} <span className="font-mono text-fuchsia-600 text-sm ml-1">{formatCode(s.code)}</span></p>
-              <p className="text-xs text-gray-500">
-                Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
-              </p>
-              <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {FEATURES.map((f) => {
-                  const on = s.features?.[f.id];
-                  return (
-                    <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
-                      onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
-                      className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
-                      {f.icon} {f.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 text-sm">
-              <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">Régie</Link>
-              <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Écran</Link>
-              <button onClick={async () => {
-                const d = await action({ action: "regie", code: s.code }, `Créer un nouveau lien régie pour « ${s.name} » ?\nL'ancien lien régie ne fonctionnera plus.`);
-                if (d?.adminToken) { setAdminToken(s.code, d.adminToken); setLink({ name: s.name, url: `${origin}/jukebox/${s.code}/regie#t=${d.adminToken}`, joinUrl: `${origin}/jukebox/${s.code}` }); }
-              }} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Nouveau lien régie</button>
-              <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
-                className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
-            </div>
-          </div>
-        ))}
-      </div>
     </Page>
+  );
+}
+
+/* Chiffre clé en tête de page (cliquable : ouvre l'onglet concerné). */
+function Stat({ label, value, title, onClick, children }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag onClick={onClick} title={title} className="text-left bg-white rounded-2xl border border-purple-100 px-4 py-3 min-w-0 hover:border-fuchsia-300">
+      <p className="text-xs text-gray-500 leading-tight">{label}</p>
+      <p className="text-xl font-black text-gray-900 tabular-nums">{value}</p>
+      {children}
+    </Tag>
   );
 }
 
@@ -433,7 +486,7 @@ const MODE_TAG = {
 };
 
 function SongMemory({ call, total }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("todo");
   const [mode, setMode] = useState("");
@@ -693,8 +746,6 @@ function Prefill({ call, state, onChanged }) {
           )}
 
           <div className="flex flex-wrap gap-2 pt-1">
-            <button disabled={busy || !modes.length} onClick={() => send({ chart: true })}
-              className="font-bold bg-gray-100 disabled:opacity-40 px-4 py-2 rounded-full">+ Top 100 Deezer France</button>
             <button onClick={() => setShowQueue((v) => !v)} className="font-bold bg-gray-100 px-4 py-2 rounded-full">
               {showQueue ? "Masquer la file" : `Voir la file (${state?.pending ?? 0})`}
             </button>

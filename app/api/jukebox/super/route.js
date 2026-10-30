@@ -14,7 +14,7 @@
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     blindSong { key, blind } → titre utilisable par le blind test automatique
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
- *     prefill { lines? | chart? | playlist?, modes[], blind? } (playlist : id ou lien Deezer)
+ *     prefill { lines? | playlist?, modes[], blind? } (playlist : id ou lien Deezer)
  *     prefillEdit { keys[], op: "remove" | "top" } → retirer / traiter en premier → titres à pré-chercher (cron de 6 h)
  *     clearPrefill → vider la file de pré-remplissage
  *     password { current, next } → changer le mot de passe super-admin
@@ -25,7 +25,7 @@ import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesT
 import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
-import { prefillState, prefillFromLines, prefillFromChart, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
+import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,7 +89,7 @@ export async function POST(req) {
           if (!r) return Response.json({ error: "Playlist Deezer introuvable (vérifiez le lien, elle doit être publique)." }, { status: 404 });
           return Response.json({ ok: true, ...r });
         }
-        return Response.json({ ok: true, ...(body.chart ? await prefillFromChart(body.modes, !!body.blind) : await prefillFromLines(body.lines, body.modes, !!body.blind)) });
+        return Response.json({ ok: true, ...(await prefillFromLines(body.lines, body.modes, !!body.blind)) });
       }
       case "prefillEdit":
         await editPrefill(body.keys, body.op);
