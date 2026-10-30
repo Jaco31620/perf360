@@ -11,6 +11,8 @@
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
+ *     prefill { lines?, chart?, modes[] } → titres à pré-chercher (cron de 6 h)
+ *     clearPrefill → vider la file de pré-remplissage
  *     password { current, next } → changer le mot de passe super-admin
  *                      (commun avec Clic-Clac)
  */
@@ -18,9 +20,11 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
+import { prefillState, prefillFromLines, prefillFromChart, clearPrefill } from "@/lib/jukeboxPrefill";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // pré-remplissage : jusqu'à 100 recherches Deezer
 
 const DAY = 24 * 3600 * 1000;
 
@@ -30,11 +34,12 @@ export async function GET(req) {
     const url = new URL(req.url);
     if (url.searchParams.get("songs"))
       return Response.json({ songs: await listSongs(Object.fromEntries(url.searchParams)) }, { headers: { "cache-control": "no-store" } });
-    const [config, sessions, searches, songs] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount()]);
+    const [config, sessions, searches, songs, prefill] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState()]);
     return Response.json({
       config,
       searches,
       songs,
+      prefill,
       sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
@@ -64,6 +69,11 @@ export async function POST(req) {
       }
       case "validateSong":
         await validateSong(body.key, body.validated);
+        return Response.json({ ok: true });
+      case "prefill":
+        return Response.json({ ok: true, ...(body.chart ? await prefillFromChart(body.modes) : await prefillFromLines(body.lines, body.modes)) });
+      case "clearPrefill":
+        await clearPrefill();
         return Response.json({ ok: true });
       case "forgetSong":
         await forgetSong(body.key);

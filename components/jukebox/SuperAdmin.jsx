@@ -3,7 +3,8 @@
  * Jukebox — super-admin (/jukebox/admin), mot de passe de Clic-Clac :
  * toutes les soirées (activité, suppression prévue), accès à leur régie,
  * nouveau lien régie, suppression ; réglages de conservation et de création ;
- * recherches YouTube du jour ; mémoire des titres (recherche, oubli).
+ * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
+ * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -182,6 +183,7 @@ export default function SuperAdmin() {
       {link && <LinkBox {...link} onClose={() => setLink(null)} />}
 
       <SongMemory call={call} total={data?.songs} />
+      <Prefill call={call} state={data?.prefill} onChanged={load} />
 
       <div className="space-y-3 mt-5">
         {data?.sessions.length === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
@@ -397,6 +399,93 @@ function SongMemory({ call, total }) {
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STOP_TEXT = { quota: "quota épuisé", time: "temps écoulé", empty: "file terminée" };
+
+/* Pré-remplissage : titres mis en attente, cherchés chaque matin vers 6 h
+ * avec le reste du quota YouTube de la veille. */
+function Prefill({ call, state, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const [lines, setLines] = useState("");
+  const [modes, setModes] = useState(["normal"]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const toggle = (id) => setModes((ms) => (ms.includes(id) ? ms.filter((m) => m !== id) : [...ms, id]));
+  const send = async (body) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const d = await call("POST", { action: "prefill", modes, ...body });
+      setMsg({ ok: true, text: `${d.added} ajouté${d.added > 1 ? "s" : ""} à la file${d.skipped ? `, ${d.skipped} déjà en mémoire ou en attente` : ""}.`, notFound: d.notFound });
+      if (!body.chart) setLines("");
+      onChanged();
+    } catch (e) {
+      setMsg({ ok: false, text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const last = state?.last;
+
+  return (
+    <div className="mt-3 bg-white rounded-2xl border border-purple-100">
+      <button onClick={() => setOpen((v) => !v)} className="w-full flex justify-between items-center px-5 py-4 font-bold text-gray-900">
+        <span>🌅 Pré-remplir la mémoire {state && <span className="text-gray-400 font-normal">({state.pending} en attente)</span>}</span>
+        <span className="text-gray-400">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 space-y-3 text-sm">
+          <p className="text-xs text-gray-500">
+            Les titres en attente sont cherchés sur YouTube <b>chaque matin vers 6 h</b>, jusqu'à épuisement du quota. C'est le reste
+            du quota de la veille (remis à zéro à 8 h ou 9 h en France) : les soirées gardent un quota neuf. Chaque titre coûte une
+            recherche par mode choisi ; les vidéos trouvées arrivent « À vérifier » dans la mémoire.
+          </p>
+          {last && (
+            <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
+              Dernier passage le {fmtDate(Date.parse(last.at))} : {last.found} trouvé{last.found > 1 ? "s" : ""}
+              {last.failed ? `, ${last.failed} sans résultat` : ""} ({STOP_TEXT[last.stop] || last.stop}).
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-gray-600">Modes :</span>
+            {SEARCH_MODES.map((m) => (
+              <button key={m.id} onClick={() => toggle(m.id)}
+                className={`px-3 py-1 rounded-full font-bold ${modes.includes(m.id) ? "bg-fuchsia-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={6}
+            placeholder={"Un titre par ligne, par exemple :\nQueen - Bohemian Rhapsody\nAngèle - Balance ton quoi"}
+            className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:border-fuchsia-500 outline-none" />
+          <div className="flex flex-wrap gap-2">
+            <button disabled={busy || !lines.trim() || !modes.length} onClick={() => send({ lines })}
+              className="font-bold bg-fuchsia-600 disabled:opacity-40 text-white px-4 py-2 rounded-full">
+              {busy ? "…" : "Ajouter à la file"}
+            </button>
+            <button disabled={busy || !modes.length} onClick={() => send({ chart: true })}
+              className="font-bold bg-gray-100 disabled:opacity-40 px-4 py-2 rounded-full">+ Top 100 Deezer France</button>
+            {state?.pending > 0 && (
+              <button disabled={busy} onClick={async () => {
+                if (!confirm(`Vider la file (${state.pending} titres en attente) ?`)) return;
+                try { await call("POST", { action: "clearPrefill" }); onChanged(); } catch (e) { alert(e.message); }
+              }} className="font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full ml-auto">Vider la file</button>
+            )}
+          </div>
+          {msg && (
+            <div className={msg.ok ? "text-green-700" : "text-red-600"}>
+              <p>{msg.text}</p>
+              {msg.notFound?.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">Introuvables sur Deezer : {msg.notFound.join(" · ")}</p>
+              )}
+            </div>
           )}
         </div>
       )}
