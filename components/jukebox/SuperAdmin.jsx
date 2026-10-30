@@ -10,6 +10,7 @@ import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
+import { VideoChooser } from "./Controls";
 import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
@@ -280,19 +281,30 @@ function Page({ children }) {
   );
 }
 
-/* Mémoire « titre Deezer → vidéo YouTube » : recherche par libellé, aperçu
- * de la vidéo retenue, oubli (le titre sera recherché à nouveau au prochain
- * ajout). La correction d'une vidéo se fait depuis la régie (« Mauvaise
- * vidéo ? »). */
+/* Mémoire « titre Deezer → vidéo YouTube », à passer en revue : filtres
+ * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
+ * changement de vidéo (validée d'office), oubli (le titre sera recherché à
+ * nouveau au prochain ajout). */
+const STATUS_FILTERS = [["todo", "À vérifier"], ["ok", "Validés"], ["all", "Tous"]];
+const MODE_TAG = {
+  normal: "bg-sky-100 text-sky-700",
+  paroles: "bg-amber-100 text-amber-700",
+  karaoke: "bg-fuchsia-100 text-fuchsia-700",
+};
+
 function SongMemory({ call, total }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState("todo");
+  const [mode, setMode] = useState("");
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
+  const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
 
-  const load = useCallback(async (term) => {
+  const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/jukebox/super?songs=1&q=${encodeURIComponent(term || "")}`, {
+      const qs = new URLSearchParams({ songs: "1", q, status, mode });
+      const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
       const d = await res.json();
@@ -302,18 +314,17 @@ function SongMemory({ call, total }) {
     } catch (e) {
       setErr(e.message);
     }
-  }, []);
+  }, [q, status, mode]);
 
-  useEffect(() => { if (open) load(""); }, [open, load]);
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => load(q), 300);
+    const t = setTimeout(load, 250);
     return () => clearTimeout(t);
-  }, [q, open, load]);
+  }, [open, load]);
 
-  const forget = async (s) => {
-    if (!confirm(`Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)) return;
-    try { await call("POST", { action: "forgetSong", key: s.key }); load(q); } catch (e) { alert(e.message); }
+  const run = async (body, confirmText) => {
+    if (confirmText && !confirm(confirmText)) return;
+    try { await call("POST", body); load(); } catch (e) { alert(e.message); }
   };
 
   return (
@@ -324,26 +335,60 @@ function SongMemory({ call, total }) {
       </button>
       {open && (
         <div className="px-5 pb-5 space-y-3">
-          <p className="text-xs text-gray-500">Vidéo YouTube retenue pour chaque titre et chaque mode. Pour corriger une vidéo, utilisez « Mauvaise vidéo ? » dans la régie ; ici, vous pouvez en oublier une.</p>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
-            className="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-fuchsia-500 outline-none" />
+          <p className="text-xs text-gray-500">
+            Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour la voir). <b>Valider</b> confirme
+            qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre (validée d'office, comme « Mauvaise vidéo ? » en régie) ;
+            <b> Oublier</b> la fera rechercher à nouveau au prochain ajout.
+          </p>
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex bg-gray-100 rounded-full p-0.5 text-sm">
+              {STATUS_FILTERS.map(([id, label]) => (
+                <button key={id} onClick={() => setStatus(id)}
+                  className={`px-3 py-1 rounded-full font-bold ${status === id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <select value={mode} onChange={(e) => setMode(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+              <option value="">Tous les modes</option>
+              {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
+              className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
+          </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
+          {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)} onDone={load} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">Aucun titre.</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
-                <li key={s.key} className="flex items-center gap-3 py-2">
+                <li key={s.key} className="flex flex-wrap items-center gap-3 py-2.5">
                   <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer" className="shrink-0" title="Voir la vidéo sur YouTube">
-                    <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="w-20 aspect-video object-cover rounded-lg" />
+                    <img src={`https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`} alt="" className="w-24 aspect-video object-cover rounded-lg" />
                   </a>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-[160px]">
                     <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
-                    <p className="text-xs text-gray-500">
-                      <span className="font-semibold text-fuchsia-600">{modeLabel(s.mode)}</span> · {formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
+                      {s.validated
+                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ Validé</span>
+                        : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">À vérifier</span>}
+                      <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
+                    </div>
                   </div>
-                  <button onClick={() => forget(s)} className="shrink-0 text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
+                  <div className="flex flex-wrap gap-1.5 shrink-0">
+                    {s.validated ? (
+                      <button onClick={() => run({ action: "validateSong", key: s.key, validated: false })}
+                        className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Retirer la validation</button>
+                    ) : (
+                      <button onClick={() => run({ action: "validateSong", key: s.key, validated: true })}
+                        className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">✓ Valider</button>
+                    )}
+                    <button onClick={() => setFixing(s)} className="text-xs font-bold bg-gray-100 px-3 py-1.5 rounded-full">Changer la vidéo</button>
+                    <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)}
+                      className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -351,6 +396,15 @@ function SongMemory({ call, total }) {
         </div>
       )}
     </div>
+  );
+}
+
+function SongVideoChooser({ song, call, onClose, onDone }) {
+  return (
+    <VideoChooser title={song.label || song.key} subtitle={`Mode ${modeLabel(song.mode)}`} initial={song.videoId}
+      onClose={onClose} onDone={onDone}
+      load={() => call("POST", { action: "songVideos", key: song.key })}
+      choose={(videoId) => call("POST", { action: "replaceSong", key: song.key, videoId })} />
   );
 }
 

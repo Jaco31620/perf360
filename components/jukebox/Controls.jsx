@@ -184,13 +184,8 @@ export function FixVideoButton({ onClick }) {
   );
 }
 
+/* Titre de la file (régie / télécommande). */
 export function VideoPicker({ code, track, onClose, onDone }) {
-  const [list, setList] = useState(null);
-  const [current, setCurrent] = useState(track.videoId);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState("");
-  const [link, setLink] = useState("");
-
   const post = async (body) => {
     const res = await fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
@@ -201,18 +196,32 @@ export function VideoPicker({ code, track, onClose, onDone }) {
     if (!res.ok) throw new Error(d.error || "Action impossible.");
     return d;
   };
+  return (
+    <VideoChooser title={track.title} subtitle={track.channel} initial={track.videoId} onClose={onClose} onDone={onDone}
+      load={() => post({ action: "videos", id: track.id })}
+      choose={(videoId) => post({ action: "replaceVideo", id: track.id, videoId })} />
+  );
+}
+
+/* Fenêtre générique : load() → { current, candidates } ; choose(videoId). */
+export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone }) {
+  const [list, setList] = useState(null);
+  const [current, setCurrent] = useState(initial);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  const [link, setLink] = useState("");
 
   useEffect(() => {
-    post({ action: "videos", id: track.id })
-      .then((d) => { setList(d.candidates); setCurrent(d.current); })
+    load()
+      .then((d) => { setList(d.candidates || []); setCurrent(d.current); })
       .catch((e) => { setList([]); setError(e.message); });
-  }, [track.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const choose = async (videoId) => {
     setBusy(videoId);
     setError("");
     try {
-      await post({ action: "replaceVideo", id: track.id, videoId });
+      await save(videoId);
       onDone?.();
       onClose();
     } catch (e) {
@@ -232,8 +241,8 @@ export function VideoPicker({ code, track, onClose, onDone }) {
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-400">Mauvaise vidéo ?</p>
-            <p className="font-bold leading-snug">{track.title}</p>
-            <p className="text-xs text-white/50">{track.channel}</p>
+            <p className="font-bold leading-snug">{title}</p>
+            <p className="text-xs text-white/50">{subtitle}</p>
           </div>
           <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
         </div>

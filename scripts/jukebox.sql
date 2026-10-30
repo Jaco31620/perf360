@@ -94,3 +94,7 @@ grant all on public.jukebox_songs to service_role;
 -- v8 (30/10/2026) : libellé lisible des titres mémorisés (super-admin).
 alter table public.jukebox_songs
   add column if not exists label text;
+
+-- v9 (30/10/2026) : vidéos validées à la main (super-admin / régie).
+alter table public.jukebox_songs
+  add column if not exists validated boolean not null default false;
