@@ -12,7 +12,8 @@ import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
-import { MAX_NAME_LEN, MAX_CHOICES, DEFAULT_MAX_PER_PARTICIPANT, SEARCH_MODES, FADE_CHOICES, DEFAULT_FADE, AUTHOR_REVEAL_CHOICES, FEATURES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel, formatDuration } from "@/lib/jukebox";
+import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES } from "@/lib/jukeboxBlind";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const CREATION_MODES = [
@@ -174,11 +175,16 @@ export default function SuperAdmin() {
               <p className="text-xs text-gray-400 mb-2">Valeurs par défaut ; modifiables ensuite pour chaque soirée, dans la liste ci-dessous.</p>
               <FeatureToggles value={cfg.defaultFeatures} onChange={(f) => action({ action: "settings", defaultFeatures: f })} />
             </div>
+            <div className="pt-2 border-t border-gray-100">
+              <p className="font-semibold mb-1">Réglages de départ des nouvelles soirées</p>
+              <p className="text-xs text-gray-400 mb-2">Pour toutes les soirées créées ensuite (par vous ou par d'autres) ; la régie peut les changer pendant la soirée.</p>
+              <SoireeFields value={cfg.defaultOptions} onChange={(patch) => action({ action: "settings", defaultOptions: patch })} />
+            </div>
           </div>
         </div>
       )}
 
-      <CreateForm token={token} defaults={cfg?.defaultFeatures} onCreated={(code, adminToken, name) => {
+      <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name) => {
         setAdminToken(code, adminToken);
         rememberParty(code, name);
         setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}`, joinUrl: `${origin}/jukebox/${code}` });
@@ -232,18 +238,16 @@ export default function SuperAdmin() {
 
 /* Création d'une soirée déjà configurée : fonctions activées et réglages de
  * la régie (modifiables ensuite par la régie, sauf les fonctions). */
-function CreateForm({ token, defaults, onCreated }) {
+function CreateForm({ token, defaults, defaultOptions, onCreated }) {
   const [name, setName] = useState("");
-  const [max, setMax] = useState(DEFAULT_MAX_PER_PARTICIPANT);
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const [features, setFeatures] = useState(null);
-  const [opts, setOpts] = useState({
-    searchMode: "normal", fade: DEFAULT_FADE, dedications: false, authorReveal: 0,
-    fairQueue: true, screenQueue: true, guestQueue: true,
-  });
+  const [changed, setChanged] = useState(null); // réglages modifiés pour cette soirée
   const feats = features || defaults || {};
-  const set = (k, v) => setOpts((o) => ({ ...o, [k]: v }));
+  const base = defaultOptions || SOIREE_DEFAULTS;
+  const opts = { ...base, ...changed, blind: { ...base.blind, ...changed?.blind } };
+  const change = (patch) => setChanged((c) => ({ ...c, ...patch, blind: { ...c?.blind, ...patch.blind } }));
 
   const create = async (e) => {
     e.preventDefault();
@@ -253,12 +257,13 @@ function CreateForm({ token, defaults, onCreated }) {
       const res = await fetch("/api/jukebox", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-jukebox-super": token },
-        body: JSON.stringify({ name, maxPerParticipant: max, features: feats, options: opts }),
+        body: JSON.stringify({ name, maxPerParticipant: opts.maxPerParticipant, features: feats, options: opts }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Création impossible.");
       onCreated(d.code, d.adminToken, name.trim());
       setName("");
+      setChanged(null);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -266,8 +271,6 @@ function CreateForm({ token, defaults, onCreated }) {
     }
   };
 
-  const check = "flex items-center justify-between gap-3";
-  const select = "border-2 border-gray-200 rounded-xl px-2 py-1 font-semibold";
   return (
     <form onSubmit={create} className="bg-white rounded-2xl border border-purple-100 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -289,35 +292,80 @@ function CreateForm({ token, defaults, onCreated }) {
           </div>
           <div className="space-y-2.5">
             <p className="font-bold text-gray-900">Réglages de départ de la régie</p>
-            <label className={check}><span>Titres en attente / invité</span>
-              <select value={max} onChange={(e) => setMax(Number(e.target.value))} className={select}>
-                {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
-              </select>
-            </label>
-            <label className={check}><span>Versions proposées</span>
-              <select value={opts.searchMode} onChange={(e) => set("searchMode", e.target.value)} className={select}>
-                {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            </label>
-            <label className={check}><span>Fondu enchaîné</span>
-              <select value={opts.fade} onChange={(e) => set("fade", Number(e.target.value))} className={select}>
-                {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
-              </select>
-            </label>
-            <label className={check}><span>Nom de l'invité</span>
-              <select value={opts.authorReveal} onChange={(e) => set("authorReveal", Number(e.target.value))} className={select}>
-                {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
-              </select>
-            </label>
-            {[["dedications", "Dédicaces"], ["fairQueue", "File équitable"], ["screenQueue", "File à suivre sur l'écran"], ["guestQueue", "Invités : voir toute la file"]].map(([k, label]) => (
-              <label key={k} className={check}><span>{label}</span>
-                <input type="checkbox" checked={opts[k]} onChange={(e) => set(k, e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
-              </label>
-            ))}
+            <SoireeFields value={opts} features={feats} onChange={change} />
           </div>
         </div>
       )}
     </form>
+  );
+}
+
+/* Réglages d'une soirée (création, ou réglages de départ par défaut) :
+ * onChange reçoit seulement ce qui change. `features` : n'affiche l'ambiance
+ * et le blind test que si la fonction est activée (tous sinon). */
+function SoireeFields({ value, features, onChange }) {
+  const v = value || SOIREE_DEFAULTS;
+  const check = "flex items-center justify-between gap-3";
+  const select = "border-2 border-gray-200 rounded-xl px-2 py-1 font-semibold";
+  const num = (k) => (e) => onChange({ [k]: Number(e.target.value) });
+  const blind = (k, val) => onChange({ blind: { [k]: val } });
+  return (
+    <div className="space-y-2.5">
+      <label className={check}><span>Titres en attente / invité</span>
+        <select value={v.maxPerParticipant} onChange={num("maxPerParticipant")} className={select}>
+          {MAX_CHOICES.map((n) => <option key={n} value={n}>{maxLabel(n)}</option>)}
+        </select>
+      </label>
+      <label className={check}><span>Versions proposées</span>
+        <select value={v.searchMode} onChange={(e) => onChange({ searchMode: e.target.value })} className={select}>
+          {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+        </select>
+      </label>
+      <label className={check}><span>Fondu enchaîné</span>
+        <select value={v.fade} onChange={num("fade")} className={select}>
+          {FADE_CHOICES.map((n) => <option key={n} value={n}>{n ? `${n} s` : "Non"}</option>)}
+        </select>
+      </label>
+      <label className={check}><span>Nom de l'invité</span>
+        <select value={v.authorReveal} onChange={num("authorReveal")} className={select}>
+          {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+        </select>
+      </label>
+      {[["dedications", "Dédicaces"], ["fairQueue", "File équitable"], ["screenQueue", "File à suivre sur l'écran"], ["guestQueue", "Invités : voir toute la file"]].map(([k, label]) => (
+        <label key={k} className={check}><span>{label}</span>
+          <input type="checkbox" checked={!!v[k]} onChange={(e) => onChange({ [k]: e.target.checked })} className="w-5 h-5 accent-fuchsia-600" />
+        </label>
+      ))}
+      {(!features || features.theme) && (
+        <label className={check}><span>🎨 Ambiance</span>
+          <select value={v.palette} onChange={(e) => onChange({ palette: e.target.value })} className={select}>
+            {THEMES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </label>
+      )}
+      {(!features || features.blindtest) && (
+        <>
+          <label className={check}><span>🕵️ Blind test</span>
+            <select value={v.blind.mode} onChange={(e) => blind("mode", e.target.value)} className={select}>
+              {BLIND_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </label>
+          <label className={check}><span className="pl-6">Dévoiler la réponse</span>
+            <select value={v.blind.reveal} onChange={(e) => blind("reveal", Number(e.target.value))} className={select}>
+              {BLIND_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+            </select>
+          </label>
+          <label className={check}><span className="pl-6">Titre suivant</span>
+            <select value={v.blind.after} onChange={(e) => blind("after", Number(e.target.value))} className={select}>
+              {BLIND_AFTER_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+            </select>
+          </label>
+          <label className={check}><span className="pl-6">Titres piochés automatiquement</span>
+            <input type="checkbox" checked={!!v.blind.auto} onChange={(e) => blind("auto", e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
+          </label>
+        </>
+      )}
+    </div>
   );
 }
 

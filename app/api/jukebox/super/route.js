@@ -5,7 +5,7 @@
  *          ?songs=1&q=…&status=all|todo|ok|blind&mode=… : mémoire des titres.
  *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
- *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures? }
+ *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures?, defaultOptions? }
  *     features { code, features } → fonctions activées pour une soirée
  *     regie { code }   → nouveau lien régie (l'ancien ne fonctionne plus)
  *     delete { code }  → supprimer une soirée

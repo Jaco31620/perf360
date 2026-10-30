@@ -25,7 +25,7 @@ export default function JukeboxHome() {
   useEffect(() => {
     setMine(myParties());
     setIsSuper(!!getSuperToken());
-    fetch("/api/jukebox", { cache: "no-store" }).then((r) => r.json()).then((d) => setMode(d.creationMode || "open")).catch(() => {});
+    fetch("/api/jukebox", { cache: "no-store" }).then((r) => r.json()).then((d) => { setMode(d.creationMode || "open"); if (d.defaultMax != null) setMax(d.defaultMax); }).catch(() => {});
   }, []);
   const needCode = mode === "code" && !isSuper;
   const closed = mode === "super" && !isSuper;

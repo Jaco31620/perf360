@@ -5,13 +5,14 @@
  * Création selon le réglage super-admin : ouverte à tous, sur code de
  * création, ou réservée au super-admin (en-tête x-jukebox-super).
  * Fonctions (historique, thème, blind test) : celles choisies par le
- * super-admin à la création, sinon ses valeurs par défaut. Le super-admin
- * peut aussi fixer les réglages de la régie ({ options }).
- * GET : mode de création en vigueur (pour l'accueil).
+ * super-admin à la création, sinon ses valeurs par défaut. Réglages de la
+ * régie : ceux du super-admin ({ options }) à la création, sinon les réglages
+ * de départ fixés dans le super-admin.
+ * GET : mode de création en vigueur et limite par invité par défaut (accueil).
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { newAdminToken, hashToken, regieOptions } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, normalizeMax, normalizeFeatures } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults } from "@/lib/jukebox";
 import { loadConfig, isJukeboxSuper, sameCode } from "@/lib/jukeboxAdmin";
 
 export const runtime = "nodejs";
@@ -19,8 +20,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { creationMode } = await loadConfig();
-    return Response.json({ creationMode });
+    const { creationMode, defaultOptions } = await loadConfig();
+    return Response.json({ creationMode, defaultMax: defaultOptions.maxPerParticipant });
   } catch (e) {
     return Response.json({ creationMode: "open" });
   }
@@ -32,14 +33,18 @@ export async function POST(req) {
 
   const name = String(body?.name || "").trim().slice(0, MAX_NAME_LEN);
   if (!name) return Response.json({ error: "Merci de nommer la soirée." }, { status: 400 });
-  const max = normalizeMax(body?.maxPerParticipant);
 
   const token = newAdminToken();
   try {
     const config = await loadConfig();
     const isSuper = isJukeboxSuper(req);
+    const d = isSuper && body?.options && typeof body.options === "object"
+      ? normalizeDefaults(body.options, config.defaultOptions) : config.defaultOptions;
+    const max = body?.maxPerParticipant == null ? d.maxPerParticipant : normalizeMax(body.maxPerParticipant);
     const options = {
-      ...(isSuper && body?.options && typeof body.options === "object" ? regieOptions(body.options) : {}),
+      ...regieOptions(d),
+      theme: { palette: d.palette },
+      blind: { ...d.blind, on: false },
       features: isSuper ? normalizeFeatures(body?.features, config.defaultFeatures) : config.defaultFeatures,
     };
     if (!isSuper) {
