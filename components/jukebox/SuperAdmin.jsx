@@ -6,7 +6,7 @@
  * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
  * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -42,9 +42,9 @@ export default function SuperAdmin() {
   const [link, setLink] = useState(null); // { name, url } lien régie à transmettre
   const [filter, setFilter] = useState("");
   const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
-  const goTo = (on) => { chooseTab("biblio"); setFocus({ on, at: Date.now() }); };
+  const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
-  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
   const matches = (s) => {
     const q = filter.trim().toLowerCase();
@@ -109,7 +109,6 @@ export default function SuperAdmin() {
   const nSessions = data?.sessions.length ?? 0;
   const tabs = [
     { id: "soirees", label: `🎉 Soirées${nSessions ? ` (${nSessions})` : ""}` },
-    { id: "biblio", label: "🎵 Bibliothèque" },
     { id: "reglages", label: "⚙️ Réglages" },
   ];
   const quotaPct = data ? Math.min(100, (data.searches / SEARCH_QUOTA) * 100) : 0;
@@ -131,8 +130,8 @@ export default function SuperAdmin() {
               <div className={`h-full ${quotaPct >= 80 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${quotaPct}%` }} />
             </div>
           </Stat>
-          <Stat label="Titres en mémoire" value={data.songs} onClick={() => goTo("memory")} />
-          <Stat label="En attente de pré-remplissage" value={data.prefill?.pending ?? 0} onClick={() => goTo("queue")} />
+          <Stat label="🎵 Titres en mémoire" value={data.songs} active={tab === "memory"} onClick={() => goTo("memory")} />
+          <Stat label="🌅 En attente de pré-remplissage" value={data.prefill?.pending ?? 0} active={tab === "queue"} onClick={() => goTo("queue")} />
         </div>
       )}
 
@@ -197,12 +196,8 @@ export default function SuperAdmin() {
         </>
       )}
 
-      {tab === "biblio" && (
-        <>
-          <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} />
-          <Prefill call={call} state={data?.prefill} onChanged={load} focus={focus?.on === "queue" ? focus.at : null} />
-        </>
-      )}
+      {tab === "memory" && <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} />}
+      {tab === "queue" && <Prefill call={call} state={data?.prefill} onChanged={load} />}
 
       {tab === "reglages" && cfg && (
         <div className="grid gap-4 md:grid-cols-2 items-start">
@@ -281,11 +276,12 @@ export default function SuperAdmin() {
   );
 }
 
-/* Chiffre clé en tête de page (cliquable : ouvre l'onglet concerné). */
-function Stat({ label, value, title, onClick, children }) {
+/* Chiffre clé en tête de page (cliquable : ouvre la page correspondante). */
+function Stat({ label, value, title, onClick, active, children }) {
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag onClick={onClick} title={title} className="text-left bg-white rounded-2xl border border-purple-100 px-4 py-3 min-w-0 hover:border-fuchsia-300">
+    <Tag onClick={onClick} title={title}
+      className={`text-left bg-white rounded-2xl border-2 px-4 py-3 min-w-0 ${active ? "border-fuchsia-500" : "border-purple-100"} ${onClick ? "hover:border-fuchsia-300" : ""}`}>
       <p className="text-xs text-gray-500 leading-tight">{label}</p>
       <p className="text-xl font-black text-gray-900 tabular-nums">{value}</p>
       {children}
@@ -493,14 +489,12 @@ function SongMemory({ call, total, focus }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("todo");
-  const box = useRef(null);
   // tuile « Titres en mémoire » : liste complète, sans filtre
   useEffect(() => {
     if (!focus) return;
     setOpen(true);
     setStatus("all");
     setQ("");
-    box.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [focus]);
   const [mode, setMode] = useState("");
   const [songs, setSongs] = useState(null);
@@ -535,7 +529,7 @@ function SongMemory({ call, total, focus }) {
   };
 
   return (
-    <div ref={box} className="mt-5 bg-white rounded-2xl border border-purple-100 scroll-mt-4">
+    <div className="bg-white rounded-2xl border border-purple-100">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex justify-between items-center px-5 py-4 font-bold text-gray-900">
         <span>🧠 Mémoire des titres {typeof total === "number" && <span className="text-gray-400 font-normal">({total})</span>}</span>
         <span className="text-gray-400">{open ? "▲" : "▼"}</span>
@@ -623,8 +617,8 @@ const STOP_TEXT = { quota: "quota épuisé", time: "temps écoulé", empty: "fil
 
 /* Pré-remplissage : titres mis en attente, cherchés chaque matin vers 6 h
  * avec le reste du quota YouTube de la veille. */
-function Prefill({ call, state, onChanged, focus }) {
-  const [open, setOpen] = useState(false);
+function Prefill({ call, state, onChanged }) {
+  const [open, setOpen] = useState(true);
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
   const [modes, setModes] = useState(["normal"]);
@@ -633,17 +627,8 @@ function Prefill({ call, state, onChanged, focus }) {
   const [msg, setMsg] = useState(null);
   const [plQuery, setPlQuery] = useState("");
   const [playlists, setPlaylists] = useState(null);
-  const [showQueue, setShowQueue] = useState(false);
+  const [showQueue, setShowQueue] = useState(true);
   const [queueVersion, setQueueVersion] = useState(0);
-  const queueBox = useRef(null);
-  // tuile « En attente » : file d'attente ouverte
-  useEffect(() => {
-    if (!focus) return;
-    setOpen(true);
-    setShowQueue(true);
-    const t = setTimeout(() => queueBox.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    return () => clearTimeout(t);
-  }, [focus]);
 
   const toggle = (id) => setModes((ms) => (ms.includes(id) ? ms.filter((m) => m !== id) : [...ms, id]));
   const send = async (body) => {
@@ -684,7 +669,7 @@ function Prefill({ call, state, onChanged, focus }) {
   const cost = (n) => `${n} recherche${n > 1 ? "s" : ""} YouTube${modes.length > 1 ? ` × ${modes.length} modes` : ""}`;
 
   return (
-    <div className="mt-3 bg-white rounded-2xl border border-purple-100">
+    <div className="bg-white rounded-2xl border border-purple-100">
       <button onClick={() => setOpen((v) => !v)} className="w-full flex justify-between items-center px-5 py-4 font-bold text-gray-900">
         <span>🌅 Pré-remplir la mémoire {state && <span className="text-gray-400 font-normal">({state.pending} en attente)</span>}</span>
         <span className="text-gray-400">{open ? "▲" : "▼"}</span>
@@ -782,7 +767,7 @@ function Prefill({ call, state, onChanged, focus }) {
             </div>
           )}
 
-          {showQueue && <div ref={queueBox} className="scroll-mt-4"><PrefillQueue call={call} version={queueVersion} onChanged={onChanged} /></div>}
+          {showQueue && <PrefillQueue call={call} version={queueVersion} onChanged={onChanged} />}
         </div>
       )}
     </div>
