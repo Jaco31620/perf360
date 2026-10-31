@@ -14,7 +14,7 @@
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
      songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
-     enrich → enrichir des titres tout de suite (année, langue ; ~40 s)
+     enrich → enrichir des titres tout de suite (année, langue ; ~45 s par appel)
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
  *     prefill { lines? | playlist?, modes[], blind? } (playlist : id ou lien Deezer)
  *     prefillEdit { keys[], op: "remove" | "top" } → retirer / traiter en premier → titres à pré-chercher (cron de 6 h)
@@ -87,7 +87,7 @@ export async function POST(req) {
         await editSongMeta(body.key, body);
         return Response.json({ ok: true });
       case "enrich":
-        return Response.json({ ok: true, ...(await enrichSongs(40e3)), pending: await enrichPending() });
+        return Response.json({ ok: true, ...(await enrichSongs(45e3)), pending: await enrichPending() });
       case "validateSong":
         await validateSong(body.key, body.validated);
         return Response.json({ ok: true });

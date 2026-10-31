@@ -6,7 +6,7 @@
  * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
  * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -539,9 +539,21 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
     if (confirmText && !confirm(confirmText)) return;
     try { await call("POST", body); load(); } catch (e) { alert(e.message); }
   };
+  // appels successifs (~45 s chacun, MusicBrainz : 1 requête / s) jusqu'au bout
+  const stopEnrich = useRef(false);
   const enrichNow = async () => {
-    setEnriching(true);
-    try { await call("POST", { action: "enrich" }); load(); onChanged?.(); } catch (e) { alert(e.message); } finally { setEnriching(false); }
+    stopEnrich.current = false;
+    setEnriching({ done: 0 });
+    try {
+      for (let total = 0; !stopEnrich.current;) {
+        const d = await call("POST", { action: "enrich" });
+        total += d.done;
+        setEnriching({ done: total, pending: d.pending });
+        load();
+        if (!d.pending || !d.done) break;
+      }
+      onChanged?.();
+    } catch (e) { alert(e.message); } finally { setEnriching(false); }
   };
   const editYear = (s) => {
     const v = prompt(`Année de sortie de « ${s.label} » (vide : inconnue)`, s.year || "");
@@ -562,12 +574,17 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
             <b> Oublier</b> la fera rechercher à nouveau au prochain ajout. L'<b>année</b> et la <b>langue</b> (filtres du blind test)
             sont trouvées automatiquement ; cliquez-les pour les corriger.
           </p>
-          {enrich > 0 && (
+          {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
-              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} sans année ni langue : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube).</span>
-              <button disabled={enriching} onClick={enrichNow} className="font-bold bg-sky-600 disabled:opacity-50 text-white px-3 py-1 rounded-full">
-                {enriching ? "Enrichissement… (~40 s)" : "Enrichir maintenant"}
-              </button>
+              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} sans année ni langue : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube, environ 4 s par titre).</span>
+              {enriching ? (
+                <span className="flex items-center gap-2 font-bold">
+                  ⏳ {enriching.done} titre{enriching.done > 1 ? "s" : ""} enrichi{enriching.done > 1 ? "s" : ""}{enriching.pending != null ? `, ${enriching.pending} ligne${enriching.pending > 1 ? "s" : ""} restante${enriching.pending > 1 ? "s" : ""}` : ""}…
+                  <button onClick={() => { stopEnrich.current = true; }} className="underline font-normal">arrêter</button>
+                </span>
+              ) : (
+                <button onClick={enrichNow} className="font-bold bg-sky-600 text-white px-3 py-1 rounded-full">Tout enrichir maintenant</button>
+              )}
             </div>
           )}
           <div className="flex flex-wrap gap-2 items-center">
