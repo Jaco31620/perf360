@@ -1,7 +1,9 @@
 "use client";
 /*
  * Jukebox — télécommande (téléphone de l'organisateur), sans lecteur : la
- * musique reste jouée par la régie (PC branché à la sono).
+ * musique est jouée par la régie (PC branché à la sono) ou par la télé en
+ * mode son. Onglets en bas : Lecture, File, Blind (si activé), Plus
+ * (réglages, télé, QR invités, historique).
  *  - pause / lecture / volume : ordres transmis à la régie (champ `command`,
  *    lu à chaque rafraîchissement de la régie, ~1,5 s) ;
  *  - titre suivant, file et réglages : mêmes actions que la régie.
@@ -13,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
+import { QRCodeSVG } from "qrcode.react";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
 import TvLink from "./TvLink";
@@ -22,7 +25,10 @@ export default function Telecommande({ code }) {
   const [data, setData] = useState(null);
   const [missing, setMissing] = useState(false);
   const [volume, setVolume] = useState(null); // valeur du curseur pendant qu'on le bouge
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tab, setTab] = useState("play"); // onglet (retenu par appareil)
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:remoteTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  const chooseTab = (t) => { setTab(t); window.scrollTo(0, 0); try { localStorage.setItem("jukebox:remoteTab", t); } catch (e) { /* ignoré */ } };
+  const [guestQr, setGuestQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
@@ -106,90 +112,139 @@ export default function Telecommande({ code }) {
     act("playnow", { id: t.id });
   };
 
-  return (
-    <div className="min-h-screen bg-gray-950 text-white px-4 py-5">
-      <div className="max-w-md mx-auto space-y-4">
-        <header className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-400">📱 Télécommande</p>
-            <h1 className="font-extrabold text-lg truncate">{session.name}</h1>
-          </div>
-          <span className="font-mono text-sm text-white/50">{formatCode(code)}</span>
-        </header>
-        <div className="flex gap-2">
-          <GuestsSwitch open={session.status === "open"} act={act} className="flex-1 justify-center py-2" />
-          <button onClick={() => setTvOpen(true)} className="shrink-0 text-xs font-bold bg-white/10 active:bg-white/20 rounded-full px-3 py-2">📺 Connecter une télé</button>
-        </div>
-        {tvOpen && <TvLink code={code} onClose={() => setTvOpen(false)} />}
+  const tabs = [
+    { id: "play", icon: "▶", label: "Lecture" },
+    { id: "queue", icon: "🎵", label: `File${queue.length ? ` (${queue.length})` : ""}` },
+    ...(session.blindSettings ? [{ id: "blind", icon: "🕵️", label: "Blind", dot: session.blindSettings.on }] : []),
+    { id: "more", icon: "⚙️", label: "Plus" },
+  ];
+  const shown = tabs.some((t) => t.id === tab) ? tab : "play";
+  const next = queue[0];
+  const joinUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/jukebox/${code}`;
 
-        <section className="bg-white/5 rounded-3xl p-4">
-          {now ? (
-            <>
-              <div className="flex items-center gap-3">
-                {now.thumb && <img src={now.thumb} alt="" className="w-24 h-[54px] object-cover rounded-lg shrink-0" />}
-                <div className="min-w-0">
-                  <p className="font-bold leading-snug line-clamp-2">{now.title}</p>
-                  {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
-                  <p className="text-xs text-white/50">proposé par {now.author}</p>
-                  <FixVideoButton onClick={() => setFixing(now)} />
+  return (
+    <div className="min-h-screen bg-gray-950 text-white">
+      <header className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur border-b border-white/10 px-4 py-2.5">
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="font-extrabold truncate leading-tight">{session.name}</h1>
+            <p className="text-[11px] text-white/40">📱 Télécommande · code <span className="font-mono">{formatCode(code)}</span></p>
+          </div>
+          <GuestsSwitch open={session.status === "open"} act={act} />
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto px-4 pt-4 pb-28 space-y-4">
+        {shown === "play" && (
+          <section className="space-y-5">
+            {now ? (
+              <div className="space-y-3">
+                {now.thumb && <img src={now.thumb} alt="" className="w-full aspect-video object-cover rounded-3xl shadow-xl" />}
+                <div>
+                  <p className="text-xl font-bold leading-snug line-clamp-2">{now.title}</p>
+                  {now.channel && <p className="text-white/70 truncate">{now.channel}</p>}
+                  <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>
                   {now.dedication && (
-                    <p className="text-xs text-fuchsia-300 italic">
+                    <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »
                       <button onClick={() => confirm("Effacer cette dédicace ?") && act("clearDedication", { id: now.id })}
                         className="not-italic ml-2 text-white/40" aria-label="Effacer la dédicace">✕</button>
                     </p>
                   )}
+                  <div className="mt-1"><FixVideoButton onClick={() => setFixing(now)} /></div>
+                </div>
+                <div>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-fuchsia-500" style={{ width: `${now.duration ? Math.min(100, (pos / now.duration) * 100) : 0}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-white/40 mt-1">
+                    <span>{formatDuration(Math.floor(pos))}</span><span>{formatDuration(now.duration)}</span>
+                  </div>
                 </div>
               </div>
-              <div className="mt-3 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-fuchsia-500" style={{ width: `${now.duration ? Math.min(100, (pos / now.duration) * 100) : 0}%` }} />
-              </div>
-              <div className="flex justify-between text-xs text-white/40 mt-1">
-                <span>{formatDuration(Math.floor(pos))}</span><span>{formatDuration(now.duration)}</span>
-              </div>
-            </>
-          ) : (
-            <p className="text-white/50 text-center py-3">Aucun titre en cours.</p>
-          )}
+            ) : (
+              <p className="text-white/50 text-center py-10">Aucun titre en cours.</p>
+            )}
 
-          {now && !regieOk && (
-            <p className="mt-3 text-sm text-amber-300 bg-amber-500/10 rounded-xl px-3 py-2">
-              ⚠️ Le lecteur ne répond pas : vérifiez que la page régie (ordinateur) ou l’écran en mode son (télé) est ouvert et que « Lancer la musique » a été cliqué.
-            </p>
-          )}
+            {now && !regieOk && (
+              <p className="text-sm text-amber-300 bg-amber-500/10 rounded-xl px-3 py-2">
+                ⚠️ Le lecteur ne répond pas : vérifiez que la page régie (ordinateur) ou l’écran en mode son (télé) est ouvert et que « Lancer la musique » a été cliqué.
+              </p>
+            )}
 
-          <div className="flex items-center justify-center gap-6 mt-5">
-            <span className="w-14" aria-hidden />
-            <PlayPauseButton size="lg" playing={isPlaying} onClick={togglePlay} disabled={!now} />
-            <SkipButton size="lg" onClick={skip} disabled={!now} />
-          </div>
+            <div className="flex items-center justify-center gap-6">
+              <span className="w-14" aria-hidden />
+              <PlayPauseButton size="lg" playing={isPlaying} onClick={togglePlay} disabled={!now} />
+              <SkipButton size="lg" onClick={skip} disabled={!now} />
+            </div>
+            <div className="flex items-center gap-3">
+              <VolumeSlider value={shownVolume} onChange={changeVolume} className="flex-1" />
+              <span className="w-8 text-right text-sm text-white/50 tabular-nums">{shownVolume}</span>
+            </div>
 
-          <div className="flex items-center gap-3 mt-6">
-            <VolumeSlider value={shownVolume} onChange={changeVolume} className="flex-1" />
-            <span className="w-8 text-right text-sm text-white/50 tabular-nums">{shownVolume}</span>
-          </div>
-        </section>
-
-
-        {session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
-
-        <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
-        <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
-
-        {session.features.history && (
-          <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 active:bg-white/20 rounded-full py-3">🕘 Historique</button>
+            {next && (
+              <button onClick={() => chooseTab("queue")} className="w-full flex items-center gap-3 bg-white/5 rounded-2xl p-3 text-left">
+                {next.thumb && <img src={next.thumb} alt="" className="w-12 h-12 object-cover rounded-lg shrink-0" />}
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-white/40">Ensuite</span>
+                  <span className="block text-sm font-semibold truncate">{next.title}</span>
+                  <span className="block text-xs text-white/50 truncate">{next.channel}</span>
+                </span>
+                <span className="text-xs text-white/40 shrink-0">{queue.length > 1 ? `+${queue.length - 1} ›` : "›"}</span>
+              </button>
+            )}
+          </section>
         )}
-        {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 
-        {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
+        {shown === "queue" && (
+          <>
+            <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
+            <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+          </>
+        )}
 
-        <section className="bg-white/5 rounded-2xl">
-          <button onClick={() => setSettingsOpen((v) => !v)} className="w-full flex justify-between items-center px-4 py-3 font-bold">
-            ⚙️ Réglages de la soirée <span className="text-white/50">{settingsOpen ? "▲" : "▼"}</span>
-          </button>
-          {settingsOpen && <div className="px-4 pb-4 space-y-3 text-sm"><Settings session={session} act={act} /></div>}
-        </section>
-      </div>
+        {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
+
+        {shown === "more" && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setTvOpen(true)} className="font-bold bg-white/10 active:bg-white/20 rounded-2xl py-3 text-sm">📺 Connecter une télé</button>
+              <button onClick={() => setGuestQr(true)} className="font-bold bg-white/10 active:bg-white/20 rounded-2xl py-3 text-sm">🔳 QR code invités</button>
+              {session.features.history && (
+                <button onClick={() => setHistoryOpen(true)} className="col-span-2 font-bold bg-white/10 active:bg-white/20 rounded-2xl py-3 text-sm">🕘 Historique de la soirée</button>
+              )}
+            </div>
+            <section className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
+              <Settings session={session} act={act} />
+            </section>
+          </>
+        )}
+      </main>
+
+      <nav className="fixed bottom-0 inset-x-0 z-30 bg-gray-900/95 backdrop-blur border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+        <div className="max-w-md mx-auto flex">
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => chooseTab(t.id)}
+              className={`relative flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-bold ${shown === t.id ? "text-fuchsia-300" : "text-white/50"}`}>
+              <span className="text-xl leading-none">{t.icon}</span>
+              {t.label}
+              {t.dot && <span className="absolute top-2 right-[30%] w-2 h-2 rounded-full bg-green-400" />}
+              {shown === t.id && <span className="absolute top-0 inset-x-6 h-0.5 rounded-full bg-fuchsia-400" />}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {tvOpen && <TvLink code={code} onClose={() => setTvOpen(false)} />}
+      {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
+      {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
+      {guestQr && (
+        <div onClick={() => setGuestQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 text-center">
+          <div className="bg-white p-4 rounded-3xl"><QRCodeSVG value={joinUrl} size={260} /></div>
+          <p className="text-lg font-bold">{joinUrl.replace(/^https?:\/\//, "")}</p>
+          <p className="text-white/60">code <span className="font-mono font-bold text-white text-2xl">{formatCode(code)}</span></p>
+        </div>
+      )}
     </div>
   );
 }
