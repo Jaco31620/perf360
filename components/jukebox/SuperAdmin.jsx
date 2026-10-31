@@ -728,7 +728,11 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
   );
 }
 
-const STOP_TEXT = { quota: "quota épuisé", time: "temps écoulé", empty: "file terminée" };
+const STOP_TEXT = {
+  quota: "quota épuisé, les titres restants seront cherchés demain",
+  error: "YouTube indisponible, les titres restants seront cherchés demain",
+  time: "temps écoulé", empty: "file terminée",
+};
 
 /* Pré-remplissage : titres mis en attente, cherchés chaque matin vers 6 h
  * avec le reste du quota YouTube de la veille. */
@@ -800,6 +804,7 @@ function Prefill({ call, state, onChanged }) {
             <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">
               Dernier passage le {fmtDate(Date.parse(last.at))} : {last.found} trouvé{last.found > 1 ? "s" : ""}
               {last.failed ? `, ${last.failed} sans résultat` : ""} ({STOP_TEXT[last.stop] || last.stop}).
+              {last.error && <span className="block text-gray-400">{last.error}</span>}
             </p>
           )}
 
