@@ -12,6 +12,9 @@
  *            Blind test en cours (`blind`) : tant que la réponse n'est pas
  *            dévoilée, le public ne voit ni le titre en cours (now.hidden)
  *            ni la file ; classement et réponses de l'invité.
+ *            ?view=ecran&engine=1 avec le jeton régie (écran en mode son,
+ *            qui joue la musique) : vue publique de l'écran + `engine`
+ *            (titre en cours, file complète, ordre de la télécommande).
  * - POST   : ajout d'un titre { participantId, author, videoId | deezerId, dedication? }. Les infos
  *            sont relues chez YouTube (pas de confiance au client). Placement
  *            en file équitable (alternance des invités) si la régie l'a choisi. La régie
@@ -47,7 +50,8 @@ export async function GET(req, { params }) {
     const now = rows.find((r) => r.status === "playing");
     const queue = rows.filter((r) => r.status === "queued");
     const session = publicSession(s);
-    const admin = isAdminReq(req, s);
+    const engine = url.searchParams.get("engine") === "1" && isAdminReq(req, s);
+    const admin = !engine && isAdminReq(req, s); // mode son : l'écran reste vu comme le public
     let list = queue.map((r, i) => ({ ...trackOut(r, me), ahead: i }));
     if (!admin) {
       if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
@@ -71,6 +75,11 @@ export async function GET(req, { params }) {
       playback: s.playback || null,
       serverTime: Date.now(),
       blind: blindOut,
+    };
+    if (engine) out.engine = {
+      now: now ? trackOut(now, null) : null,
+      queue: queue.map((r) => trackOut(r, null)),
+      command: s.command || null,
     };
     if (admin) {
       out.admin = true;

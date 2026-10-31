@@ -2,7 +2,9 @@ import Ecran from "@/components/jukebox/Ecran";
 
 export const metadata = { title: "Écran — Jukebox" };
 
-export default async function JukeboxEcranPage({ params }) {
+/* ?son=1 : la télé joue aussi la musique (jumelée depuis perf360.fr/tv). */
+export default async function JukeboxEcranPage({ params, searchParams }) {
   const { code } = await params;
-  return <Ecran code={code} />;
+  const { son } = await searchParams;
+  return <Ecran code={code} sound={son === "1"} />;
 }

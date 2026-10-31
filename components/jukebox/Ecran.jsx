@@ -7,19 +7,26 @@
  * La vidéo est jouée en MUET (le son vient de la régie) et suit la position
  * envoyée par la régie : `playback` est horodaté par le serveur, converti en
  * heure locale grâce à `serverTime` (pas besoin d'horloges synchronisées).
+ * Mode son (`sound`, télé sans PC, jeton régie sur l'appareil) : l'écran
+ * joue lui-même la musique avec le moteur de la régie (usePlayerEngine) ; la
+ * régie se pilote alors depuis la télécommande (téléphone).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
-import { formatCode } from "./storage";
+import { formatCode, authHeaders, getAdminToken } from "./storage";
+import { useAdminActions } from "./optimistic";
+import { usePlayerEngine } from "./usePlayerEngine";
 import { themeVars } from "@/lib/jukebox";
 import { Leaderboard } from "./Blind";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 
 const MAX_SHOWN = 6;
 
-export default function Ecran({ code }) {
+export default function Ecran({ code, sound: wantSound }) {
   const [data, setData] = useState(null);
+  const [sound, setSound] = useState(null); // mode son (jeton régie présent) ; null : pas encore lu
+  useEffect(() => { setSound(!!wantSound && !!getAdminToken(code)); }, [wantSound, code]);
   const [missing, setMissing] = useState(false);
   const [origin, setOrigin] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -34,10 +41,11 @@ export default function Ecran({ code }) {
   const clock = useRef(null); // { offset: heure serveur − heure locale, rtt }
   const progress = useRef(null); // { cur, t } : la vidéo avance-t-elle vraiment ?
 
+  const { act, fresh, refreshRef } = useAdminActions(code, setData);
   const refresh = useCallback(async () => {
     try {
       const t0 = Date.now();
-      const res = await fetch(`/api/jukebox/${code}?view=ecran`, { cache: "no-store" });
+      const res = await fetch(`/api/jukebox/${code}?view=ecran${sound ? "&engine=1" : ""}`, { cache: "no-store", headers: sound ? authHeaders(code) : {} });
       if (res.status === 404) return setMissing(true);
       if (!res.ok) return;
       const d = await res.json();
@@ -53,14 +61,22 @@ export default function Ecran({ code }) {
         sync.current = { id: pb.id, pos: pb.pos, playing: pb.playing, at: pb.at, localAt: pb.at - clock.current.offset };
       nowRef.current = d.now;
       d.fetchedAt = Date.now();
+      if (sound && !fresh(t0)) return; // action envoyée entre-temps : réponse périmée
       setData(d);
     } catch (e) { /* réseau : on retentera */ }
-  }, [code]);
+  }, [code, sound, fresh]);
+  refreshRef.current = refresh;
+
+  // mode son : le moteur voit le titre en cours et la file complets
+  const engineData = sound && data?.engine
+    ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null;
+  const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data });
 
   // Lecteur muet, sans commandes (un calque transparent bloque les clics).
   const hasData = !!data;
   useEffect(() => {
     let cancelled = false;
+    if (sound !== false) return; // mode son : lecteurs du moteur
     loadYouTubeApi().then(() => {
       if (cancelled || player.current || !playerEl.current) return;
       player.current = createPlayer(playerEl.current, {
@@ -69,7 +85,7 @@ export default function Ecran({ code }) {
       });
     });
     return () => { cancelled = true; };
-  }, [hasData]); // le conteneur n'existe qu'une fois les données chargées
+  }, [hasData, sound]); // le conteneur n'existe qu'une fois les données chargées
 
   // Recalage sur la position de la régie, en douceur : petit écart → vitesse
   // légèrement modifiée (vidéo muette, invisible) ; saut seulement au-delà de
@@ -122,8 +138,9 @@ export default function Ecran({ code }) {
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    if (sound === null) return;
     refresh();
-    const id = setInterval(refresh, 3000);
+    const id = setInterval(refresh, sound ? 1500 : 3000); // mode son : enchaînements suivis de près
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -152,7 +169,7 @@ export default function Ecran({ code }) {
   };
 
   if (missing) return <Center>La soirée {formatCode(code)} n'existe pas (ou plus).</Center>;
-  if (!data) return <Center>Chargement…</Center>;
+  if (!data || sound === null) return <Center>Chargement…</Center>;
 
   const { session, now, queue, total, blind } = data;
   const theme = session.theme;
@@ -161,6 +178,21 @@ export default function Ecran({ code }) {
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
   const cover = now && !hidden ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
+  // mode son : la vidéo reste à sa taille pendant le blind test (un lecteur
+  // trop petit s'arrête), masquée par un cache
+  const boxShown = sound ? !!now : now && !hidden;
+  const hiddenText = (
+    <>
+      <p className="text-[9vw] leading-none">🕵️</p>
+      <h1 className="mt-[3vh] text-[4.5vw] font-black leading-tight">Quel est ce titre ?</h1>
+      <p className="mt-[1.5vh] text-[2vw] text-white/80">
+        {blind?.mode === "phone" ? "Répondez sur votre téléphone : artiste, titre… ou les deux !" : "À vous de deviner !"}
+      </p>
+      {blind?.revealIn != null && (
+        <p className="mt-[3vh] text-[5vw] font-black tabular-nums text-[var(--jb-light)]">{Math.max(0, Math.ceil(blind.revealIn - (blind.playing ? since : 0)))}</p>
+      )}
+    </>
+  );
 
   return (
     <div className="relative h-screen overflow-hidden bg-gray-950 text-white select-none" style={themeVars(theme)}>
@@ -179,23 +211,20 @@ export default function Ecran({ code }) {
             </div>
           </div>
           {/* toujours monté (sinon le lecteur serait détruit), invisible sans titre */}
-          <div className={now && !hidden ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
-            style={now && !hidden ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
-            <div ref={playerEl} className="absolute inset-0" />
-            <div className="absolute inset-0" />
+          <div className={boxShown ? "relative aspect-video bg-black rounded-[1.5vw] overflow-hidden shadow-2xl" : "absolute w-px h-px opacity-0 pointer-events-none overflow-hidden"}
+            style={boxShown ? { width: "min(100%, calc(62vh * 16 / 9))" } : undefined}>
+            {sound ? [0, 1].map((i) => (
+              <div key={i} ref={engine.playerEls[i]}
+                className={`absolute inset-0 transition-opacity duration-1000 ${i === engine.activeIdx ? "opacity-100 z-10" : "opacity-0"}`} />
+            )) : <div ref={playerEl} className="absolute inset-0" />}
+            <div className="absolute inset-0 z-20" />
+            {sound && hidden && (
+              <div className="absolute inset-0 z-30 bg-gray-950 flex flex-col items-center justify-center text-center">{hiddenText}</div>
+            )}
           </div>
-          {hidden ? (
-            <div className="text-center py-[4vh]">
-              <p className="text-[9vw] leading-none">🕵️</p>
-              <h1 className="mt-[3vh] text-[4.5vw] font-black leading-tight">Quel est ce titre ?</h1>
-              <p className="mt-[1.5vh] text-[2vw] text-white/80">
-                {blind?.mode === "phone" ? "Répondez sur votre téléphone : artiste, titre… ou les deux !" : "À vous de deviner !"}
-              </p>
-              {blind?.revealIn != null && (
-                <p className="mt-[3vh] text-[5vw] font-black tabular-nums text-[var(--jb-light)]">{Math.max(0, Math.ceil(blind.revealIn - (blind.playing ? since : 0)))}</p>
-              )}
-            </div>
-          ) : now ? (
+          {hidden && !sound ? (
+            <div className="text-center py-[4vh]">{hiddenText}</div>
+          ) : hidden ? null : now ? (
             <>
               <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-[var(--jb-light)]"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
@@ -269,6 +298,17 @@ export default function Ecran({ code }) {
           )}
         </aside>
       </div>
+
+      {sound && !engine.started && (
+        <div className="absolute inset-0 z-50 bg-black/85 flex flex-col items-center justify-center gap-[3vh] text-center px-6">
+          <p className="text-[2vw] text-white/80">🔊 Cette télé joue la musique de la soirée.</p>
+          <button autoFocus onClick={engine.start} disabled={!engine.ready}
+            className="bg-fuchsia-600 hover:bg-fuchsia-700 focus:ring-8 focus:ring-white outline-none disabled:opacity-40 text-white text-[2.5vw] font-bold px-[4vw] py-[2vh] rounded-full">
+            {engine.ready ? "▶ Lancer la musique" : "Chargement du lecteur…"}
+          </button>
+          <p className="text-[1.3vw] text-white/60">Appuyez sur OK avec la télécommande de la télé. Ensuite, tout se pilote depuis la télécommande du téléphone.</p>
+        </div>
+      )}
 
       <button onClick={toggleFullscreen}
         className={`absolute bottom-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur text-white font-bold px-5 py-2.5 rounded-full border border-white/20 transition-opacity duration-500 ${

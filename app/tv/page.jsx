@@ -8,9 +8,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
-import { formatCode } from "@/components/jukebox/storage";
+import { formatCode, setAdminToken, getAdminToken } from "@/components/jukebox/storage";
 
 const LAST_KEY = "jukebox:tvCode";
+const SOUND_KEY = "jukebox:tvSound"; // dernière soirée ouverte en mode son
 const PAIR_KEY = "jukebox:tvPair";
 const newPairId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
@@ -44,21 +45,24 @@ export default function TvPage() {
       if (document.hidden) return;
       try {
         const d = await (await fetch(`/api/jukebox/tv?id=${pair}`, { cache: "no-store" })).json();
-        if (d.code) open(d.code);
+        if (d.code) {
+          if (d.token) setAdminToken(d.code, d.token); // mode son : la télé devient le lecteur de la régie
+          open(d.code, !!d.token);
+        }
       } catch (e) { /* réseau : on retentera */ }
     }, 2000);
     return () => clearInterval(t);
   }, [pair]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = async (c) => {
+  const open = async (c, sound = false) => {
     if (c.length !== 6 || busy) return;
     setBusy(true);
     setError("");
     try {
       const res = await fetch(`/api/jukebox/${c}`, { cache: "no-store" });
       if (res.status === 404) throw new Error(`Aucune soirée avec le code ${formatCode(c)}.`);
-      try { localStorage.setItem(LAST_KEY, c); } catch (e) { /* stockage indisponible */ }
-      router.push(`/jukebox/${c}/ecran`);
+      try { localStorage.setItem(LAST_KEY, c); localStorage.setItem(SOUND_KEY, sound ? "1" : ""); } catch (e) { /* stockage indisponible */ }
+      router.push(`/jukebox/${c}/ecran${sound ? "?son=1" : ""}`);
     } catch (e) {
       setError(e.message || "Connexion impossible, réessayez.");
       setBusy(false);
@@ -105,7 +109,11 @@ export default function TvPage() {
           {error && <p className="text-2xl text-amber-300">{error}</p>}
           {busy && <p className="text-2xl text-white/70">Ouverture…</p>}
           {last && !code && (
-            <button onClick={() => open(last)}
+            <button onClick={() => {
+              let sound = false;
+              try { sound = localStorage.getItem(SOUND_KEY) === "1" && !!getAdminToken(last); } catch (e) { /* stockage indisponible */ }
+              open(last, sound);
+            }}
               className="text-2xl font-bold bg-white/15 hover:bg-white/25 focus:bg-white focus:text-purple-900 outline-none rounded-full px-8 py-4">
               ▶ Reprendre la soirée {formatCode(last)}
             </button>

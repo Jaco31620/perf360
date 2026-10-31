@@ -147,7 +147,7 @@ export default function Telecommande({ code }) {
 
           {now && !regieOk && (
             <p className="mt-3 text-sm text-amber-300 bg-amber-500/10 rounded-xl px-3 py-2">
-              ⚠️ La régie ne répond pas : vérifiez que sa page est ouverte et que « Lancer la musique » a été cliqué.
+              ⚠️ Le lecteur ne répond pas : vérifiez que la page régie (ordinateur) ou l’écran en mode son (télé) est ouvert et que « Lancer la musique » a été cliqué.
             </p>
           )}
 

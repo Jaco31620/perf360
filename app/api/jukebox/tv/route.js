@@ -1,12 +1,13 @@
 /*
  * Jumelage d'une télé (perf360.fr/tv) : la télé affiche un QR code portant
  * son identifiant de jumelage ; le téléphone qui le scanne choisit la soirée
- * (POST { id, code }) ; la télé interroge (GET ?id=…) et ouvre l'écran
- * d'affichage de la soirée. Rangé dans jukebox_config (« tv:<id> »), effacé
- * dès que la télé l'a lu ; ignoré après 10 minutes.
+ * (POST { id, code, token? }) ; la télé interroge (GET ?id=…) et ouvre l'écran
+ * d'affichage de la soirée. Avec le jeton régie (téléphone de la régie), la
+ * télé passe en mode son : elle joue la musique. Rangé dans jukebox_config
+ * (« tv:<id> »), effacé dès que la télé l'a lu ; ignoré après 10 minutes.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession } from "@/lib/jukeboxServer";
+import { loadSession, checkToken } from "@/lib/jukeboxServer";
 import { isValidCode } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -24,18 +25,21 @@ export async function GET(req) {
   await sb.from("jukebox_config").delete().eq("key", `tv:${id}`);
   let v = null;
   try { v = JSON.parse(data.value); } catch (e) { /* valeur illisible */ }
-  return Response.json({ code: v && Date.now() - v.at < TTL ? v.code : null });
+  if (!v || Date.now() - v.at >= TTL) return Response.json({ code: null });
+  return Response.json({ code: v.code, token: v.token || null });
 }
 
 export async function POST(req) {
   let body;
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
-  const { id, code } = body || {};
+  const { id, code, token } = body || {};
   if (!validId(id) || !isValidCode(code)) return Response.json({ error: "Requête invalide." }, { status: 400 });
   try {
-    if (!(await loadSession(code))) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
+    const s = await loadSession(code);
+    if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
+    if (token && !checkToken(token, s.admin_hash)) return Response.json({ error: "Accès régie refusé." }, { status: 403 });
     const { error } = await getSupabaseAdmin().from("jukebox_config")
-      .upsert({ key: `tv:${id}`, value: JSON.stringify({ code, at: Date.now() }) });
+      .upsert({ key: `tv:${id}`, value: JSON.stringify({ code, at: Date.now(), ...(token ? { token } : {}) }) });
     if (error) throw error;
     return Response.json({ ok: true });
   } catch (e) {
