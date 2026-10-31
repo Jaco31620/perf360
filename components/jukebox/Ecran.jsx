@@ -16,6 +16,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
 import { formatCode, authHeaders, getAdminToken } from "./storage";
 import { useAdminActions } from "./optimistic";
+import { useWakeLock } from "./useWakeLock";
 import { usePlayerEngine } from "./usePlayerEngine";
 import { themeVars } from "@/lib/jukebox";
 import { Leaderboard } from "./Blind";
@@ -42,6 +43,7 @@ export default function Ecran({ code, sound: wantSound }) {
   const progress = useRef(null); // { cur, t } : la vidéo avance-t-elle vraiment ?
 
   const { act, fresh, refreshRef } = useAdminActions(code, setData);
+  useWakeLock(); // pas de mise en veille pendant la soirée
   const refresh = useCallback(async () => {
     try {
       const t0 = Date.now();
@@ -71,6 +73,26 @@ export default function Ecran({ code, sound: wantSound }) {
   const engineData = sound && data?.engine
     ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null;
   const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data });
+
+  // Mode son : lancement automatique ; si le navigateur de la télé bloque le
+  // son sans geste (vidéo qui ne démarre pas), on affiche le bouton « Lancer ».
+  const [blocked, setBlocked] = useState(false);
+  const tapped = useRef(false); // un appui a eu lieu : le son est autorisé pour la page
+  useEffect(() => {
+    if (sound && engine.ready && !engine.started) engine.start();
+  }, [sound, engine.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!sound || !engine.started) return;
+    let since = null;
+    const id = setInterval(() => {
+      const st = engine.playerState();
+      const stuck = !tapped.current && engineData?.now && (st === -1 || st === 5); // jamais démarrée (≠ pause)
+      since = stuck ? since ?? Date.now() : null;
+      setBlocked(!!since && Date.now() - since > 4000);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sound, engine.started, !!engineData?.now]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unlock = () => { tapped.current = true; setBlocked(false); engine.start(); };
 
   // Lecteur muet, sans commandes (un calque transparent bloque les clics).
   const hasData = !!data;
@@ -300,10 +322,10 @@ export default function Ecran({ code, sound: wantSound }) {
         </aside>
       </div>
 
-      {sound && !engine.started && (
+      {sound && (!engine.started || blocked) && (
         <div className="absolute inset-0 z-50 bg-black/85 flex flex-col items-center justify-center gap-[3vh] text-center px-6">
           <p className="text-[2vw] text-white/80">🔊 Cette télé joue la musique de la soirée.</p>
-          <button autoFocus onClick={engine.start} disabled={!engine.ready}
+          <button autoFocus onClick={unlock} disabled={!engine.ready}
             className="bg-fuchsia-600 hover:bg-fuchsia-700 focus:ring-8 focus:ring-white outline-none disabled:opacity-40 text-white text-[2.5vw] font-bold px-[4vw] py-[2vh] rounded-full">
             {engine.ready ? "▶ Lancer la musique" : "Chargement du lecteur…"}
           </button>

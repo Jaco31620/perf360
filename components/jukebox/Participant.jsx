@@ -12,6 +12,7 @@ import { participantId, getName, setName, authHeaders, formatCode } from "./stor
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
 import { MAX_ANSWER_LEN } from "@/lib/jukeboxBlind";
 import { Leaderboard } from "./Blind";
+import { useWakeLock } from "./useWakeLock";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
@@ -29,6 +30,7 @@ export default function Participant({ code }) {
   const [verdict, setVerdict] = useState(null); // { ok, text }
   const [sending, setSending] = useState(false);
   const pid = useRef(null);
+  useWakeLock(!!data?.blind?.on); // blind test : le téléphone reste allumé pour répondre
 
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
 

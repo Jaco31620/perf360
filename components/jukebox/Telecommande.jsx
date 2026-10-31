@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
+import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { QRCodeSVG } from "qrcode.react";
 import { formatDuration } from "@/lib/jukebox";
@@ -45,6 +46,7 @@ export default function Telecommande({ code }) {
   }, [code]);
 
   const { act, fresh, refreshRef } = useAdminActions(code, setData);
+  useWakeLock(); // pas de mise en veille pendant la soirée
   const refresh = useCallback(async () => {
     const started = Date.now();
     try {
@@ -203,7 +205,8 @@ export default function Telecommande({ code }) {
           </>
         )}
 
-        {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
+        {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act}
+          controls={<><PlayPauseButton playing={isPlaying} onClick={togglePlay} disabled={!now} /><SkipButton onClick={skip} disabled={!now} /></>} />}
 
         {shown === "more" && (
           <>

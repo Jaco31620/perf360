@@ -12,6 +12,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { usePlayerEngine } from "./usePlayerEngine";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
+import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
@@ -45,6 +46,7 @@ export default function Regie({ code }) {
   }, [code]);
 
   const { act, fresh, refreshRef } = useAdminActions(code, setData);
+  useWakeLock(); // pas de mise en veille pendant la soirée
   const refresh = useCallback(async () => {
     const started = Date.now();
     try {
@@ -236,7 +238,8 @@ export default function Regie({ code }) {
             </div>
           )}
 
-          {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
+          {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act}
+            controls={started ? <><PlayPauseButton playing={playing} onClick={togglePlay} disabled={!now} /><SkipButton onClick={() => advance(true)} disabled={!now} /></> : null} />}
 
           {shown === "tools" && (
             <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">

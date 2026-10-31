@@ -49,6 +49,7 @@ export async function POST(req, { params }) {
       session_id: s.id, track_id: now.id, participant_id: pid, author,
       artist_ok: !!(row?.artist_ok || hit.artist), title_ok: !!(row?.title_ok || hit.title),
       points: (row?.points || 0) + gained, attempts: (row?.attempts || 0) + 1, last_answer: answer,
+      tries: [...(Array.isArray(row?.tries) ? row.tries : []), { a: answer, artist: hit.artist, title: hit.title }],
     };
     const { error } = await sb.from("jukebox_answers").upsert(next, { onConflict: "track_id,participant_id" });
     if (error) throw error;

@@ -214,11 +214,21 @@ export async function POST(req, { params }) {
       case "blind":
       case "blindReveal":
       case "blindAccept":
+      case "blindNewGame":
       case "blindReset": {
         const blind = sessionBlind(s);
         if (!blind) return Response.json({ error: "Blind test non activé pour cette soirée." }, { status: 403 });
         if (body.action === "blindReset") {
           res = await sb.from("jukebox_answers").delete().eq("session_id", s.id);
+          break;
+        }
+        if (body.action === "blindNewGame") {
+          // tous les titres redeviennent piochables (scores remis à zéro si demandé)
+          res = await update({ options: { ...(s.options || {}), blind: { ...blind, since: Date.now(), holdId: null } } });
+          if (res.error) break;
+          if (body.scores) await sb.from("jukebox_answers").delete().eq("session_id", s.id);
+          await dropBlindPicks(s);
+          await topUpBlind(await loadSession(code));
           break;
         }
         const { data: cur } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing").maybeSingle();
@@ -229,7 +239,7 @@ export async function POST(req, { params }) {
         }
         const next = body.action === "blindReveal"
           ? { ...blind, revealedId: cur?.id || null, revealedPos: cur ? playPos(s, cur) : null }
-          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "reveal", "after", "lang", "decades", "validated"].filter((k) => k in body).map((k) => [k, body[k]])) });
+          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "reveal", "after", "lang", "decades", "validated", "holdId"].filter((k) => k in body).map((k) => [k, body[k]])) });
         res = await update({ options: { ...(s.options || {}), blind: next } });
         if (!res.error && body.action === "blind") {
           // arrêt ou filtres changés : titres piochés pas encore joués retirés, puis nouvelle pioche

@@ -259,9 +259,10 @@ export function usePlayerEngine({ code, data, act, enabled }) {
   useEffect(() => {
     const b = data?.blind;
     const now = data?.now;
-    if (!started || !b?.on || !now || !b.revealed || !b.after || blindNext.current === now.id) return;
+    if (!started || !b?.on || !now || !b.revealed || !b.after || b.hold || blindNext.current === now.id) return; // hold : titre prolongé
     if (b.revealedFor >= b.after) { blindNext.current = now.id; advance(false, now.id); }
   }, [data, started, advance]);
 
-  return { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current };
+  return { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current,
+    playerState: () => { try { return cur()?.getPlayerState?.(); } catch (e) { return undefined; } } };
 }

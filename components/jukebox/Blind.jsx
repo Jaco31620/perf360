@@ -11,11 +11,21 @@ import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 
-export function BlindPanel({ settings, blind, now, act }) {
+/* `controls` : boutons lecture / pause et suivant (régie ou télécommande). */
+export function BlindPanel({ settings, blind, now, act, controls }) {
   return settings.on
-    ? <BlindLive settings={settings} blind={blind} now={now} act={act} />
+    ? <BlindLive settings={settings} blind={blind} now={now} act={act} controls={controls} />
     : <BlindSetup settings={settings} blind={blind} act={act} />;
 }
+
+/* Nouvelle partie : tous les titres redeviennent piochables, scores remis à
+ * zéro si on le confirme. */
+function newGame(act) {
+  if (!confirm("Nouvelle partie : tous les titres de la pioche redeviennent disponibles.\nContinuer ?")) return;
+  act("blindNewGame", { scores: confirm("Remettre aussi les scores à zéro ?") });
+}
+const playedCount = (settings, facets) => Array.isArray(facets)
+  ? sumWhere(facets, { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated }, true) : 0;
 
 /* Résumé de la pioche : « 42 titres · 🇫🇷 · 80's, 90's · validées ». */
 function pickSummary(settings, facets) {
@@ -93,6 +103,11 @@ function BlindSetup({ settings, blind, act }) {
         <Timing settings={settings} act={act} />
       </Fold>
 
+      {playedCount(settings, blind?.facets) > 0 && (
+        <button onClick={() => newGame(act)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-2xl py-3">
+          🔄 Nouvelle partie ({playedCount(settings, blind?.facets)} titre{playedCount(settings, blind?.facets) > 1 ? "s" : ""} déjà passé{playedCount(settings, blind?.facets) > 1 ? "s" : ""} redeviennent piochables)
+        </button>
+      )}
       <button onClick={() => act("blind", { on: true })} disabled={pick.available === 0}
         className="w-full text-lg font-bold bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-2xl py-4">
         ▶ Lancer le blind test
@@ -105,37 +120,43 @@ function BlindSetup({ settings, blind, act }) {
 }
 
 /* Pendant la partie : titre en cours, dévoilement, réponses, classement. */
-function BlindLive({ settings, blind, now, act }) {
+function BlindLive({ settings, blind, now, act, controls }) {
   const phone = settings.mode === "phone";
   const pick = pickSummary(settings, blind?.facets);
+  const hold = !!blind?.hold;
   return (
     <div className="space-y-3 text-sm">
       <div className="bg-white/5 rounded-2xl p-4 space-y-3">
         <p className="text-xs font-bold uppercase tracking-wider text-green-400">● Blind test en cours · {phone ? "📱 réponses sur téléphone" : "🎤 animé"}</p>
         {!now ? (
           <p className="text-white/60">Le prochain titre arrive…</p>
-        ) : blind?.revealed ? (
-          <div>
-            <p className="text-green-400 font-bold">✓ Réponse dévoilée</p>
-            <p className="text-lg font-bold leading-snug">{now.title}</p>
-            <p className="text-white/60">{now.channel}</p>
-            {settings.after > 0 && blind.revealedFor != null && (
-              <p className="text-xs text-white/40 mt-1">Titre suivant dans {Math.max(0, Math.ceil(settings.after - blind.revealedFor))} s</p>
-            )}
-          </div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <span className="text-4xl">🤫</span>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-amber-300">Masqué au public{blind?.revealIn != null ? ` · ${blind.revealIn} s` : ""}</p>
-                <p className="text-xs text-white/50 truncate">Pour vous : {now.title} — {now.channel}</p>
-              </div>
+          <>
+            {/* la réponse attendue, pour juger (jamais montrée au public avant le dévoilement) */}
+            <div className={`rounded-xl px-3 py-2 ${blind?.revealed ? "bg-green-500/10" : "bg-amber-500/10"}`}>
+              <p className={`text-[11px] font-bold uppercase tracking-wider ${blind?.revealed ? "text-green-400" : "text-amber-300"}`}>
+                {blind?.revealed ? "✓ Réponse dévoilée" : `🤫 Masqué au public${blind?.revealIn != null ? ` · réponse dans ${blind.revealIn} s` : ""}`}
+              </p>
+              <p className="text-lg font-bold leading-snug">{now.title}</p>
+              <p className="text-white/70">{now.channel}</p>
             </div>
-            <button onClick={() => act("blindReveal")} className="w-full text-lg font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-2xl py-3">
-              👀 Dévoiler la réponse
-            </button>
-          </div>
+            {controls && <div className="flex items-center justify-center gap-5">{controls}</div>}
+            {!blind?.revealed ? (
+              <button onClick={() => act("blindReveal")} className="w-full text-lg font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-2xl py-3">
+                👀 Dévoiler la réponse
+              </button>
+            ) : settings.after > 0 && (
+              <div className="flex items-center gap-3">
+                <p className="flex-1 text-xs text-white/50">
+                  {hold ? "♾️ Titre prolongé : il va jusqu'au bout." : blind.revealedFor != null ? `Titre suivant dans ${Math.max(0, Math.ceil(settings.after - blind.revealedFor))} s` : ""}
+                </p>
+                <button onClick={() => act("blind", { holdId: hold ? null : now.id })}
+                  className={`shrink-0 text-xs font-bold rounded-full px-3 py-2 ${hold ? "bg-white/10" : "bg-fuchsia-600/80 hover:bg-fuchsia-600"}`}>
+                  {hold ? "Reprendre l'enchaînement" : "♾️ Laisser jouer ce titre"}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -153,7 +174,15 @@ function BlindLive({ settings, blind, now, act }) {
                         onAccept={() => act("blindAccept", { participantId: a.participantId, name: a.name, part })} />
                     ))}
                   </div>
-                  <p className="text-xs text-white/50 truncate">« {a.last} » · {a.attempts} essai{a.attempts > 1 ? "s" : ""}</p>
+                  <ol className="mt-1 space-y-0.5">
+                    {(a.tries || []).map((t, k) => (
+                      <li key={k} className="flex items-baseline gap-2 text-xs">
+                        <span className="text-white/30 tabular-nums w-4 text-right shrink-0">{k + 1}</span>
+                        <span className={`flex-1 min-w-0 break-words ${t.artist || t.title ? "text-green-300" : "text-white/60"}`}>« {t.a} »</span>
+                        {(t.artist || t.title) && <span className="text-[10px] text-green-400 shrink-0">✓ {[t.artist && "artiste", t.title && "titre"].filter(Boolean).join(" + ")}</span>}
+                      </li>
+                    ))}
+                  </ol>
                 </li>
               ))}
             </ul>
@@ -174,6 +203,7 @@ function BlindLive({ settings, blind, now, act }) {
         <Timing settings={settings} act={act} />
       </Fold>
 
+      <button onClick={() => newGame(act)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-2xl py-3">🔄 Nouvelle partie</button>
       <button onClick={() => confirm("Arrêter le blind test et revenir au jukebox ?") && act("blind", { on: false })}
         className="w-full font-bold bg-white/10 hover:bg-red-500/80 rounded-2xl py-3">
         ⏹ Arrêter le blind test

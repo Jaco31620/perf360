@@ -155,3 +155,8 @@ alter table public.jukebox_songs
   add column if not exists plays int not null default 0;
 alter table public.jukebox_songs
   add column if not exists rank int;
+
+-- v15 (31/10/2026) : blind test, tous les essais d'un invité pour un titre
+-- ([{ a: réponse, artist, title }]), affichés en régie.
+alter table public.jukebox_answers
+  add column if not exists tries jsonb not null default '[]';
