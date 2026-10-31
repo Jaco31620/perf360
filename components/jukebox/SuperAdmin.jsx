@@ -290,6 +290,7 @@ function applySong(list, body) {
     case "forgetSong": return list.filter((s) => s.key !== body.key);
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key === body.key ? { ...s, blind: !!body.blind } : s));
+    case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
       ...s, enriched: true,
       ...("year" in body ? { year: parseInt(body.year, 10) || null } : {}),
@@ -525,11 +526,11 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
+const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"], ["all", "Tous"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 const MODE_TAG = {
-  paroles: "bg-amber-100 text-amber-700",
+  normal: "bg-sky-100 text-sky-700",
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
@@ -624,7 +625,8 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
             Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
             qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre, qui repasse « À vérifier » : testez-la (aperçu ouvert d'office) puis validez-la. Les corrections « Mauvaise vidéo ? » faites en régie arrivent aussi ici à vérifier ;
             <b> Oublier</b> la fera rechercher à nouveau au prochain ajout. L'<b>année</b> et la <b>langue</b> (filtres du blind test)
-            sont trouvées automatiquement ; cliquez-les pour les corriger.
+            sont trouvées automatiquement ; cliquez-les pour les corriger. <b>📝 Paroles</b> indique que la vidéo affiche les paroles
+            (deviné d'après son titre YouTube : vérifiez-le en validant).
           </p>
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
@@ -666,7 +668,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
@@ -694,6 +696,11 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         title={s.blind ? "Retirer du blind test" : "Utiliser dans le blind test"}
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                         🕵️ Blind test{s.blind ? "" : " ?"}
+                      </button>
+                      <button onClick={() => run({ action: "lyricsSong", key: s.key, lyrics: !s.lyrics })}
+                        title={s.lyrics ? "La vidéo n'affiche pas les paroles" : "La vidéo affiche les paroles"}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        📝 Paroles{s.lyrics ? "" : " ?"}
                       </button>
                       <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
                     </div>
@@ -739,7 +746,7 @@ function Prefill({ call, state, onChanged }) {
   const [open, setOpen] = useState(true);
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
-  const [modes, setModes] = useState(["paroles"]);
+  const [modes, setModes] = useState(["normal"]);
   const [blind, setBlind] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -818,7 +825,7 @@ function Prefill({ call, state, onChanged }) {
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="w-4 h-4 accent-violet-600" />
-            <span>Marquer ces titres <b>🕵️ Blind test</b> (versions Avec paroles : la vidéo est masquée)</span>
+            <span>Marquer ces titres <b>🕵️ Blind test</b> (versions Normale : la vidéo est masquée)</span>
           </label>
 
           <div className="flex bg-gray-100 rounded-full p-0.5 w-fit">

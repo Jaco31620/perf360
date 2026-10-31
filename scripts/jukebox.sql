@@ -143,3 +143,8 @@ alter table public.jukebox_songs
   add column if not exists fr boolean;
 alter table public.jukebox_songs
   add column if not exists enriched_at timestamptz;
+
+-- v13 (31/10/2026) : étiquette « avec paroles » (la vidéo retenue affiche
+-- les paroles), devinée d'après le titre YouTube, corrigée en super-admin.
+alter table public.jukebox_songs
+  add column if not exists lyrics boolean not null default false;

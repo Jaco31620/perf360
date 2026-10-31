@@ -2,7 +2,7 @@
  * Route SUPER-ADMIN du jukebox (en-tête x-jukebox-super requis).
  * - GET  : toutes les soirées (activité, compteurs, date de suppression),
  *          réglages, recherches YouTube du jour.
- *          ?songs=1&q=…&status=all|todo|ok|missing|blind&mode=…&lang=fr|intl|unknown&decade=1980 : mémoire des titres.
+ *          ?songs=1&q=…&status=all|todo|ok|missing|blind|lyrics&mode=…&lang=fr|intl|unknown&decade=1980 : mémoire des titres.
  *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures?, defaultOptions? }
@@ -13,6 +13,7 @@
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
+ *     lyricsSong { key, lyrics } → la vidéo retenue affiche les paroles
      songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
      enrich → enrichir des titres tout de suite (année, langue ; ~45 s par appel)
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
@@ -24,7 +25,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
@@ -82,6 +83,9 @@ export async function POST(req) {
       }
       case "blindSong":
         await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
+      case "lyricsSong":
+        await lyricsSong(body.key, body.lyrics);
         return Response.json({ ok: true });
       case "songMeta":
         await editSongMeta(body.key, body);
