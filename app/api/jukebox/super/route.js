@@ -12,6 +12,7 @@
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
+ *     deezerSearch { q } / retargetSong { key, deezerId } → rattacher la ligne au bon titre Deezer
  *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
  *     lyricsSong { key, lyrics } → la vidéo retenue affiche les paroles
      songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
@@ -25,7 +26,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
@@ -75,6 +76,13 @@ export async function POST(req) {
         const d = await songCandidates(body.key);
         if (!d) return Response.json({ error: "Titre introuvable." }, { status: 404 });
         return Response.json({ ok: true, ...d });
+      }
+      case "deezerSearch":
+        return Response.json({ ok: true, results: await deezerSearch(String(body.q || "").slice(0, 200)) });
+      case "retargetSong": {
+        const err = await retargetSong(body.key, body.deezerId);
+        if (err) return Response.json({ error: err }, { status: 422 });
+        return Response.json({ ok: true });
       }
       case "replaceSong": {
         const err = await replaceSongVideo(body.key, body.videoId);

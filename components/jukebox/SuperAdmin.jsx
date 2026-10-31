@@ -554,6 +554,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
   const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
+  const [retitling, setRetitling] = useState(null); // titre rattaché à un autre titre Deezer
   const [preview, setPreview] = useState(null); // clé du titre en aperçu
 
   const lastAct = useRef(0); // liste relue avant la dernière action : périmée
@@ -625,7 +626,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
             Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
             qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre, qui repasse « À vérifier » : testez-la (aperçu ouvert d'office) puis validez-la. Les corrections « Mauvaise vidéo ? » faites en régie arrivent aussi ici à vérifier ;
             <b> Oublier</b> la fera rechercher à nouveau au prochain ajout. L'<b>année</b> et la <b>langue</b> (filtres du blind test)
-            sont trouvées automatiquement ; cliquez-les pour les corriger. <b>📝 Paroles</b> indique que la vidéo affiche les paroles
+            sont trouvées automatiquement ; cliquez-les pour les corriger, comme le <b>titre</b> lui-même s'il désigne une reprise ou une compilation. <b>📝 Paroles</b> indique que la vidéo affiche les paroles
             (deviné d'après son titre YouTube : vérifiez-le en validant).
           </p>
           {(enrich > 0 || enriching) && (
@@ -665,6 +666,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
+          {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)} onDone={load} />}
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
@@ -675,7 +677,10 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                 <li key={s.key} className="flex flex-wrap items-center gap-3 py-2.5">
                   <PreviewThumb videoId={s.videoId} active={preview === s.key} onClick={() => setPreview(preview === s.key ? null : s.key)} />
                   <div className="flex-1 min-w-[160px]">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
+                    <button onClick={() => setRetitling(s)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
+                      className="block max-w-full text-left text-sm font-semibold text-gray-900 truncate hover:text-fuchsia-700">
+                      {s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}
+                    </button>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
                       {s.missing
@@ -985,6 +990,75 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
       onClose={onClose} onDone={onDone}
       load={() => call("POST", { action: "songVideos", key: song.key })}
       choose={(videoId) => call("POST", { action: "replaceSong", key: song.key, videoId })} />
+  );
+}
+
+/* Mauvais titre Deezer (reprise, compilation…) : recherche dans Deezer et
+ * rattachement de la ligne au bon titre (vidéo conservée). */
+function SongTitleChooser({ song, call, onClose, onDone }) {
+  const [q, setQ] = useState((song.label || "").replace(" – ", " "));
+  const [list, setList] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const search = async (e) => {
+    e?.preventDefault();
+    setError("");
+    setList(null);
+    try { setList((await call("POST", { action: "deezerSearch", q })).results || []); } catch (err) { setError(err.message); setList([]); }
+  };
+  useEffect(() => { search(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const choose = async (t) => {
+    setBusy(true);
+    setError("");
+    try {
+      await call("POST", { action: "retargetSong", key: song.key, deezerId: t.deezerId });
+      onDone();
+      onClose();
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  const current = song.key.split(":")[1];
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" onClick={() => !busy && onClose()}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-5 space-y-3 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-600">Corriger le titre</p>
+            <p className="font-bold leading-snug">{song.label || song.key}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none" aria-label="Fermer">×</button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Choisissez la version originale : la ligne prend son artiste et son titre (réponses du blind test), la vidéo et les
+          étiquettes sont conservées, l'année et la langue sont cherchées à nouveau.
+        </p>
+        <form onSubmit={search} className="flex gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Artiste et titre"
+            className="flex-1 border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
+          <button className="text-sm font-bold text-white bg-fuchsia-600 px-4 py-1.5 rounded-full">Chercher</button>
+        </form>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {list === null ? <p className="text-sm text-gray-400">Recherche…</p> : list.length === 0 ? <p className="text-sm text-gray-400">Aucun résultat.</p> : (
+          <ul className="divide-y divide-gray-100">
+            {list.map((t) => {
+              const same = String(t.deezerId) === current;
+              return (
+                <li key={t.id}>
+                  <button disabled={busy || same} onClick={() => choose(t)}
+                    className="w-full flex items-center gap-3 py-2 text-left hover:bg-fuchsia-50 rounded-xl px-1 disabled:opacity-60">
+                    {t.thumb ? <img src={t.thumb} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" /> : <span className="w-10 h-10 rounded-lg bg-gray-100 shrink-0" />}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold truncate">{t.title}</span>
+                      <span className="block text-xs text-gray-500 truncate">{t.channel} · {formatDuration(t.duration)}</span>
+                    </span>
+                    {same && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap">actuel</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 
