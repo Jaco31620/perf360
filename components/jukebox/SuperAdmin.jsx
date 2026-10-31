@@ -13,7 +13,7 @@ import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
 import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel, formatDuration } from "@/lib/jukebox";
-import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES } from "@/lib/jukeboxBlind";
+import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const CREATION_MODES = [
@@ -196,7 +196,7 @@ export default function SuperAdmin() {
         </>
       )}
 
-      {tab === "memory" && <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} />}
+      {tab === "memory" && <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} onChanged={load} />}
       {tab === "queue" && <Prefill call={call} state={data?.prefill} onChanged={load} />}
 
       {tab === "reglages" && cfg && (
@@ -413,8 +413,13 @@ function SoireeFields({ value, features, onChange }) {
               {BLIND_AFTER_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
             </select>
           </label>
-          <label className={check}><span className="pl-6">Titres piochés automatiquement</span>
-            <input type="checkbox" checked={!!v.blind.auto} onChange={(e) => blind("auto", e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
+          <label className={check}><span className="pl-6">Titres piochés</span>
+            <select value={v.blind.lang} onChange={(e) => blind("lang", e.target.value)} className={select}>
+              {BLIND_LANGS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </label>
+          <label className={check}><span className="pl-6">Vidéos validées seulement</span>
+            <input type="checkbox" checked={!!v.blind.validated} onChange={(e) => blind("validated", e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
           </label>
         </>
       )}
@@ -478,14 +483,16 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
+const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["noblind", "🚫 Exclus du blind test"], ["all", "Tous"]];
+const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
+const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 const MODE_TAG = {
   normal: "bg-sky-100 text-sky-700",
   paroles: "bg-amber-100 text-amber-700",
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
-function SongMemory({ call, total, focus }) {
+function SongMemory({ call, total, focus, enrich, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("todo");
@@ -495,8 +502,13 @@ function SongMemory({ call, total, focus }) {
     setOpen(true);
     setStatus("all");
     setQ("");
+    setLang("");
+    setDecade("");
   }, [focus]);
   const [mode, setMode] = useState("");
+  const [lang, setLang] = useState("");
+  const [decade, setDecade] = useState("");
+  const [enriching, setEnriching] = useState(false);
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
   const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
@@ -504,7 +516,7 @@ function SongMemory({ call, total, focus }) {
 
   const load = useCallback(async () => {
     try {
-      const qs = new URLSearchParams({ songs: "1", q, status, mode });
+      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
@@ -515,7 +527,7 @@ function SongMemory({ call, total, focus }) {
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, mode]);
+  }, [q, status, mode, lang, decade]);
 
   useEffect(() => {
     if (!open) return;
@@ -526,6 +538,14 @@ function SongMemory({ call, total, focus }) {
   const run = async (body, confirmText) => {
     if (confirmText && !confirm(confirmText)) return;
     try { await call("POST", body); load(); } catch (e) { alert(e.message); }
+  };
+  const enrichNow = async () => {
+    setEnriching(true);
+    try { await call("POST", { action: "enrich" }); load(); onChanged?.(); } catch (e) { alert(e.message); } finally { setEnriching(false); }
+  };
+  const editYear = (s) => {
+    const v = prompt(`Année de sortie de « ${s.label} » (vide : inconnue)`, s.year || "");
+    if (v !== null) run({ action: "songMeta", key: s.key, year: v.trim() });
   };
 
   return (
@@ -539,8 +559,17 @@ function SongMemory({ call, total, focus }) {
           <p className="text-xs text-gray-500">
             Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
             qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre, qui repasse « À vérifier » : testez-la (aperçu ouvert d'office) puis validez-la. Les corrections « Mauvaise vidéo ? » faites en régie arrivent aussi ici à vérifier ;
-            <b> Oublier</b> la fera rechercher à nouveau au prochain ajout.
+            <b> Oublier</b> la fera rechercher à nouveau au prochain ajout. L'<b>année</b> et la <b>langue</b> (filtres du blind test)
+            sont trouvées automatiquement ; cliquez-les pour les corriger.
           </p>
+          {enrich > 0 && (
+            <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
+              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} sans année ni langue : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube).</span>
+              <button disabled={enriching} onClick={enrichNow} className="font-bold bg-sky-600 disabled:opacity-50 text-white px-3 py-1 rounded-full">
+                {enriching ? "Enrichissement… (~40 s)" : "Enrichir maintenant"}
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex bg-gray-100 rounded-full p-0.5 text-sm">
               {STATUS_FILTERS.map(([id, label]) => (
@@ -554,6 +583,13 @@ function SongMemory({ call, total, focus }) {
               <option value="">Tous les modes</option>
               {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
+            <select value={lang} onChange={(e) => setLang(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+              {LANG_FILTERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+            <select value={decade} onChange={(e) => setDecade(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+              <option value="">Toutes décennies</option>
+              {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
+            </select>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
               className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
           </div>
@@ -561,7 +597,7 @@ function SongMemory({ call, total, focus }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "noblind" ? "Aucun titre exclu du blind test." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
@@ -576,10 +612,19 @@ function SongMemory({ call, total, focus }) {
                         : s.validated
                         ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ Validé</span>
                         : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">À vérifier</span>}
-                      <button onClick={() => run({ action: "blindSong", key: s.key, blind: !s.blind })}
-                        title={s.blind ? "Retirer du blind test automatique" : "Utiliser dans le blind test automatique"}
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
-                        🕵️ Blind test{s.blind ? "" : " ?"}
+                      <button onClick={() => editYear(s)} title="Année de sortie (cliquer pour corriger)"
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
+                        {s.year || (s.enriched ? "année ?" : "…")}
+                      </button>
+                      <button onClick={() => run({ action: "songMeta", key: s.key, fr: FR_NEXT[String(s.fr)] })}
+                        title="Langue (cliquer : français → international → inconnue)"
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
+                        {s.fr === true ? "🇫🇷 Français" : s.fr === false ? "🌍 International" : s.enriched ? "❓ langue" : "…"}
+                      </button>
+                      <button onClick={() => run({ action: "songMeta", key: s.key, noBlind: !s.noBlind })}
+                        title={s.noBlind ? "Exclu du blind test (cliquer pour le réintégrer)" : "Exclure du blind test"}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.noBlind ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        {s.noBlind ? "🚫 Exclu du blind test" : "🕵️"}
                       </button>
                       <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
                     </div>
@@ -622,7 +667,6 @@ function Prefill({ call, state, onChanged }) {
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
   const [modes, setModes] = useState(["normal"]);
-  const [blind, setBlind] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [plQuery, setPlQuery] = useState("");
@@ -635,7 +679,7 @@ function Prefill({ call, state, onChanged }) {
     setBusy(true);
     setMsg(null);
     try {
-      const d = await call("POST", { action: "prefill", modes, blind, ...body });
+      const d = await call("POST", { action: "prefill", modes, ...body });
       setMsg({ ok: true, text: `${d.added} ajouté${d.added > 1 ? "s" : ""} à la file${d.skipped ? `, ${d.skipped} déjà en mémoire ou en attente` : ""}.`, notFound: d.notFound });
       if (body.lines) setLines("");
       onChanged();
@@ -697,10 +741,7 @@ function Prefill({ call, state, onChanged }) {
               </button>
             ))}
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="w-4 h-4 accent-violet-600" />
-            <span>Marquer ces titres <b>🕵️ Blind test</b> (pioche automatique ; mode Normale conseillé, les paroles trahiraient le titre)</span>
-          </label>
+          <p className="text-xs text-gray-400 -mt-1">Pour le blind test, les versions Normale et Avec paroles servent toutes les deux (vidéo masquée).</p>
 
           <div className="flex bg-gray-100 rounded-full p-0.5 w-fit">
             {[["playlist", "🎧 Playlist Deezer"], ["lines", "📝 Liste de titres"]].map(([id, label]) => (
@@ -830,7 +871,6 @@ function PrefillQueue({ call, version, onChanged }) {
             <input type="checkbox" checked={sel.has(it.key)} onChange={() => toggleSel(it.key)} className="accent-fuchsia-600 shrink-0" />
             <span className="flex-1 min-w-0 truncate"><b>{it.artist}</b> – {it.title}</span>
             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${MODE_TAG[it.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(it.mode)}</span>
-            {it.blind && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-600 text-white shrink-0">🕵️</span>}
             <button onClick={() => edit([it.key], "top")} title="Traiter en premier" className="text-gray-400 hover:text-gray-900 px-1 shrink-0">⤒</button>
             <button onClick={() => edit([it.key], "remove")} title="Retirer" className="text-gray-400 hover:text-red-600 px-1 shrink-0">✕</button>
           </li>

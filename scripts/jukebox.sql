@@ -129,3 +129,20 @@ grant all on public.jukebox_answers to service_role;
 -- (gardé « à remplacer » au lieu d'être oublié).
 alter table public.jukebox_songs
   add column if not exists missing boolean not null default false;
+
+-- v12 (31/10/2026) : enrichissement de la mémoire (filtres du blind test).
+-- Année de première sortie, langue des paroles, pays de l'artiste,
+-- chanson française ou non (null : inconnu), date d'enrichissement,
+-- exclusion du blind test.
+alter table public.jukebox_songs
+  add column if not exists year int;
+alter table public.jukebox_songs
+  add column if not exists lang text;
+alter table public.jukebox_songs
+  add column if not exists country text;
+alter table public.jukebox_songs
+  add column if not exists fr boolean;
+alter table public.jukebox_songs
+  add column if not exists enriched_at timestamptz;
+alter table public.jukebox_songs
+  add column if not exists no_blind boolean not null default false;

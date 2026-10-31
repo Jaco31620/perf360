@@ -2,12 +2,13 @@
 /*
  * Jukebox — blind test : panneau de la régie (et de la télécommande) et
  * classement. Réglages : mode (réponses sur téléphone / animé par la régie),
- * pioche automatique dans la mémoire, délai avant de dévoiler la réponse,
+ * filtres de la pioche dans la mémoire (langue, décennies, vidéos validées),
+ * délai avant de dévoiler la réponse,
  * passage au titre suivant après la réponse. Pendant un titre : dévoiler,
  * réponses des invités (accepter l'artiste ou le titre refusé à tort), scores.
  */
 import { Check, X } from "lucide-react";
-import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES } from "@/lib/jukeboxBlind";
+import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { Toggle } from "./Controls";
 
 export function BlindPanel({ settings, blind, now, act }) {
@@ -31,10 +32,7 @@ export function BlindPanel({ settings, blind, now, act }) {
         ))}
       </div>
       <p className="text-xs text-white/40 -mt-1">{BLIND_MODES.find((m) => m.id === settings.mode)?.hint}</p>
-      <Toggle label="🎲 Titres piochés automatiquement" on={settings.auto} onClick={() => act("blind", { auto: !settings.auto })}
-        hint={settings.auto
-          ? `Parmi les titres « blind test » de la mémoire${blind?.pool != null ? ` (${blind.pool} disponibles)` : ""}. Vous pouvez aussi ajouter les vôtres.`
-          : "Vous préparez la file vous-même (+ Ajouter un titre)."} />
+      <BlindFilters settings={settings} pool={blind?.pool} onChange={(patch) => act("blind", patch)} />
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Dévoiler la réponse</span>
         <select value={settings.reveal} onChange={(e) => act("blind", { reveal: Number(e.target.value) })} className={select}>
@@ -88,6 +86,44 @@ export function BlindPanel({ settings, blind, now, act }) {
             className="mt-2 text-xs text-white/40 hover:text-red-400">Remettre les scores à zéro</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/* Filtres de la pioche : langue, décennies (aucune cochée = toutes), vidéos
+ * validées seulement ; nombre de titres disponibles. */
+function BlindFilters({ settings, pool, onChange }) {
+  const decades = settings.decades || [];
+  const toggleDecade = (d) => onChange({ decades: decades.includes(d) ? decades.filter((x) => x !== d) : [...decades, d] });
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-white/70">🎲 Titres piochés dans la mémoire</span>
+        {pool != null && (
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pool < 10 ? "bg-red-500/20 text-red-300" : "bg-white/10 text-white/70"}`}>
+            {pool} disponible{pool > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+      <div className="flex bg-white/10 rounded-full p-0.5">
+        {BLIND_LANGS.map((l) => (
+          <button key={l.id} onClick={() => l.id !== settings.lang && onChange({ lang: l.id })}
+            className={`flex-1 px-2 py-1 rounded-full font-bold text-xs ${l.id === settings.lang ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {DECADES.map((d) => (
+          <button key={d} onClick={() => toggleDecade(d)}
+            className={`px-2 py-0.5 rounded-full text-xs font-bold ${decades.includes(d) ? "bg-fuchsia-600" : "bg-white/10 text-white/60 hover:text-white"}`}>
+            {decadeLabel(d)}
+          </button>
+        ))}
+        {decades.length > 0 && <button onClick={() => onChange({ decades: [] })} className="px-2 text-xs text-white/40 underline">toutes</button>}
+      </div>
+      <Toggle label="Vidéos validées seulement" on={settings.validated} onClick={() => onChange({ validated: !settings.validated })} />
+      {pool === 0 && <p className="text-xs text-red-300">Aucun titre ne correspond : élargissez les filtres ou enrichissez la mémoire (super-admin).</p>}
     </div>
   );
 }

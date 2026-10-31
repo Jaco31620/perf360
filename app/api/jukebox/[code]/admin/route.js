@@ -38,7 +38,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
-import { sessionBlind, topUpBlind, acceptAnswer } from "@/lib/jukeboxBlindServer";
+import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 
@@ -211,9 +211,13 @@ export async function POST(req, { params }) {
         }
         const next = body.action === "blindReveal"
           ? { ...blind, revealedId: cur?.id || null, revealedAt: Date.now() }
-          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "auto", "reveal", "after"].filter((k) => k in body).map((k) => [k, body[k]])) });
+          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "reveal", "after", "lang", "decades", "validated"].filter((k) => k in body).map((k) => [k, body[k]])) });
         res = await update({ options: { ...(s.options || {}), blind: next } });
-        if (!res.error && body.action === "blind") await topUpBlind({ ...s, options: { ...(s.options || {}), blind: next } });
+        if (!res.error && body.action === "blind") {
+          // arrêt ou filtres changés : titres piochés pas encore joués retirés, puis nouvelle pioche
+          if (["on", "lang", "decades", "validated"].some((k) => k in body)) await dropBlindPicks(s);
+          await topUpBlind({ ...s, options: { ...(s.options || {}), blind: next } });
+        }
         break;
       }
       case "history":
