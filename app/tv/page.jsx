@@ -13,7 +13,7 @@ import { formatCode, setAdminToken, getAdminToken } from "@/components/jukebox/s
 const LAST_KEY = "jukebox:tvCode";
 const SOUND_KEY = "jukebox:tvSound"; // dernière soirée ouverte en mode son
 const PAIR_KEY = "jukebox:tvPair";
-const newPairId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+const newPairId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
 
 export default function TvPage() {
@@ -99,7 +99,10 @@ export default function TvPage() {
           {pair && origin && (
             <div className="flex items-center gap-5 justify-center md:justify-start">
               <div className="bg-white p-3 rounded-2xl shrink-0"><QRCodeSVG value={`${origin}/tv/${pair}`} size={170} /></div>
-              <p className="text-2xl text-white/90 text-left">Scannez avec votre téléphone et choisissez la soirée.</p>
+              <div className="text-left space-y-2">
+                <p className="text-2xl text-white/90">Scannez avec la télécommande Jukebox du téléphone (📺 Connecter une télé), ou l'appareil photo.</p>
+                <p className="text-lg text-white/60">Code télé : <span className="font-mono font-bold text-white tracking-widest">{pair.toUpperCase().replace(/(.{4})(?=.)/g, "$1 ")}</span></p>
+              </div>
             </div>
           )}
           <p className="text-xl text-white/70">Ou saisissez le code de la soirée, affiché dans la régie :</p>

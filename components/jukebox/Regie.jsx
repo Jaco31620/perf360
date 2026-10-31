@@ -15,6 +15,7 @@ import { useAdminActions } from "./optimistic";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
+import TvLink from "./TvLink";
 import { BlindPanel } from "./Blind";
 
 export default function Regie({ code }) {
@@ -27,6 +28,7 @@ export default function Regie({ code }) {
   const [remoteQr, setRemoteQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [peek, setPeek] = useState(null); // blind test : titre affiché quand même en régie
   const [tab, setTab] = useState("queue"); // onglet de la colonne de droite (retenu par appareil)
   useEffect(() => { try { const t = localStorage.getItem("jukebox:regieTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
@@ -246,9 +248,9 @@ export default function Regie({ code }) {
               <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                 📺 Ouvrir l'écran d'affichage
               </Link>
-              <p className="text-xs text-white/50 text-center -mt-1">
-                Sur une télé connectée, sans PC : ouvrir <b className="text-white">perf360.fr/tv</b> dans son navigateur, puis scanner son QR code avec le téléphone (ou taper le code <b className="text-white font-mono">{formatCode(code)}</b>)
-              </p>
+              <button onClick={() => setTvOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
+                📺 Connecter une télé (perf360.fr/tv)
+              </button>
               {token.current && (
                 <button onClick={copyRegieLink} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                   {copied ? "✓ Lien copié" : "🔗 Copier le lien régie (autre appareil)"}
@@ -267,6 +269,7 @@ export default function Regie({ code }) {
       </div>
 
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
+      {tvOpen && <TvLink code={code} defaultSound={false} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 
       {remoteQr && (

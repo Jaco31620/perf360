@@ -15,6 +15,7 @@ import { useAdminActions } from "./optimistic";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
+import TvLink from "./TvLink";
 import { BlindPanel } from "./Blind";
 
 export default function Telecommande({ code }) {
@@ -24,6 +25,7 @@ export default function Telecommande({ code }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
   const volumeTimer = useRef(null);
@@ -114,7 +116,11 @@ export default function Telecommande({ code }) {
           </div>
           <span className="font-mono text-sm text-white/50">{formatCode(code)}</span>
         </header>
-        <GuestsSwitch open={session.status === "open"} act={act} className="w-full justify-center py-2" />
+        <div className="flex gap-2">
+          <GuestsSwitch open={session.status === "open"} act={act} className="flex-1 justify-center py-2" />
+          <button onClick={() => setTvOpen(true)} className="shrink-0 text-xs font-bold bg-white/10 active:bg-white/20 rounded-full px-3 py-2">📺 Connecter une télé</button>
+        </div>
+        {tvOpen && <TvLink code={code} onClose={() => setTvOpen(false)} />}
 
         <section className="bg-white/5 rounded-3xl p-4">
           {now ? (
