@@ -16,12 +16,19 @@ export function BlindPanel({ settings, blind, now, act }) {
   const select = "bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold";
   return (
     <div className="bg-white/5 rounded-2xl p-4 space-y-4 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-bold text-base">🕵️ Blind test {on && <span className="ml-1 text-xs font-bold text-green-400">● en cours</span>}</h2>
-        <button onClick={() => act("blind", { on: !on })}
-          className={`font-bold px-3 py-1.5 rounded-full ${on ? "bg-red-500/80 hover:bg-red-500" : "bg-green-600 hover:bg-green-700"}`}>
-          {on ? "Arrêter" : "Lancer"}
-        </button>
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-bold text-base">🕵️ Blind test {on && <span className="ml-1 text-xs font-bold text-green-400">● en cours</span>}</h2>
+          <button onClick={() => act("blind", { on: !on })}
+            className={`font-bold px-3 py-1.5 rounded-full text-xs ${on ? "bg-red-500/80 hover:bg-red-500" : "bg-green-600 hover:bg-green-700"}`}>
+            {on ? "Revenir au jukebox" : "Passer en blind test"}
+          </button>
+        </div>
+        <p className="text-xs text-white/40 mt-1">
+          {on
+            ? "Titres piochés et masqués, ajouts des invités suspendus. Pause et lecture se font comme d'habitude (les délais s'arrêtent pendant une pause)."
+            : "Bascule la soirée en jeu : les titres suivants sont piochés dans la mémoire et masqués. La musique se lance et se met en pause avec le lecteur, comme d'habitude."}
+        </p>
       </div>
 
       <BlindFilters settings={settings} facets={blind?.facets} onChange={(patch) => act("blind", patch, true)} />

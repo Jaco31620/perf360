@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession } from "@/lib/jukeboxServer";
 import { MAX_AUTHOR_LEN } from "@/lib/jukebox";
 import { checkAnswer, pointsFor, MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
-import { sessionBlind, expectedParts, revealedFor } from "@/lib/jukeboxBlindServer";
+import { sessionBlind, expectedParts, revealedFor, playPos } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function POST(req, { params }) {
     const sb = getSupabaseAdmin();
     const { data: now } = await sb.from("jukebox_tracks").select("*").eq("session_id", s.id).eq("status", "playing").maybeSingle();
     if (!now) return Response.json({ error: "Attendez le prochain titre !" }, { status: 409 });
-    if (revealedFor(blind, now) !== null) return Response.json({ error: "Trop tard, la réponse est dévoilée !" }, { status: 409 });
+    if (revealedFor(s, blind, now) !== null) return Response.json({ error: "Trop tard, la réponse est dévoilée !" }, { status: 409 });
 
     const { data: row } = await sb.from("jukebox_answers").select("*").eq("track_id", now.id).eq("participant_id", pid).maybeSingle();
     if ((row?.attempts || 0) >= MAX_ATTEMPTS) return Response.json({ error: "Plus d'essai pour ce titre." }, { status: 429 });
@@ -41,7 +41,7 @@ export async function POST(req, { params }) {
 
     const parts = expectedParts(now);
     const hit = checkAnswer(answer, parts.artist, parts.title);
-    const elapsed = (Date.now() - (Date.parse(now.played_at) || Date.now())) / 1000;
+    const elapsed = playPos(s, now); // temps d'écoute, pauses exclues
     const newArtist = hit.artist && !row?.artist_ok;
     const newTitle = hit.title && !row?.title_ok;
     const gained = (newArtist ? pointsFor(elapsed, blind.reveal) : 0) + (newTitle ? pointsFor(elapsed, blind.reveal) : 0);

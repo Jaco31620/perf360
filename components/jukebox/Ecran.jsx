@@ -192,7 +192,7 @@ export default function Ecran({ code }) {
                 {blind?.mode === "phone" ? "Répondez sur votre téléphone : artiste, titre… ou les deux !" : "À vous de deviner !"}
               </p>
               {blind?.revealIn != null && (
-                <p className="mt-[3vh] text-[5vw] font-black tabular-nums text-[var(--jb-light)]">{Math.max(0, Math.ceil(blind.revealIn - since))}</p>
+                <p className="mt-[3vh] text-[5vw] font-black tabular-nums text-[var(--jb-light)]">{Math.max(0, Math.ceil(blind.revealIn - (blind.playing ? since : 0)))}</p>
               )}
             </div>
           ) : now ? (
