@@ -193,9 +193,9 @@ export default function Participant({ code }) {
           </p>
         ) : (
           <>
-            {session.searchMode !== "normal" && (
+            {session.searchMode === "karaoke" && (
               <p className="text-sm font-semibold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl px-3 py-2 mb-3">
-                {session.searchMode === "karaoke" ? "🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké." : "📝 La recherche propose en priorité les versions avec les paroles à l'écran."}
+                🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké.
               </p>
             )}
             <form onSubmit={search} className="flex gap-2">

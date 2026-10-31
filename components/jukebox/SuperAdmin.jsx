@@ -529,7 +529,6 @@ const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplac
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 const MODE_TAG = {
-  normal: "bg-sky-100 text-sky-700",
   paroles: "bg-amber-100 text-amber-700",
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
@@ -740,7 +739,7 @@ function Prefill({ call, state, onChanged }) {
   const [open, setOpen] = useState(true);
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
-  const [modes, setModes] = useState(["normal"]);
+  const [modes, setModes] = useState(["paroles"]);
   const [blind, setBlind] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -819,7 +818,7 @@ function Prefill({ call, state, onChanged }) {
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="w-4 h-4 accent-violet-600" />
-            <span>Marquer ces titres <b>🕵️ Blind test</b> (les versions Normale et Avec paroles conviennent : la vidéo est masquée)</span>
+            <span>Marquer ces titres <b>🕵️ Blind test</b> (versions Avec paroles : la vidéo est masquée)</span>
           </label>
 
           <div className="flex bg-gray-100 rounded-full p-0.5 w-fit">
