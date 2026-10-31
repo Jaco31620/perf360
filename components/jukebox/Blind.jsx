@@ -7,44 +7,49 @@
  * passage au titre suivant après la réponse. Pendant un titre : dévoiler,
  * réponses des invités (accepter l'artiste ou le titre refusé à tort), scores.
  */
+import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
-import { Toggle } from "./Controls";
 
 export function BlindPanel({ settings, blind, now, act }) {
   const on = settings.on;
   const select = "bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold";
   return (
-    <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
+    <div className="bg-white/5 rounded-2xl p-4 space-y-4 text-sm">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-bold text-base">🕵️ Blind test</h2>
+        <h2 className="font-bold text-base">🕵️ Blind test {on && <span className="ml-1 text-xs font-bold text-green-400">● en cours</span>}</h2>
         <button onClick={() => act("blind", { on: !on })}
           className={`font-bold px-3 py-1.5 rounded-full ${on ? "bg-red-500/80 hover:bg-red-500" : "bg-green-600 hover:bg-green-700"}`}>
           {on ? "Arrêter" : "Lancer"}
         </button>
       </div>
-      <div className="flex bg-white/10 rounded-full p-0.5">
-        {BLIND_MODES.map((m) => (
-          <button key={m.id} onClick={() => m.id !== settings.mode && act("blind", { mode: m.id })}
-            className={`flex-1 px-2 py-1 rounded-full font-bold text-xs ${m.id === settings.mode ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
-            {m.label}
-          </button>
-        ))}
+
+      <BlindFilters settings={settings} facets={blind?.facets} onChange={(patch) => act("blind", patch, true)} />
+
+      <div className="space-y-2.5">
+        <p className="text-xs font-bold uppercase tracking-wider text-white/40">⏱️ Déroulé</p>
+        <div className="flex bg-white/10 rounded-full p-0.5">
+          {BLIND_MODES.map((m) => (
+            <button key={m.id} onClick={() => m.id !== settings.mode && act("blind", { mode: m.id })}
+              className={`flex-1 px-2 py-1 rounded-full font-bold text-xs ${m.id === settings.mode ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-white/40 -mt-1">{BLIND_MODES.find((m) => m.id === settings.mode)?.hint}</p>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-white/70">Dévoiler la réponse</span>
+          <select value={settings.reveal} onChange={(e) => act("blind", { reveal: Number(e.target.value) })} className={select}>
+            {BLIND_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-white/70">Titre suivant</span>
+          <select value={settings.after} onChange={(e) => act("blind", { after: Number(e.target.value) })} className={select}>
+            {BLIND_AFTER_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
+          </select>
+        </label>
       </div>
-      <p className="text-xs text-white/40 -mt-1">{BLIND_MODES.find((m) => m.id === settings.mode)?.hint}</p>
-      <BlindFilters settings={settings} pool={blind?.pool} onChange={(patch) => act("blind", patch)} />
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Dévoiler la réponse</span>
-        <select value={settings.reveal} onChange={(e) => act("blind", { reveal: Number(e.target.value) })} className={select}>
-          {BLIND_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
-        </select>
-      </label>
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Titre suivant</span>
-        <select value={settings.after} onChange={(e) => act("blind", { after: Number(e.target.value) })} className={select}>
-          {BLIND_AFTER_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
-        </select>
-      </label>
 
       {on && blind && now && (
         <div className="pt-3 border-t border-white/10 space-y-2">
@@ -90,40 +95,87 @@ export function BlindPanel({ settings, blind, now, act }) {
   );
 }
 
-/* Filtres de la pioche : langue, décennies (aucune cochée = toutes), vidéos
- * validées seulement ; nombre de titres disponibles. */
-function BlindFilters({ settings, pool, onChange }) {
-  const decades = settings.decades || [];
-  const toggleDecade = (d) => onChange({ decades: decades.includes(d) ? decades.filter((x) => x !== d) : [...decades, d] });
+/* Filtres de la pioche (langue, décennies, vidéos validées) avec le nombre
+ * de titres correspondant à chaque choix. Les nombres sont calculés ici à
+ * partir des comptes du serveur (`facets`) : ils changent dès le clic, le
+ * réglage est enregistré en arrière-plan. */
+const sumWhere = (facets, f, played = false) => (facets || []).reduce((n, [decade, fr, validated, used, count]) =>
+  ((f.lang === "all" || (f.lang === "fr" ? fr === true : fr === false))
+    && (!f.decades.length || f.decades.includes(decade))
+    && (!f.validated || validated)
+    && used === played ? n + count : n), 0);
+
+function BlindFilters({ settings, facets, onChange }) {
+  const saved = { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated };
+  const [local, setLocal] = useState(saved);
+  const savedKey = JSON.stringify(saved);
+  useEffect(() => { setLocal(JSON.parse(savedKey)); }, [savedKey]); // réglage enregistré (ou changé ailleurs)
+  const set = (patch) => { setLocal((f) => ({ ...f, ...patch })); onChange(patch); };
+  const f = local;
+  const toggleDecade = (d) => set({ decades: f.decades.includes(d) ? f.decades.filter((x) => x !== d) : [...f.decades, d].sort() });
+
+  const ready = Array.isArray(facets);
+  const available = sumWhere(facets, f);
+  const played = sumWhere(facets, f, true);
+  const tagged = (facets || []).reduce((n, c) => n + c[4], 0);
+  const noYear = f.decades.length ? sumWhere(facets, { ...f, decades: [null] }) + sumWhere(facets, { ...f, decades: [null] }, true) : 0;
+  const count = (patch) => (ready ? sumWhere(facets, { ...f, ...patch }) : null);
+  const badge = (n, active) => n == null ? null : (
+    <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-white/40"}`}>{n}</span>
+  );
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-white/70">🎲 Titres piochés dans la mémoire</span>
-        {pool != null && (
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pool < 10 ? "bg-red-500/20 text-red-300" : "bg-white/10 text-white/70"}`}>
-            {pool} disponible{pool > 1 ? "s" : ""}
-          </span>
+    <div className="space-y-3 bg-white/5 rounded-xl p-3">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-white/40">🎲 Pioche</p>
+          <p className="text-xs text-white/40">{ready ? `parmi ${tagged} titre${tagged > 1 ? "s" : ""} 🕵️ de la mémoire` : "Chargement…"}</p>
+        </div>
+        {ready && (
+          <div className="text-right">
+            <p className={`text-3xl font-black tabular-nums leading-none ${available < 10 ? "text-red-400" : "text-white"}`}>{available}</p>
+            <p className="text-[11px] text-white/50">disponible{available > 1 ? "s" : ""}{played ? ` · ${played} déjà passé${played > 1 ? "s" : ""}` : ""}</p>
+          </div>
         )}
       </div>
-      <div className="flex bg-white/10 rounded-full p-0.5">
+
+      <div className="grid grid-cols-3 gap-1 bg-white/10 rounded-xl p-0.5">
         {BLIND_LANGS.map((l) => (
-          <button key={l.id} onClick={() => l.id !== settings.lang && onChange({ lang: l.id })}
-            className={`flex-1 px-2 py-1 rounded-full font-bold text-xs ${l.id === settings.lang ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
-            {l.label}
+          <button key={l.id} onClick={() => l.id !== f.lang && set({ lang: l.id })}
+            className={`px-1 py-1.5 rounded-lg font-bold text-xs ${l.id === f.lang ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
+            {l.label}{badge(count({ lang: l.id }), l.id === f.lang)}
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-1">
-        {DECADES.map((d) => (
-          <button key={d} onClick={() => toggleDecade(d)}
-            className={`px-2 py-0.5 rounded-full text-xs font-bold ${decades.includes(d) ? "bg-fuchsia-600" : "bg-white/10 text-white/60 hover:text-white"}`}>
-            {decadeLabel(d)}
-          </button>
-        ))}
-        {decades.length > 0 && <button onClick={() => onChange({ decades: [] })} className="px-2 text-xs text-white/40 underline">toutes</button>}
+
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-white/50">Décennies {f.decades.length ? "" : "(toutes)"}</span>
+          {f.decades.length > 0 && <button onClick={() => set({ decades: [] })} className="text-xs text-white/50 underline">Toutes</button>}
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          {DECADES.map((d) => {
+            const active = f.decades.includes(d);
+            const n = count({ decades: [d] });
+            return (
+              <button key={d} onClick={() => toggleDecade(d)}
+                className={`py-1.5 rounded-lg text-xs font-bold ${active ? "bg-fuchsia-600" : n === 0 ? "bg-white/5 text-white/25" : "bg-white/10 text-white/70 hover:text-white"}`}>
+                {decadeLabel(d)}{badge(n, active)}
+              </button>
+            );
+          })}
+        </div>
+        {noYear > 0 && <p className="text-[11px] text-white/40 mt-1">{noYear} titre{noYear > 1 ? "s" : ""} sans année connue, écarté{noYear > 1 ? "s" : ""} par le filtre décennies.</p>}
       </div>
-      <Toggle label="Vidéos validées seulement" on={settings.validated} onClick={() => onChange({ validated: !settings.validated })} />
-      {pool === 0 && <p className="text-xs text-red-300">Aucun titre ne correspond : élargissez les filtres ou enrichissez la mémoire (super-admin).</p>}
+
+      <button onClick={() => set({ validated: !f.validated })} className="w-full flex items-center justify-between gap-3 text-left">
+        <span className="text-white/70">Vidéos validées seulement{badge(count({ validated: true }), f.validated)}</span>
+        <span className={`font-bold px-3 py-1 rounded-full text-xs ${f.validated ? "bg-fuchsia-600" : "bg-white/10"}`}>{f.validated ? "Oui" : "Non"}</span>
+      </button>
+
+      {ready && available === 0 && (
+        <p className="text-xs text-red-300">Aucun titre ne correspond : élargissez les filtres, ou marquez d'autres titres 🕵️ dans le super-admin.</p>
+      )}
     </div>
   );
 }
