@@ -228,6 +228,7 @@ export default function Ecran({ code, sound: wantSound }) {
             <>
               <p className="mt-[2.5vh] flex items-center gap-[0.5vw] text-[1.2vw] font-bold uppercase tracking-wider text-[var(--jb-light)]"><Play className="w-[1vw] h-[1vw]" fill="currentColor" strokeWidth={0} />En ce moment</p>
               <h1 className="text-[2.8vw] font-black leading-tight line-clamp-2">{now.title}</h1>
+              {now.channel && <p className="text-[2vw] font-semibold text-white/85 truncate">{now.channel}</p>}
               {now.author ? (
                 <p className="mt-[0.5vh] text-[1.5vw] text-white/70">proposé par <span className="font-bold text-white">{now.author}</span></p>
               ) : now.revealIn ? (
@@ -284,7 +285,7 @@ export default function Ecran({ code, sound: wantSound }) {
                       {t.thumb && <img src={t.thumb} alt="" className="w-[5vw] aspect-video object-cover rounded-[0.4vw] shrink-0" />}
                       <div className="min-w-0">
                         <p className="text-[1.15vw] font-semibold truncate">{t.title}</p>
-                        {t.author && <p className="text-[0.95vw] text-white/60 truncate">{t.author}</p>}
+                        <p className="text-[0.95vw] text-white/60 truncate">{[t.channel, t.author && `proposé par ${t.author}`].filter(Boolean).join(" · ")}</p>
                         {t.dedication && <p className="text-[0.95vw] text-[var(--jb-light)] italic truncate">💌 « {t.dedication} »</p>}
                       </div>
                     </li>

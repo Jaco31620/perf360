@@ -296,7 +296,7 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
                     {t.title} <RefreshCw size={11} className="inline opacity-0 group-hover:opacity-60" />
                   </button>
                 ) : <p className="text-sm font-semibold truncate">{t.title}</p>}
-                <p className="text-xs text-white/50 truncate">{t.author} · {formatDuration(t.duration)}</p>
+                <p className="text-xs text-white/50 truncate">{[t.channel, t.author, formatDuration(t.duration)].filter(Boolean).join(" · ")}</p>
                 {t.dedication && (
                   <p className="text-xs text-fuchsia-300 italic flex items-start gap-1">
                     <span className="min-w-0 break-words">💌 « {t.dedication} »</span>

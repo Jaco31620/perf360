@@ -253,6 +253,7 @@ export default function Participant({ code }) {
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-xs font-bold text-[var(--jb-accent)] uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment</p>
               <p className="font-bold text-gray-900 leading-snug line-clamp-2">{now.title}</p>
+              {now.channel && <p className="text-sm text-gray-600 truncate">{now.channel}</p>}
               {now.mine || now.author ? (
                 <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>
               ) : now.revealIn ? (
@@ -276,6 +277,7 @@ export default function Participant({ code }) {
                   <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 bg-[var(--jb-soft)]">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
+                      {t.channel && <p className="text-xs text-gray-500 truncate">{t.channel}</p>}
                       <p className="text-xs font-semibold text-[var(--jb-accent)]">
                         {t.ahead === 0 ? "🔜 C'est le prochain !" : `${t.ahead} titre${t.ahead > 1 ? "s" : ""} avant le vôtre`}
                       </p>
@@ -297,7 +299,7 @@ export default function Participant({ code }) {
                 <span className="w-5 text-right text-sm font-bold text-gray-400 shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
-                  {(t.mine || t.author) && <p className="text-xs text-gray-500">{t.mine ? "vous" : t.author}</p>}
+                  <p className="text-xs text-gray-500 truncate">{[t.channel, (t.mine || t.author) && `par ${t.mine ? "vous" : t.author}`].filter(Boolean).join(" · ")}</p>
                   {t.dedication && <p className="text-xs text-[var(--jb-accent)] italic truncate">💌 « {t.dedication} »</p>}
                 </div>
                 {t.mine && <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>}

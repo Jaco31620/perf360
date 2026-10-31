@@ -38,7 +38,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
-import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos } from "@/lib/jukeboxBlindServer";
+import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos, AUTO_PID } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 
@@ -175,9 +175,16 @@ export async function POST(req, { params }) {
         if (!res.error && key) await rememberSong(key, video, null, false); // corrigé pour les prochaines soirées, à valider dans le super-admin
         break;
       }
-      case "remove":
-        res = await tracks().delete().eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued");
+      case "remove": {
+        // titre pioché par le blind test : écarté (pas repioché ce soir), un autre le remplace
+        const { data: t } = await tracks().select("participant_id").eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued").maybeSingle();
+        if (!t) break;
+        res = t.participant_id === AUTO_PID
+          ? await tracks().update({ status: "removed" }).eq("id", String(body.id))
+          : await tracks().delete().eq("id", String(body.id));
+        if (!res.error && t.participant_id === AUTO_PID) await topUpBlind(s);
         break;
+      }
       case "reset":
         res = await tracks().delete().eq("session_id", s.id).in("status", ["queued", "playing"]);
         break;

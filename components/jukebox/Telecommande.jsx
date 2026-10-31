@@ -129,6 +129,7 @@ export default function Telecommande({ code }) {
                 {now.thumb && <img src={now.thumb} alt="" className="w-24 h-[54px] object-cover rounded-lg shrink-0" />}
                 <div className="min-w-0">
                   <p className="font-bold leading-snug line-clamp-2">{now.title}</p>
+                  {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
                   <p className="text-xs text-white/50">proposé par {now.author}</p>
                   <FixVideoButton onClick={() => setFixing(now)} />
                   {now.dedication && (
