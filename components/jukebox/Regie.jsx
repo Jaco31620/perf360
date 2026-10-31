@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
+import { useAdminActions } from "./optimistic";
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
@@ -71,7 +72,9 @@ export default function Regie({ code }) {
     setOrigin(window.location.origin);
   }, [code]);
 
+  const { act, fresh, refreshRef } = useAdminActions(code, setData);
   const refresh = useCallback(async () => {
+    const started = Date.now();
     try {
       const res = await fetch(`/api/jukebox/${code}`, {
         cache: "no-store",
@@ -80,12 +83,13 @@ export default function Regie({ code }) {
       if (res.status === 404) return setMissing(true);
       if (res.ok) {
         const d = await res.json();
+        if (!fresh(started)) return; // une action a eu lieu entre-temps : réponse périmée
         d.fetchedAt = Date.now();
         setData(d);
         if (d.admin) rememberParty(code, d.session.name);
       }
     } catch (e) { /* réseau : on retentera */ }
-  }, [code]);
+  }, [code, fresh]);
 
   useEffect(() => {
     refresh();
@@ -93,17 +97,7 @@ export default function Regie({ code }) {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const act = useCallback(async (action, extra = {}, silent = false) => {
-    const res = await fetch(`/api/jukebox/${code}/admin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders(code) },
-      body: JSON.stringify({ action, ...extra }),
-    });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) { if (!silent) alert(d.error || "Action impossible."); return false; }
-    await refresh();
-    return true;
-  }, [code, refresh]);
+  refreshRef.current = refresh;
 
   const advance = useCallback(async (skip, from = loaded.current) => {
     if (advancing.current) return;

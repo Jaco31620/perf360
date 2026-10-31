@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
+import { useAdminActions } from "./optimistic";
 import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
@@ -36,17 +37,20 @@ export default function Telecommande({ code }) {
     }
   }, [code]);
 
+  const { act, fresh, refreshRef } = useAdminActions(code, setData);
   const refresh = useCallback(async () => {
+    const started = Date.now();
     try {
       const res = await fetch(`/api/jukebox/${code}`, { cache: "no-store", headers: authHeaders(code) });
       if (res.status === 404) return setMissing(true);
       if (res.ok) {
         const d = await res.json();
+        if (!fresh(started)) return; // une action a eu lieu entre-temps : réponse périmée
         d.fetchedAt = Date.now();
         setData(d);
       }
     } catch (e) { /* réseau : on retentera */ }
-  }, [code]);
+  }, [code, fresh]);
 
   useEffect(() => {
     refresh();
@@ -55,17 +59,7 @@ export default function Telecommande({ code }) {
     return () => { clearInterval(id); clearInterval(t); };
   }, [refresh]);
 
-  const act = useCallback(async (action, extra = {}, silent = false) => {
-    const res = await fetch(`/api/jukebox/${code}/admin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders(code) },
-      body: JSON.stringify({ action, ...extra }),
-    });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok) { if (!silent) alert(d.error || "Action impossible."); return false; }
-    await refresh();
-    return true;
-  }, [code, refresh]);
+  refreshRef.current = refresh;
 
   // l'ordre lecture/pause est considéré comme appliqué dès que la régie confirme l'état voulu
   useEffect(() => {

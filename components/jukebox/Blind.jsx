@@ -7,7 +7,6 @@
  * passage au titre suivant après la réponse. Pendant un titre : dévoiler,
  * réponses des invités (accepter l'artiste ou le titre refusé à tort), scores.
  */
-import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 
@@ -104,8 +103,7 @@ export function BlindPanel({ settings, blind, now, act }) {
 
 /* Filtres de la pioche (langue, décennies, vidéos validées) avec le nombre
  * de titres correspondant à chaque choix. Les nombres sont calculés ici à
- * partir des comptes du serveur (`facets`) : ils changent dès le clic, le
- * réglage est enregistré en arrière-plan. */
+ * partir des comptes du serveur (`facets`) : ils changent dès le clic. */
 const sumWhere = (facets, f, played = false) => (facets || []).reduce((n, [decade, fr, validated, used, count]) =>
   ((f.lang === "all" || (f.lang === "fr" ? fr === true : fr === false))
     && (!f.decades.length || f.decades.includes(decade))
@@ -113,12 +111,8 @@ const sumWhere = (facets, f, played = false) => (facets || []).reduce((n, [decad
     && used === played ? n + count : n), 0);
 
 function BlindFilters({ settings, facets, onChange }) {
-  const saved = { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated };
-  const [local, setLocal] = useState(saved);
-  const savedKey = JSON.stringify(saved);
-  useEffect(() => { setLocal(JSON.parse(savedKey)); }, [savedKey]); // réglage enregistré (ou changé ailleurs)
-  const set = (patch) => { setLocal((f) => ({ ...f, ...patch })); onChange(patch); };
-  const f = local;
+  const f = { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated };
+  const set = onChange; // affiché tout de suite (useAdminActions), enregistré dans l'ordre des clics
   const toggleDecade = (d) => set({ decades: f.decades.includes(d) ? f.decades.filter((x) => x !== d) : [...f.decades, d].sort() });
 
   const ready = Array.isArray(facets);

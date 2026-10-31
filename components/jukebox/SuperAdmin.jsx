@@ -84,9 +84,14 @@ export default function SuperAdmin() {
     setPw("");
   };
 
+  // Réglages affichés dès le clic ; actions envoyées une par une, dans l'ordre.
+  const queue = useRef(Promise.resolve());
   const action = async (body, confirmText) => {
     if (confirmText && !confirm(confirmText)) return null;
-    try { const d = await call("POST", body); await load(); return d; } catch (e) { alert(e.message); return null; }
+    setData((d) => applyLocally(d, body));
+    const run = queue.current.then(() => call("POST", body));
+    queue.current = run.catch(() => {});
+    try { const d = await run; await load(); return d; } catch (e) { alert(e.message); load(); return null; }
   };
 
   if (token === undefined) return null;
@@ -274,6 +279,24 @@ export default function SuperAdmin() {
       )}
     </Page>
   );
+}
+
+/* Effet immédiat d'une action du super-admin sur l'état affiché. */
+function applyLocally(d, body) {
+  if (!d) return d;
+  if (body.action === "features")
+    return { ...d, sessions: d.sessions.map((s) => (s.code === body.code ? { ...s, features: { ...s.features, ...body.features } } : s)) };
+  if (body.action !== "settings") return d;
+  const { action, defaultFeatures, defaultOptions, ...rest } = body;
+  const c = d.config;
+  return {
+    ...d,
+    config: {
+      ...c, ...rest,
+      ...(defaultFeatures ? { defaultFeatures: { ...c.defaultFeatures, ...defaultFeatures } } : {}),
+      ...(defaultOptions ? { defaultOptions: { ...c.defaultOptions, ...defaultOptions, blind: { ...c.defaultOptions.blind, ...defaultOptions.blind } } } : {}),
+    },
+  };
 }
 
 /* Chiffre clé en tête de page (cliquable : ouvre la page correspondante). */
