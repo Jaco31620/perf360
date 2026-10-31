@@ -156,11 +156,12 @@ function BlindFilters({ settings, facets, onChange }) {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-white/50">Décennies {f.decades.length ? "" : "(toutes)"}</span>
-          {f.decades.length > 0 && <button onClick={() => set({ decades: [] })} className="text-xs text-white/50 underline">Toutes</button>}
-        </div>
-        <div className="grid grid-cols-4 gap-1">
+        <p className="text-xs text-white/50 mb-1">Décennies <span className="text-white/30">(une ou plusieurs)</span></p>
+        <div className="grid grid-cols-3 gap-1">
+          <button onClick={() => f.decades.length && set({ decades: [] })}
+            className={`py-1.5 rounded-lg text-xs font-bold ${f.decades.length ? "bg-white/10 text-white/70 hover:text-white" : "bg-fuchsia-600"}`}>
+            Toutes{badge(count({ decades: [] }), !f.decades.length)}
+          </button>
           {DECADES.map((d) => {
             const active = f.decades.includes(d);
             const n = count({ decades: [d] });
