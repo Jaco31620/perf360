@@ -220,7 +220,10 @@ export default function Participant({ code }) {
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
-                      <p className="text-xs text-gray-500 truncate">{v.channel} · {formatDuration(v.duration)}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {v.channel} · {formatDuration(v.duration)}
+                        {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span> : null}
+                      </p>
                     </div>
                     {inQueue.has(v.id) ? (
                       <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
