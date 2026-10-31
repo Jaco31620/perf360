@@ -35,7 +35,7 @@
  *   delete                 → supprimer la soirée
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
 import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos } from "@/lib/jukeboxBlindServer";
@@ -88,13 +88,14 @@ export async function POST(req, { params }) {
         break;
       }
       case "next": {
-        const { data: cur, error } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing");
+        const { data: cur, error } = await tracks().select("id,video_id").eq("session_id", s.id).eq("status", "playing");
         if (error) throw error;
         if ((cur[0]?.id || null) !== (body.from || null)) break;
         if (cur.length) {
           res = await tracks().update({ status: body.skip ? "skipped" : "played" })
             .eq("session_id", s.id).eq("status", "playing");
           if (res.error) break;
+          if (!body.skip) await countPlay(cur[0].video_id);
         }
         await topUpBlind(s); // blind test automatique : file complétée
         const [nxt] = await queued();

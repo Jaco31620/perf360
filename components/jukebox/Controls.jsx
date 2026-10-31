@@ -289,10 +289,10 @@ export function VideoPicker({ code, track, onClose, onDone, mute }) {
 
 /* Aperçu d'une vidéo YouTube dans la page (lecteur intégré). mute : sans son
  * (régie : le son partirait sur la sono de la soirée). */
-export function VideoPreview({ videoId, onClose, mute }) {
+export function VideoPreview({ videoId, onClose, mute, start }) {
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
-      <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1&cc_load_policy=0&iv_load_policy=3${mute ? "&mute=1" : ""}`} title="Aperçu"
+      <iframe key={videoId} src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1&cc_load_policy=0&iv_load_policy=3${mute ? "&mute=1" : ""}${start ? `&start=${start}` : ""}`} title="Aperçu"
         allow="autoplay; encrypted-media; fullscreen" allowFullScreen className="absolute inset-0 w-full h-full" />
       {onClose && (
         <button onClick={onClose} aria-label="Fermer l'aperçu"

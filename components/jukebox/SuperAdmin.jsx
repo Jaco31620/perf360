@@ -556,6 +556,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
   const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
   const [retitling, setRetitling] = useState(null); // titre rattaché à un autre titre Deezer
   const [preview, setPreview] = useState(null); // clé du titre en aperçu
+  const [review, setReview] = useState(null); // revue : clés des titres à passer, position
 
   const lastAct = useRef(0); // liste relue avant la dernière action : périmée
   const queue = useRef(Promise.resolve());
@@ -642,6 +643,20 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               )}
             </div>
           )}
+          {(() => {
+            const todo = (songs || []).filter((s) => !s.validated && !s.missing);
+            return todo.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 bg-fuchsia-50 rounded-xl px-3 py-2">
+                <button onClick={() => { setPreview(null); setReview({ keys: todo.map((s) => s.key), i: 0 }); }}
+                  className="text-sm font-bold text-white bg-fuchsia-600 hover:bg-fuchsia-700 px-4 py-1.5 rounded-full">
+                  ▶ Revue des titres à vérifier ({todo.length})
+                </button>
+                <span className="text-xs text-fuchsia-900/70">
+                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. {status === "todo" ? "Les plus joués en soirée d'abord, puis les plus connus." : "Titres non validés de la liste affichée."}
+                </span>
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex bg-gray-100 rounded-full p-0.5 text-sm">
               {STATUS_FILTERS.map(([id, label]) => (
@@ -666,9 +681,18 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
-          {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)} onDone={load} />}
+          {review && (
+            <SongReview review={review} setReview={setReview} songs={songs} run={run} editYear={editYear}
+              busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
+          )}
+          {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)}
+            onDone={(key) => {
+              // revue en cours : la ligne change de clé (autre titre Deezer)
+              if (key && key !== retitling.key) setReview((r) => r && { ...r, keys: r.keys.map((k) => (k === retitling.key ? key : k)) });
+              load();
+            }} />}
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
-            onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
+            onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
             <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
@@ -708,7 +732,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         📝 Paroles{s.lyrics ? "" : " ?"}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
+                    <p className="text-xs text-gray-400 mt-1">{s.plays > 0 && <span className="font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {s.plays}× · </span>}{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
                     {s.missing ? null : s.validated ? (
@@ -993,6 +1017,120 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
   );
 }
 
+/* Revue des titres à vérifier, un par un : vidéo lancée à 40 s (là où les
+ * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
+ * passent par run() (effet immédiat sur la liste de la mémoire). */
+const REVIEW_START = 40;
+function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRetitle, onClose }) {
+  const { keys, i } = review;
+  const song = i < keys.length ? (songs || []).find((s) => s.key === keys[i]) : null;
+  const go = (d) => setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) }));
+  const act = {
+    validate: () => { if (song && !song.missing) run({ action: "validateSong", key: song.key, validated: true }); go(1); },
+    lyrics: () => song && run({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
+    blind: () => song && run({ action: "blindSong", key: song.key, blind: !song.blind }),
+    fix: () => song && onFix(song),
+    next: () => go(1),
+    prev: () => go(-1),
+  };
+  const actRef = useRef(act);
+  actRef.current = act;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (busy || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      const a = actRef.current;
+      const k = e.key.toLowerCase();
+      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
+      if (fn) { e.preventDefault(); fn(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  const Key = ({ k }) => <kbd className="ml-1.5 text-[10px] font-mono bg-black/10 rounded px-1 py-0.5">{k}</kbd>;
+  const big = "flex-1 min-w-[130px] text-sm font-bold px-4 py-3 rounded-2xl transition";
+  return (
+    <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-3xl max-h-[95vh] overflow-y-auto bg-white rounded-3xl p-5 space-y-4 shadow-2xl">
+        <div className="flex items-center gap-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-600 flex-1">
+            Revue · {Math.min(i + 1, keys.length)} / {keys.length}
+          </p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none" aria-label="Fermer">×</button>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-fuchsia-500 transition-all" style={{ width: `${(Math.min(i, keys.length) / keys.length) * 100}%` }} />
+        </div>
+        {i >= keys.length ? (
+          <div className="text-center py-10 space-y-3">
+            <p className="text-3xl">🎉</p>
+            <p className="font-bold">Revue terminée</p>
+            <div className="flex justify-center gap-2">
+              <button onClick={() => go(-1)} className="text-sm font-bold bg-gray-100 px-4 py-2 rounded-full">← Revenir au dernier</button>
+              <button onClick={onClose} className="text-sm font-bold text-white bg-fuchsia-600 px-4 py-2 rounded-full">Fermer</button>
+            </div>
+          </div>
+        ) : !song ? (
+          <div className="text-center py-10 space-y-3">
+            <p className="text-sm text-gray-500">Ce titre n'est plus dans la liste (oublié, ou filtre changé).</p>
+            <button onClick={() => go(1)} className="text-sm font-bold bg-gray-100 px-4 py-2 rounded-full">Suivant →</button>
+          </div>
+        ) : (
+          <>
+            <div>
+              <button onClick={() => onRetitle(song)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
+                className="text-left text-lg font-bold text-gray-900 hover:text-fuchsia-700 leading-snug">{song.label || song.key}</button>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(song.mode)}</span>
+                {song.missing
+                  ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-100 text-red-700">⚠️ Vidéo disparue · à remplacer</span>
+                  : song.validated
+                  ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-green-100 text-green-700">✓ Validé</span>
+                  : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-gray-100 text-gray-500">À vérifier</span>}
+                <button onClick={() => editYear(song)} title="Année de sortie (cliquer pour corriger)"
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${song.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
+                  {song.year || (song.enriched ? "année ?" : "…")}
+                </button>
+                <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
+                  {song.fr === true ? "🇫🇷 Français" : song.fr === false ? "🌍 International" : song.enriched ? "❓ langue" : "…"}
+                </button>
+                <span className="text-xs text-gray-400">
+                  {song.plays > 0 && <b className="text-gray-500">▶ joué {song.plays}× · </b>}{formatDuration(song.duration)}
+                </span>
+              </div>
+            </div>
+            <VideoPreview videoId={song.videoId} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
+            <div className="flex flex-wrap gap-2">
+              <button onClick={act.lyrics} className={`${big} ${song.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-500 hover:text-gray-900"}`}>
+                📝 {song.lyrics ? "Avec paroles" : "Sans paroles"}<Key k="P" />
+              </button>
+              <button onClick={act.blind} className={`${big} ${song.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-500 hover:text-gray-900"}`}>
+                🕵️ {song.blind ? "Blind test" : "Pas au blind test"}<Key k="B" />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={act.prev} disabled={i === 0} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl disabled:opacity-40">←</button>
+              <button onClick={act.fix} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">
+                {song.missing ? "Remplacer la vidéo" : "Changer la vidéo"}<Key k="C" />
+              </button>
+              <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">Passer<Key k="→" /></button>
+              <button onClick={act.validate} disabled={song.missing}
+                className="flex-1 min-w-[180px] text-sm font-bold text-white bg-green-600 hover:bg-green-700 px-4 py-3 rounded-2xl disabled:opacity-40">
+                ✓ Valider et suivant<Key k="V" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400">
+              Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. Cliquez le titre pour le corriger
+              (reprise, compilation). Échap pour fermer.
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Mauvais titre Deezer (reprise, compilation…) : recherche dans Deezer et
  * rattachement de la ligne au bon titre (vidéo conservée). */
 function SongTitleChooser({ song, call, onClose, onDone }) {
@@ -1011,8 +1149,8 @@ function SongTitleChooser({ song, call, onClose, onDone }) {
     setBusy(true);
     setError("");
     try {
-      await call("POST", { action: "retargetSong", key: song.key, deezerId: t.deezerId });
-      onDone();
+      const d = await call("POST", { action: "retargetSong", key: song.key, deezerId: t.deezerId });
+      onDone(d.key);
       onClose();
     } catch (err) { setError(err.message); setBusy(false); }
   };

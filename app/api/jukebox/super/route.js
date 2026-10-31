@@ -80,9 +80,9 @@ export async function POST(req) {
       case "deezerSearch":
         return Response.json({ ok: true, results: await deezerSearch(String(body.q || "").slice(0, 200)) });
       case "retargetSong": {
-        const err = await retargetSong(body.key, body.deezerId);
-        if (err) return Response.json({ error: err }, { status: 422 });
-        return Response.json({ ok: true });
+        const r = await retargetSong(body.key, body.deezerId);
+        if (typeof r === "string") return Response.json({ error: r }, { status: 422 });
+        return Response.json({ ok: true, key: r.key });
       }
       case "replaceSong": {
         const err = await replaceSongVideo(body.key, body.videoId);

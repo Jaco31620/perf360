@@ -148,3 +148,10 @@ alter table public.jukebox_songs
 -- les paroles), devinée d'après le titre YouTube, corrigée en super-admin.
 alter table public.jukebox_songs
   add column if not exists lyrics boolean not null default false;
+
+-- v14 (31/10/2026) : priorités de la revue des titres. Nombre de
+-- passages en soirée, popularité Deezer (rank, à l'enrichissement).
+alter table public.jukebox_songs
+  add column if not exists plays int not null default 0;
+alter table public.jukebox_songs
+  add column if not exists rank int;
