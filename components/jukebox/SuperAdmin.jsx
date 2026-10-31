@@ -483,7 +483,7 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["noblind", "🚫 Exclus du blind test"], ["all", "Tous"]];
+const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["all", "Tous"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 const MODE_TAG = {
@@ -597,7 +597,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "noblind" ? "Aucun titre exclu du blind test." : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s) => (
@@ -621,10 +621,10 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                         {s.fr === true ? "🇫🇷 Français" : s.fr === false ? "🌍 International" : s.enriched ? "❓ langue" : "…"}
                       </button>
-                      <button onClick={() => run({ action: "songMeta", key: s.key, noBlind: !s.noBlind })}
-                        title={s.noBlind ? "Exclu du blind test (cliquer pour le réintégrer)" : "Exclure du blind test"}
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.noBlind ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
-                        {s.noBlind ? "🚫 Exclu du blind test" : "🕵️"}
+                      <button onClick={() => run({ action: "blindSong", key: s.key, blind: !s.blind })}
+                        title={s.blind ? "Retirer du blind test" : "Utiliser dans le blind test"}
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        🕵️ Blind test{s.blind ? "" : " ?"}
                       </button>
                       <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
                     </div>
@@ -667,6 +667,7 @@ function Prefill({ call, state, onChanged }) {
   const [source, setSource] = useState("playlist"); // playlist | lines
   const [lines, setLines] = useState("");
   const [modes, setModes] = useState(["normal"]);
+  const [blind, setBlind] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [plQuery, setPlQuery] = useState("");
@@ -679,7 +680,7 @@ function Prefill({ call, state, onChanged }) {
     setBusy(true);
     setMsg(null);
     try {
-      const d = await call("POST", { action: "prefill", modes, ...body });
+      const d = await call("POST", { action: "prefill", modes, blind, ...body });
       setMsg({ ok: true, text: `${d.added} ajouté${d.added > 1 ? "s" : ""} à la file${d.skipped ? `, ${d.skipped} déjà en mémoire ou en attente` : ""}.`, notFound: d.notFound });
       if (body.lines) setLines("");
       onChanged();
@@ -741,7 +742,10 @@ function Prefill({ call, state, onChanged }) {
               </button>
             ))}
           </div>
-          <p className="text-xs text-gray-400 -mt-1">Pour le blind test, les versions Normale et Avec paroles servent toutes les deux (vidéo masquée).</p>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={blind} onChange={(e) => setBlind(e.target.checked)} className="w-4 h-4 accent-violet-600" />
+            <span>Marquer ces titres <b>🕵️ Blind test</b> (les versions Normale et Avec paroles conviennent : la vidéo est masquée)</span>
+          </label>
 
           <div className="flex bg-gray-100 rounded-full p-0.5 w-fit">
             {[["playlist", "🎧 Playlist Deezer"], ["lines", "📝 Liste de titres"]].map(([id, label]) => (
@@ -871,6 +875,7 @@ function PrefillQueue({ call, version, onChanged }) {
             <input type="checkbox" checked={sel.has(it.key)} onChange={() => toggleSel(it.key)} className="accent-fuchsia-600 shrink-0" />
             <span className="flex-1 min-w-0 truncate"><b>{it.artist}</b> – {it.title}</span>
             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${MODE_TAG[it.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(it.mode)}</span>
+            {it.blind && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-600 text-white shrink-0">🕵️</span>}
             <button onClick={() => edit([it.key], "top")} title="Traiter en premier" className="text-gray-400 hover:text-gray-900 px-1 shrink-0">⤒</button>
             <button onClick={() => edit([it.key], "remove")} title="Retirer" className="text-gray-400 hover:text-red-600 px-1 shrink-0">✕</button>
           </li>

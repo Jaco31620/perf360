@@ -2,7 +2,7 @@
  * Route SUPER-ADMIN du jukebox (en-tête x-jukebox-super requis).
  * - GET  : toutes les soirées (activité, compteurs, date de suppression),
  *          réglages, recherches YouTube du jour.
- *          ?songs=1&q=…&status=all|todo|ok|missing|noblind&mode=…&lang=fr|intl|unknown&decade=1980 : mémoire des titres.
+ *          ?songs=1&q=…&status=all|todo|ok|missing|blind&mode=…&lang=fr|intl|unknown&decade=1980 : mémoire des titres.
  *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode?, searchEngine?, defaultFeatures?, defaultOptions? }
@@ -12,10 +12,11 @@
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
- *     songMeta { key, year?, fr?, noBlind? } → corriger année / langue, exclure du blind test (toutes les versions du titre)
+ *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
+     songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
      enrich → enrichir des titres tout de suite (année, langue ; ~40 s)
  *     validateSong { key, validated } → marquer la vidéo retenue comme vérifiée
- *     prefill { lines? | playlist?, modes[] } (playlist : id ou lien Deezer)
+ *     prefill { lines? | playlist?, modes[], blind? } (playlist : id ou lien Deezer)
  *     prefillEdit { keys[], op: "remove" | "top" } → retirer / traiter en premier → titres à pré-chercher (cron de 6 h)
  *     clearPrefill → vider la file de pré-remplissage
  *     password { current, next } → changer le mot de passe super-admin
@@ -23,7 +24,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { normalizeFeatures } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
@@ -79,6 +80,9 @@ export async function POST(req) {
         if (err) return Response.json({ error: err }, { status: 422 });
         return Response.json({ ok: true });
       }
+      case "blindSong":
+        await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
       case "songMeta":
         await editSongMeta(body.key, body);
         return Response.json({ ok: true });
@@ -90,11 +94,11 @@ export async function POST(req) {
       case "prefill": {
         if (body.playlist) {
           const id = await deezerPlaylistId(body.playlist);
-          const r = id && await prefillFromPlaylist(id, body.modes);
+          const r = id && await prefillFromPlaylist(id, body.modes, !!body.blind);
           if (!r) return Response.json({ error: "Playlist Deezer introuvable (vérifiez le lien, elle doit être publique)." }, { status: 404 });
           return Response.json({ ok: true, ...r });
         }
-        return Response.json({ ok: true, ...(await prefillFromLines(body.lines, body.modes)) });
+        return Response.json({ ok: true, ...(await prefillFromLines(body.lines, body.modes, !!body.blind)) });
       }
       case "prefillEdit":
         await editPrefill(body.keys, body.op);
