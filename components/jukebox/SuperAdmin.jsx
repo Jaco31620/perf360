@@ -178,7 +178,7 @@ export default function SuperAdmin() {
                       return (
                         <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
                           onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
-                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
                           {f.icon} {f.label}
                         </button>
                       );
@@ -677,33 +677,33 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                   <div className="flex-1 min-w-[160px]">
                     <p className="text-sm font-semibold text-gray-900 truncate">{s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
                       {s.missing
-                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700" title="La vidéo n'existe plus ou n'est plus lisible : choisissez-en une autre">⚠️ Vidéo disparue · à remplacer</span>
+                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-100 text-red-700" title="La vidéo n'existe plus ou n'est plus lisible : choisissez-en une autre">⚠️ Vidéo disparue · à remplacer</span>
                         : s.validated
-                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">✓ Validé</span>
-                        : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">À vérifier</span>}
+                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-green-100 text-green-700">✓ Validé</span>
+                        : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-gray-100 text-gray-500">À vérifier</span>}
                       <button onClick={() => editYear(s)} title="Année de sortie (cliquer pour corriger)"
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
                         {s.year || (s.enriched ? "année ?" : "…")}
                       </button>
                       <button onClick={() => run({ action: "songMeta", key: s.key, fr: FR_NEXT[String(s.fr)] })}
                         title="Langue (cliquer : français → international → inconnue)"
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                         {s.fr === true ? "🇫🇷 Français" : s.fr === false ? "🌍 International" : s.enriched ? "❓ langue" : "…"}
                       </button>
                       <button onClick={() => run({ action: "blindSong", key: s.key, blind: !s.blind })}
                         title={s.blind ? "Retirer du blind test" : "Utiliser dans le blind test"}
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                         🕵️ Blind test{s.blind ? "" : " ?"}
                       </button>
                       <button onClick={() => run({ action: "lyricsSong", key: s.key, lyrics: !s.lyrics })}
                         title={s.lyrics ? "La vidéo n'affiche pas les paroles" : "La vidéo affiche les paroles"}
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${s.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                         📝 Paroles{s.lyrics ? "" : " ?"}
                       </button>
-                      <span className="text-xs text-gray-400">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</span>
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
                     {s.missing ? null : s.validated ? (
@@ -967,8 +967,8 @@ function PrefillQueue({ call, version, onChanged }) {
           <li key={it.key} className="flex items-center gap-2 py-1.5">
             <input type="checkbox" checked={sel.has(it.key)} onChange={() => toggleSel(it.key)} className="accent-fuchsia-600 shrink-0" />
             <span className="flex-1 min-w-0 truncate"><b>{it.artist}</b> – {it.title}</span>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${MODE_TAG[it.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(it.mode)}</span>
-            {it.blind && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-600 text-white shrink-0">🕵️</span>}
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${MODE_TAG[it.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(it.mode)}</span>
+            {it.blind && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-violet-600 text-white shrink-0">🕵️</span>}
             <button onClick={() => edit([it.key], "top")} title="Traiter en premier" className="text-gray-400 hover:text-gray-900 px-1 shrink-0">⤒</button>
             <button onClick={() => edit([it.key], "remove")} title="Retirer" className="text-gray-400 hover:text-red-600 px-1 shrink-0">✕</button>
           </li>
