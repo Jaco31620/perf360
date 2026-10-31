@@ -281,9 +281,28 @@ export default function SuperAdmin() {
   );
 }
 
+/* Mémoire des titres : effet immédiat d'une action sur la liste affichée.
+ * Année et langue valent pour toutes les versions (modes) du titre. */
+function applySong(list, body) {
+  if (!list) return list;
+  const id = String(body.key || "").split(":")[1];
+  switch (body.action) {
+    case "forgetSong": return list.filter((s) => s.key !== body.key);
+    case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
+    case "blindSong": return list.map((s) => (s.key === body.key ? { ...s, blind: !!body.blind } : s));
+    case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
+      ...s, enriched: true,
+      ...("year" in body ? { year: parseInt(body.year, 10) || null } : {}),
+      ...("fr" in body ? { fr: body.fr } : {}),
+    }));
+    default: return list;
+  }
+}
+
 /* Effet immédiat d'une action du super-admin sur l'état affiché. */
 function applyLocally(d, body) {
   if (!d) return d;
+  if (body.action === "delete") return { ...d, sessions: d.sessions.filter((s) => s.code !== body.code) };
   if (body.action === "features")
     return { ...d, sessions: d.sessions.map((s) => (s.code === body.code ? { ...s, features: { ...s.features, ...body.features } } : s)) };
   if (body.action !== "settings") return d;
@@ -537,7 +556,10 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
   const [fixing, setFixing] = useState(null); // titre dont on change la vidéo
   const [preview, setPreview] = useState(null); // clé du titre en aperçu
 
+  const lastAct = useRef(0); // liste relue avant la dernière action : périmée
+  const queue = useRef(Promise.resolve());
   const load = useCallback(async () => {
+    const started = Date.now();
     try {
       const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
@@ -545,6 +567,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Chargement impossible.");
+      if (started < lastAct.current) return;
       setSongs(d.songs);
       setErr("");
     } catch (e) {
@@ -558,9 +581,16 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
     return () => clearTimeout(t);
   }, [open, load]);
 
+  // Effet affiché dès le clic, actions envoyées dans l'ordre ; la liste n'est
+  // pas relue après chaque action (un titre validé reste visible jusqu'au
+  // prochain changement de filtre, sans décaler les lignes sous la souris).
   const run = async (body, confirmText) => {
     if (confirmText && !confirm(confirmText)) return;
-    try { await call("POST", body); load(); } catch (e) { alert(e.message); }
+    lastAct.current = Date.now();
+    setSongs((list) => applySong(list, body));
+    const p = queue.current.then(() => call("POST", body));
+    queue.current = p.catch(() => {});
+    try { await p; } catch (e) { alert(e.message); lastAct.current = Date.now(); load(); }
   };
   // appels successifs (~45 s chacun, MusicBrainz : 1 requête / s) jusqu'au bout
   const stopEnrich = useRef(false);
@@ -874,12 +904,24 @@ function PrefillQueue({ call, version, onChanged }) {
   }, []);
   useEffect(() => { load(); }, [load, version]);
 
-  const edit = async (keys, op) => {
-    try { await call("POST", { action: "prefillEdit", keys, op }); setSel(new Set()); await load(); onChanged(); } catch (e) { alert(e.message); }
+  // effet affiché tout de suite, actions envoyées dans l'ordre
+  const queue = useRef(Promise.resolve());
+  const send = async (body, local) => {
+    setItems(local);
+    setSel(new Set());
+    const p = queue.current.then(() => call("POST", body));
+    queue.current = p.catch(() => {});
+    try { await p; onChanged(); } catch (e) { alert(e.message); load(); }
   };
-  const clear = async () => {
+  const edit = (keys, op) => {
+    const set = new Set(keys);
+    const hit = items.filter((it) => set.has(it.key));
+    const rest = items.filter((it) => !set.has(it.key));
+    send({ action: "prefillEdit", keys, op }, op === "top" ? [...hit, ...rest] : rest);
+  };
+  const clear = () => {
     if (!confirm(`Vider la file (${items.length} titres en attente) ?`)) return;
-    try { await call("POST", { action: "clearPrefill" }); setSel(new Set()); await load(); onChanged(); } catch (e) { alert(e.message); }
+    send({ action: "clearPrefill" }, []);
   };
 
   if (!items) return <p className="text-gray-400">Chargement…</p>;

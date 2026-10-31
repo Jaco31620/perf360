@@ -32,11 +32,16 @@ export default function Participant({ code }) {
 
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
 
+  const lastAct = useRef(0); // réponse partie avant une action : périmée
   const refresh = useCallback(async () => {
+    const started = Date.now();
     try {
       const res = await fetch(`/api/jukebox/${code}?pid=${pid.current}`, { cache: "no-store", headers: headers() });
       if (res.status === 404) return setData(null);
-      if (res.ok) setData(await res.json());
+      if (res.ok) {
+        const d = await res.json();
+        if (started > lastAct.current) setData(d);
+      }
     } catch (e) { /* réseau : on retentera */ }
   }, [code]);
 
@@ -127,10 +132,13 @@ export default function Participant({ code }) {
 
   const withdraw = async (t) => {
     if (!confirm(`Retirer « ${t.title} » de la file ?`)) return;
+    lastAct.current = Date.now();
+    setData((d) => ({ ...d, queue: d.queue.filter((x) => x.id !== t.id), total: Math.max(0, d.total - 1), pending: Math.max(0, d.pending - 1) })); // retiré tout de suite
     await fetch(`/api/jukebox/${code}`, {
       method: "DELETE", headers: headers(),
       body: JSON.stringify({ participantId: pid.current, id: t.id }),
     }).catch(() => {});
+    lastAct.current = Date.now();
     refresh();
   };
 

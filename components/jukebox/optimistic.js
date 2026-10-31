@@ -1,6 +1,6 @@
 "use client";
 /*
- * Régie et télécommande : un réglage change à l'écran dès le clic, sans
+ * Régie et télécommande : un réglage ou la file change à l'écran dès le clic, sans
  * attendre l'aller-retour serveur (optimistic), et les actions partent une
  * par une, dans l'ordre des clics. Une réponse de rafraîchissement partie
  * avant la fin d'une action est ignorée (elle montrerait l'ancien état).
@@ -12,6 +12,20 @@ import { authHeaders } from "./storage";
 function applyLocally(data, action, extra) {
   const session = data?.session;
   if (!session) return data;
+  const queue = data.queue || [];
+  if (action === "remove") return { ...data, queue: queue.filter((t) => t.id !== extra.id) };
+  if (action === "move") {
+    const q = [...queue];
+    const i = q.findIndex((t) => t.id === extra.id);
+    const j = extra.dir === "top" ? 0 : extra.dir === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= q.length) return data;
+    q.splice(j, 0, q.splice(i, 1)[0]);
+    return { ...data, queue: q };
+  }
+  if (action === "clearDedication") {
+    const clear = (t) => (t && t.id === extra.id ? { ...t, dedication: null } : t);
+    return { ...data, now: clear(data.now), queue: queue.map(clear) };
+  }
   let patch = null;
   if (action === "options") patch = extra;
   else if (action === "max") patch = { maxPerParticipant: extra.max };

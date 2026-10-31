@@ -34,7 +34,8 @@ export default function History({ code, name, onClose, onChanged }) {
   const say = (text) => { setFlash(text); setTimeout(() => setFlash(""), 2500); };
 
   const replay = async (t) => {
-    try { await post({ action: "replay", id: t.id }); say(`« ${t.title} » remis dans la file.`); onChanged?.(); } catch (e) { alert(e.message); }
+    say(`« ${t.title} » remis dans la file.`); // tout de suite, confirmé par le serveur ensuite
+    try { await post({ action: "replay", id: t.id }); onChanged?.(); } catch (e) { setFlash(""); alert(e.message); }
   };
 
   const ordered = () => [...(list || [])].reverse(); // export : ordre de passage
@@ -57,7 +58,8 @@ export default function History({ code, name, onClose, onChanged }) {
   };
   const clear = async () => {
     if (!confirm("Effacer tout l'historique de la soirée ?")) return;
-    try { await post({ action: "clearHistory" }); load(); } catch (e) { alert(e.message); }
+    setList([]);
+    try { await post({ action: "clearHistory" }); } catch (e) { alert(e.message); load(); }
   };
 
   return (
