@@ -746,8 +746,6 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                     <button onClick={() => setFixing(s)} className={`text-xs font-bold px-3 py-1.5 rounded-full ${s.missing ? "bg-red-600 text-white" : "bg-gray-100"}`}>
                       {s.missing ? "Remplacer la vidéo" : "Changer la vidéo"}
                     </button>
-                    <a href={`https://www.youtube.com/watch?v=${s.videoId}`} target="_blank" rel="noreferrer"
-                      className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">YouTube ↗</a>
                     <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier « ${s.label || s.key} » (${modeLabel(s.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)}
                       className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
                   </div>
@@ -1102,6 +1100,8 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
               </div>
             </div>
             <VideoPreview videoId={song.videoId} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
+            <a href={`https://www.youtube.com/watch?v=${song.videoId}`} target="_blank" rel="noreferrer"
+              className="block -mt-2 text-right text-xs text-gray-400 hover:text-gray-700 underline">Ouvrir sur YouTube ↗</a>
             <div className="flex flex-wrap gap-2">
               <button onClick={act.lyrics} className={`${big} ${song.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-500 hover:text-gray-900"}`}>
                 📝 {song.lyrics ? "Avec paroles" : "Sans paroles"}<Key k="P" />
