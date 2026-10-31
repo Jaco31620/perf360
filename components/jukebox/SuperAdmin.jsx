@@ -676,6 +676,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
             <select value={decade} onChange={(e) => setDecade(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
               <option value="">Toutes décennies</option>
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
+              <option value="unknown">❓ Année inconnue</option>
             </select>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
               className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
