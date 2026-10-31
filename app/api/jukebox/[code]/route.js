@@ -21,7 +21,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
-import { sessionBlind, blindView } from "@/lib/jukeboxBlindServer";
+import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +56,8 @@ export async function GET(req, { params }) {
     let nowOut = now ? trackOut(now, me) : null;
     if (!admin) hideAuthors(nowOut, list, now, session.authorReveal);
     const blind = sessionBlind(s);
-    const blindOut = blind?.on ? await blindView(s, blind, now, { admin, pid: me }) : null;
+    const blindOut = blind?.on ? await blindView(s, blind, now, { admin, pid: me })
+      : blind && admin ? { on: false, facets: await blindFacets(s) } : null; // régie : nombres de la pioche avant le lancement
     if (blindOut && !admin) {
       list = []; // la file trahirait les prochains titres
       if (nowOut && !blindOut.revealed) nowOut = { id: nowOut.id, hidden: true, duration: nowOut.duration };
