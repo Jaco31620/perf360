@@ -51,14 +51,16 @@ export function usePlayerEngine({ code, data, act, enabled }) {
   }, [act]);
 
   // Position de lecture transmise à l'écran d'affichage (qui suit en muet) :
-  // à chaque lecture / pause et toutes les 5 s.
+  // à chaque lecture / pause et toutes les 5 s. Sans titre en cours : signe de
+  // vie (id vide), pour que la télécommande sache qu'un lecteur est prêt.
   const report = useCallback(() => {
     const p = players.current[active.current];
-    if (!loaded.current || !p?.getCurrentTime) return;
+    if (!p?.getCurrentTime) return;
+    const id = loaded.current || "";
     fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders(code) },
-      body: JSON.stringify({ action: "playback", id: loaded.current, pos: p.getCurrentTime(), playing: p.getPlayerState() === 1, volume: master.current }),
+      body: JSON.stringify({ action: "playback", id, pos: id ? p.getCurrentTime() : 0, playing: !!id && p.getPlayerState() === 1, volume: master.current }),
     }).catch(() => {});
   }, [code]);
 

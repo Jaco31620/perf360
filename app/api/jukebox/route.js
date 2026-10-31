@@ -12,6 +12,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { newAdminToken, hashToken, regieOptions } from "@/lib/jukeboxServer";
+import { newRegieCode, deviceLabel } from "@/lib/jukeboxAccess";
 import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults } from "@/lib/jukebox";
 import { loadConfig, isJukeboxSuper, sameCode } from "@/lib/jukeboxAdmin";
 
@@ -57,10 +58,15 @@ export async function POST(req) {
     const sb = getSupabaseAdmin();
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = String(Math.floor(100000 + Math.random() * 900000));
-      const { error } = await sb.from("jukebox_sessions").insert({
-        code, name, admin_hash: hashToken(token), max_per_participant: max, options,
-      });
-      if (!error) return Response.json({ code, adminToken: token });
+      const regieCode = newRegieCode();
+      const { data: row, error } = await sb.from("jukebox_sessions").insert({
+        code, name, admin_hash: hashToken(token), max_per_participant: max, options, regie_code: regieCode,
+      }).select("id").maybeSingle();
+      if (!error) {
+        // le créateur est le premier appareil autorisé (super-admin : son jeton sert au lien d'invitation)
+        await sb.from("jukebox_devices").insert({ session_id: row.id, token_hash: hashToken(token), label: deviceLabel(req.headers.get("user-agent") || "") });
+        return Response.json({ code, adminToken: token, regieCode });
+      }
       if (error.code !== "23505") throw error; // 23505 = code déjà pris → on retente
     }
     return Response.json({ error: "Impossible de générer un code, réessayez." }, { status: 503 });

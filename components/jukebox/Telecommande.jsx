@@ -20,6 +20,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
 import TvLink from "./TvLink";
+import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
 export default function Telecommande({ code }) {
@@ -30,6 +31,7 @@ export default function Telecommande({ code }) {
   useEffect(() => { try { const t = localStorage.getItem("jukebox:remoteTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); window.scrollTo(0, 0); try { localStorage.setItem("jukebox:remoteTab", t); } catch (e) { /* ignoré */ } };
   const [guestQr, setGuestQr] = useState(false);
+  const [pcHelp, setPcHelp] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
@@ -69,6 +71,7 @@ export default function Telecommande({ code }) {
   }, [refresh]);
 
   refreshRef.current = refresh;
+  const passError = useJoinPass(code, refresh); // QR « Ajouter un téléphone » de la régie
 
   // l'ordre lecture/pause est considéré comme appliqué dès que la régie confirme l'état voulu
   useEffect(() => {
@@ -79,19 +82,14 @@ export default function Telecommande({ code }) {
   if (missing) return <Center>La soirée {formatCode(code)} n'existe pas (ou plus).</Center>;
   if (!data) return <Center>Chargement…</Center>;
   if (!data.admin) {
-    return (
-      <Center>
-        <p className="text-4xl mb-3">🔒</p>
-        <p className="mb-2 font-bold">{data.session.name}</p>
-        <p className="text-white/70">Scannez le QR code « Télécommande » affiché sur la régie pour piloter la soirée.</p>
-      </Center>
-    );
+    return <Center><JoinForm code={code} name={data.session.name} onJoined={refresh} error={passError} /></Center>;
   }
 
   const { session, now, queue, playback: pb } = data;
   const live = pb && now && pb.id === now.id;
   const age = pb ? data.serverTime - pb.at + (Date.now() - data.fetchedAt) : Infinity;
   const regieOk = live && age < 15000; // la régie envoie son état toutes les 5 s
+  const playerSeen = pb && age < 60000; // un lecteur (régie ou télé) a donné signe de vie récemment
   const isPlaying = pending ? pending === "play" : !!(live && pb.playing);
   const pos = live ? Math.min(now.duration || Infinity, pb.pos + (pb.playing ? age / 1000 : 0)) : 0;
   const shownVolume = volume ?? pb?.volume ?? 100;
@@ -166,9 +164,22 @@ export default function Telecommande({ code }) {
               <p className="text-white/50 text-center py-10">Aucun titre en cours.</p>
             )}
 
-            {now && !regieOk && (
+            {!playerSeen ? (
+              <div className="bg-fuchsia-500/10 border border-fuchsia-400/30 rounded-2xl p-4 space-y-3">
+                <p className="font-bold">🔊 Aucun lecteur pour l'instant</p>
+                <p className="text-sm text-white/60">La musique est jouée par une télé ou un ordinateur ; ce téléphone les pilote.</p>
+                <button onClick={() => setTvOpen(true)} className="w-full font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-3">📺 Connecter une télé</button>
+                <button onClick={() => setPcHelp((v) => !v)} className="w-full font-bold bg-white/10 rounded-full py-2 text-sm">💻 Utiliser un ordinateur</button>
+                {pcHelp && (
+                  <p className="text-sm text-white/70">
+                    Sur l'ordinateur branché à la sono, ouvrez <b className="text-white break-all">{joinUrl.replace(/^https?:\/\//, "")}/regie</b> puis
+                    tapez le code régie (onglet ⚙️ Plus).
+                  </p>
+                )}
+              </div>
+            ) : now && !regieOk && (
               <p className="text-sm text-amber-300 bg-amber-500/10 rounded-xl px-3 py-2">
-                ⚠️ Le lecteur ne répond pas : vérifiez que la page régie (ordinateur) ou l’écran en mode son (télé) est ouvert et que « Lancer la musique » a été cliqué.
+                ⚠️ Le lecteur ne répond pas : vérifiez que la régie (ordinateur) ou l'écran en mode son (télé) est toujours ouvert.
               </p>
             )}
 
@@ -199,6 +210,7 @@ export default function Telecommande({ code }) {
                 <button onClick={() => setHistoryOpen(true)} className="col-span-2 font-bold bg-white/10 active:bg-white/20 rounded-2xl py-3 text-sm">🕘 Historique de la soirée</button>
               )}
             </div>
+            <AccessPanel code={code} name={session.name} />
             <section className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
               <Settings session={session} act={act} />
             </section>

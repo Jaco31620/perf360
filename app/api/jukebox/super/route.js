@@ -7,7 +7,7 @@
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode?, defaultFeatures?, defaultOptions? }
  *     features { code, features } → fonctions activées pour une soirée
- *     regie { code }   → nouveau lien régie (l'ancien ne fonctionne plus)
+ *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
@@ -26,8 +26,9 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
-import { loadSession, newAdminToken, hashToken, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
+import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
@@ -146,10 +147,9 @@ export async function POST(req) {
           if (error) throw error;
           return Response.json({ ok: true });
         }
-        const token = newAdminToken();
-        const { error } = await sb.from("jukebox_sessions").update({ admin_hash: hashToken(token) }).eq("id", s.id);
-        if (error) throw error;
-        return Response.json({ ok: true, adminToken: token });
+        // regie : code régie de la soirée (reset : nouveau code, logoutAll : appareils déconnectés)
+        const regieCode = body.reset ? await resetRegieCode(s, !!body.logoutAll) : await ensureRegieCode(s);
+        return Response.json({ ok: true, regieCode });
       }
       default:
         return Response.json({ error: "Action inconnue." }, { status: 400 });

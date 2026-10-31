@@ -7,7 +7,8 @@
  * (« tv:<id> »), effacé dès que la télé l'a lu ; ignoré après 10 minutes.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, checkToken } from "@/lib/jukeboxServer";
+import { loadSession } from "@/lib/jukeboxServer";
+import { adminAccess, createDevice } from "@/lib/jukeboxAccess";
 import { isValidCode } from "@/lib/jukebox";
 
 export const runtime = "nodejs";
@@ -37,9 +38,15 @@ export async function POST(req) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    if (token && !checkToken(token, s.admin_hash)) return Response.json({ error: "Accès régie refusé." }, { status: 403 });
+    // mode son : la télé devient un appareil autorisé, avec son propre jeton
+    let tvToken = null;
+    if (token) {
+      if (!(await adminAccess({ headers: new Headers({ "x-jukebox-admin": String(token) }) }, s)).ok)
+        return Response.json({ error: "Accès régie refusé." }, { status: 403 });
+      tvToken = await createDevice(s.id, "Télé (mode son)");
+    }
     const { error } = await getSupabaseAdmin().from("jukebox_config")
-      .upsert({ key: `tv:${id}`, value: JSON.stringify({ code, at: Date.now(), ...(token ? { token } : {}) }) });
+      .upsert({ key: `tv:${id}`, value: JSON.stringify({ code, at: Date.now(), ...(tvToken ? { token: tvToken } : {}) }) });
     if (error) throw error;
     return Response.json({ ok: true });
   } catch (e) {

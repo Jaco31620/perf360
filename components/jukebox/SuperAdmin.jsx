@@ -12,6 +12,7 @@ import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
+import { inviteText, fmtRegieCode } from "./Access";
 import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel, formatDuration } from "@/lib/jukebox";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 
@@ -39,7 +40,7 @@ export default function SuperAdmin() {
   const [err, setErr] = useState("");
   const [data, setData] = useState(null);
   const [origin, setOrigin] = useState("");
-  const [link, setLink] = useState(null); // { name, url } lien régie à transmettre
+  const [link, setLink] = useState(null); // { name, code, regieCode } invitation à transmettre à l'organisateur
   const [filter, setFilter] = useState("");
   const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
   const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
@@ -151,13 +152,13 @@ export default function SuperAdmin() {
 
       {tab === "soirees" && (
         <>
-          <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name) => {
+          <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name, regieCode) => {
             setAdminToken(code, adminToken);
             rememberParty(code, name);
-            setLink({ name, url: `${origin}/jukebox/${code}/regie#t=${adminToken}`, joinUrl: `${origin}/jukebox/${code}` });
+            setLink({ name, code, regieCode });
             load();
           }} />
-          {link && <LinkBox {...link} onClose={() => setLink(null)} />}
+          {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
           {nSessions > 5 && (
             <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher une soirée (nom ou code)"
               className="mt-4 w-full border-2 border-gray-200 bg-white rounded-full px-4 py-2 text-sm focus:border-fuchsia-500 outline-none" />
@@ -172,6 +173,13 @@ export default function SuperAdmin() {
                     Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
                   </p>
                   <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    🔑 Code régie <b className="font-mono text-sm tracking-wider">{s.regieCode ? fmtRegieCode(s.regieCode) : "—"}</b>
+                    <button onClick={async () => {
+                      if (!confirm(`Nouveau code régie pour « ${s.name} » ? L'ancien ne fonctionnera plus.`)) return;
+                      await action({ action: "regie", code: s.code, reset: true, logoutAll: confirm("Déconnecter aussi tous les appareils déjà autorisés ?") });
+                    }} className="ml-2 text-fuchsia-600 underline">{s.regieCode ? "changer" : "créer"}</button>
+                  </p>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {FEATURES.map((f) => {
                       const on = s.features?.[f.id];
@@ -189,9 +197,9 @@ export default function SuperAdmin() {
                   <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">Régie</Link>
                   <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Écran</Link>
                   <button onClick={async () => {
-                    const d = await action({ action: "regie", code: s.code }, `Créer un nouveau lien régie pour « ${s.name} » ?\nL'ancien lien régie ne fonctionnera plus.`);
-                    if (d?.adminToken) { setAdminToken(s.code, d.adminToken); setLink({ name: s.name, url: `${origin}/jukebox/${s.code}/regie#t=${d.adminToken}`, joinUrl: `${origin}/jukebox/${s.code}` }); }
-                  }} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Nouveau lien régie</button>
+                    const regieCode = s.regieCode || (await action({ action: "regie", code: s.code }))?.regieCode;
+                    if (regieCode) { setLink({ name: s.name, code: s.code, regieCode }); window.scrollTo({ top: 0, behavior: "smooth" }); }
+                  }} className="font-bold bg-fuchsia-600 text-white px-3 py-1.5 rounded-full">📨 Invitation</button>
                   <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
                     className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
                 </div>
@@ -341,7 +349,7 @@ function CreateForm({ token, defaults, defaultOptions, onCreated }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Création impossible.");
-      onCreated(d.code, d.adminToken, name.trim());
+      onCreated(d.code, d.adminToken, name.trim(), d.regieCode);
       setName("");
       setChanged(null);
     } catch (err) {
@@ -470,24 +478,25 @@ function FeatureToggles({ value, onChange }) {
 }
 
 /* Lien régie à transmettre : copie, partage (téléphone) ou e-mail. */
-function LinkBox({ name, url, joinUrl, onClose }) {
+/* Invitation à transmettre à l'organisateur : adresses de la télécommande et
+ * de la régie, code régie (Access.jsx). */
+function InviteBox({ name, code, regieCode, origin, onClose }) {
   const [copied, setCopied] = useState(false);
-  const message = `Voici le lien de la régie de votre soirée « ${name} » (à ouvrir sur le PC branché à la sono) :\n${url}\n\nNe le partagez pas avec les invités : ils proposent leurs titres ici : ${joinUrl}`;
+  const message = inviteText({ origin, code, name, regieCode });
   const share = async () => {
-    try { await navigator.share({ title: `Régie « ${name} »`, text: message }); } catch (e) { /* annulé */ }
+    try { await navigator.share({ title: `Jukebox « ${name} »`, text: message }); } catch (e) { /* annulé */ }
   };
   return (
-    <div className="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4">
-      <p className="font-bold text-gray-900 mb-1">Lien régie de « {name} » — à transmettre à l'organisateur</p>
-      <p className="text-xs text-gray-500 mb-2">Ce lien donne le contrôle de la soirée : ne le partagez pas avec les invités.</p>
+    <div className="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4 space-y-2">
+      <p className="font-bold text-gray-900">Invitation pour l'organisateur de « {name} »</p>
+      <pre className="whitespace-pre-wrap break-words bg-white rounded-xl px-3 py-2 text-xs text-gray-700 font-sans">{message}</pre>
       <div className="flex flex-wrap gap-2 items-center">
-        <code className="flex-1 min-w-0 break-all bg-white rounded-lg px-3 py-2 text-xs">{url}</code>
-        <button onClick={async () => { try { await navigator.clipboard.writeText(url); setCopied(true); } catch (e) { /* ignoré */ } }}
-          className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copié" : "Copier"}</button>
+        <button onClick={async () => { try { await navigator.clipboard.writeText(message); setCopied(true); } catch (e) { /* ignoré */ } }}
+          className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copiée" : "Copier"}</button>
         {typeof navigator !== "undefined" && navigator.share && (
           <button onClick={share} className="bg-fuchsia-600 text-white text-sm font-bold px-4 py-2 rounded-full">Partager…</button>
         )}
-        <a href={`mailto:?subject=${encodeURIComponent(`Régie de la soirée « ${name} »`)}&body=${encodeURIComponent(message)}`}
+        <a href={`mailto:?subject=${encodeURIComponent(`Jukebox · soirée « ${name} »`)}&body=${encodeURIComponent(message)}`}
           className="bg-white border border-gray-200 text-sm font-bold px-4 py-2 rounded-full">✉️ E-mail</a>
         <button onClick={onClose} className="text-sm text-gray-400 underline">Fermer</button>
       </div>

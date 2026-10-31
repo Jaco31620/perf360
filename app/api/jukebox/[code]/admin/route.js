@@ -33,9 +33,14 @@
  *   replay { id }          → remettre un titre joué en fin de file
  *   clearHistory           → effacer l'historique
  *   delete                 → supprimer la soirée
+ *   access                 → code régie et appareils autorisés
+ *   joinPass               → passe à usage unique pour ajouter un appareil (QR, 10 min)
+ *   revokeDevice { id }    → retirer un appareil
+ *   regieCode { logoutAll } → nouveau code régie (appareils déconnectés si logoutAll)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { loadSession, publicSession, isAdminReq, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { adminAccess, ensureRegieCode, listDevices, createJoinPass, revokeDevice, resetRegieCode } from "@/lib/jukeboxAccess";
+import { loadSession, publicSession, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
 import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos, AUTO_PID } from "@/lib/jukeboxBlindServer";
@@ -51,7 +56,8 @@ export async function POST(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    if (!isAdminReq(req, s))
+    const access = await adminAccess(req, s);
+    if (!access.ok)
       return Response.json({ error: "Accès refusé." }, { status: 401 });
 
     const sb = getSupabaseAdmin();
@@ -174,6 +180,17 @@ export async function POST(req, { params }) {
         }).eq("id", t.id);
         if (!res.error && key) await rememberSong(key, video, null, false); // corrigé pour les prochaines soirées, à valider dans le super-admin
         break;
+      }
+      case "access":
+        return Response.json({ ok: true, regieCode: await ensureRegieCode(s), devices: await listDevices(s, access.deviceId) });
+      case "joinPass":
+        return Response.json({ ok: true, pass: await createJoinPass(s) });
+      case "revokeDevice":
+        await revokeDevice(s, body.id);
+        return Response.json({ ok: true, devices: await listDevices(s, access.deviceId) });
+      case "regieCode": {
+        const regieCode = await resetRegieCode(s, !!body.logoutAll);
+        return Response.json({ ok: true, regieCode, devices: body.logoutAll ? [] : await listDevices(s, access.deviceId) });
       }
       case "remove": {
         // titre pioché par le blind test : écarté (pas repioché ce soir), un autre le remplace

@@ -59,7 +59,9 @@ export default function JukeboxHome() {
       if (!res.ok) throw new Error(data.error || "Création impossible.");
       setAdminToken(data.code, data.adminToken);
       rememberParty(data.code, name.trim());
-      router.push(`/jukebox/${data.code}/regie`);
+      // téléphone : la télécommande (la musique viendra d'une télé ou d'un ordinateur) ; ordinateur : la régie
+      const phone = window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
+      router.push(`/jukebox/${data.code}/${phone ? "telecommande" : "regie"}`);
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -144,7 +146,8 @@ export default function JukeboxHome() {
                 <li key={c.code} className="flex items-center gap-3 py-3">
                   <span className="font-mono font-bold text-indigo-600 shrink-0">{formatCode(c.code)}</span>
                   <span className="flex-1 min-w-0 truncate text-gray-700">{c.name}</span>
-                  <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline shrink-0">Régie</Link>
+                  <Link href={`/jukebox/${c.code}/telecommande`} className="text-sm font-semibold text-fuchsia-600 hover:underline shrink-0">📱 Télécommande</Link>
+                  <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline shrink-0">💻 Régie</Link>
                   <button onClick={() => remove(c.code)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>
                 </li>
               ))}

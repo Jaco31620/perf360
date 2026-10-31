@@ -20,7 +20,7 @@ export async function GET(req, { params }) {
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
     const id = parseVideoId(q);
     if (id) {
-      const { video, reason } = await ytVideo(id, { musicOnly: !isAdminReq(req, s) });
+      const { video, reason } = await ytVideo(id, { musicOnly: !(await isAdminReq(req, s)) });
       return Response.json(video ? { results: [video] } : { results: [], error: REJECT_MESSAGES[reason] });
     }
     const query = q.slice(0, MAX_QUERY_LEN);

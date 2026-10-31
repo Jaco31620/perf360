@@ -50,8 +50,9 @@ export async function GET(req, { params }) {
     const now = rows.find((r) => r.status === "playing");
     const queue = rows.filter((r) => r.status === "queued");
     const session = publicSession(s);
-    const engine = url.searchParams.get("engine") === "1" && isAdminReq(req, s);
-    const admin = !engine && isAdminReq(req, s); // mode son : l'écran reste vu comme le public
+    const isAdmin = await isAdminReq(req, s);
+    const engine = url.searchParams.get("engine") === "1" && isAdmin;
+    const admin = !engine && isAdmin; // mode son : l'écran reste vu comme le public
     let list = queue.map((r, i) => ({ ...trackOut(r, me), ahead: i }));
     if (!admin) {
       if (url.searchParams.get("view") === "ecran") { if (!session.screenQueue) list = []; }
@@ -108,7 +109,7 @@ export async function POST(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    const admin = isAdminReq(req, s);
+    const admin = await isAdminReq(req, s);
     if (!admin && s.status !== "open") return Response.json({ error: "Les ajouts de titres sont bloqués pour le moment." }, { status: 403 });
     if (!admin && sessionBlind(s)?.on) return Response.json({ error: "Blind test en cours : les ajouts reprendront après." }, { status: 403 });
     if (!admin && !author) return Response.json({ error: "Merci d'indiquer votre prénom." }, { status: 400 });

@@ -10,13 +10,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { usePlayerEngine } from "./usePlayerEngine";
-import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
+import { setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
 import TvLink from "./TvLink";
+import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
 export default function Regie({ code }) {
@@ -25,8 +26,6 @@ export default function Regie({ code }) {
   const [missing, setMissing] = useState(false);
   const [origin, setOrigin] = useState("");
   const [bigQr, setBigQr] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [remoteQr, setRemoteQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
@@ -34,14 +33,12 @@ export default function Regie({ code }) {
   const [tab, setTab] = useState("queue"); // onglet de la colonne de droite (retenu par appareil)
   useEffect(() => { try { const t = localStorage.getItem("jukebox:regieTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:regieTab", t); } catch (e) { /* ignoré */ } };
-  const token = useRef(null);
   useEffect(() => {
     const m = window.location.hash.match(/t=([a-f0-9]+)/);
     if (m) {
       setAdminToken(code, m[1]);
       history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    token.current = getAdminToken(code);
     setOrigin(window.location.origin);
   }, [code]);
 
@@ -72,6 +69,7 @@ export default function Regie({ code }) {
   }, [refresh]);
 
   refreshRef.current = refresh;
+  const passError = useJoinPass(code, refresh); // QR « Ajouter un appareil »
 
   const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance } =
     usePlayerEngine({ code, data, act, enabled: !!data?.admin });
@@ -79,14 +77,6 @@ export default function Regie({ code }) {
   const playNow = (t) => {
     if (data.now && !confirm(`Lancer « ${t.title} » maintenant ?\nLe titre en cours sera interrompu.`)) return;
     act("playnow", { id: t.id });
-  };
-
-  const copyRegieLink = async () => {
-    try {
-      await navigator.clipboard.writeText(`${origin}/jukebox/${code}/regie#t=${token.current}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) { alert("Copie impossible."); }
   };
 
   const toggleFullscreen = () => {
@@ -105,14 +95,7 @@ export default function Regie({ code }) {
   }
   if (!data) return <Center>Chargement…</Center>;
   if (!data.admin) {
-    return (
-      <Center>
-        <p className="text-4xl mb-3">🔒</p>
-        <p className="mb-2 font-bold text-xl">{data.session.name}</p>
-        <p className="mb-6 text-white/70">Cette page est réservée à la régie de la soirée.</p>
-        <Link href={`/jukebox/${code}`} className="bg-fuchsia-600 text-white font-bold px-6 py-3 rounded-full">Proposer un titre</Link>
-      </Center>
-    );
+    return <Center><JoinForm code={code} name={data.session.name} onJoined={refresh} error={passError} /></Center>;
   }
 
   const { session, now, queue } = data;
@@ -243,22 +226,13 @@ export default function Regie({ code }) {
 
           {shown === "tools" && (
             <div className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
-              {token.current && (
-                <button onClick={() => setRemoteQr(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
-                  📱 Télécommande sur téléphone
-                </button>
-              )}
               <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                 📺 Ouvrir l'écran d'affichage
               </Link>
               <button onClick={() => setTvOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                 📺 Connecter une télé (perf360.fr/tv)
               </button>
-              {token.current && (
-                <button onClick={copyRegieLink} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
-                  {copied ? "✓ Lien copié" : "🔗 Copier le lien régie (autre appareil)"}
-                </button>
-              )}
+              <AccessPanel code={code} name={session.name} />
               <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-white/10 text-xs text-white/50">
                 <button onClick={() => confirm("Vider la file et arrêter le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>
                 <button onClick={async () => {
@@ -274,15 +248,6 @@ export default function Regie({ code }) {
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
       {tvOpen && <TvLink code={code} defaultSound={false} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
-
-      {remoteQr && (
-        <div onClick={() => setRemoteQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 cursor-pointer text-center">
-          <p className="text-2xl font-bold">📱 Télécommande</p>
-          <div className="bg-white p-4 rounded-3xl"><QRCodeSVG value={`${origin}/jukebox/${code}/telecommande#t=${token.current}`} size={280} /></div>
-          <p className="text-white/70 max-w-sm">Scannez avec votre téléphone pour piloter la soirée : lecture, volume, file et réglages.</p>
-          <p className="text-amber-300 text-sm max-w-sm">⚠️ Ce QR code donne le contrôle de la soirée : ne le montrez pas aux invités.</p>
-        </div>
-      )}
 
       {bigQr && (
         <div onClick={() => setBigQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-6 p-6 cursor-pointer">

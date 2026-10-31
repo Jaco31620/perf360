@@ -160,3 +160,26 @@ alter table public.jukebox_songs
 -- ([{ a: réponse, artist, title }]), affichés en régie.
 alter table public.jukebox_answers
   add column if not exists tries jsonb not null default '[]';
+
+-- v16 (01/11/2026) : accès régie. Code régie à 6 chiffres par soirée
+-- (avec blocage après 5 essais ratés) et un jeton par appareil.
+alter table public.jukebox_sessions
+  add column if not exists regie_code text;
+alter table public.jukebox_sessions
+  add column if not exists regie_fails int not null default 0;
+alter table public.jukebox_sessions
+  add column if not exists regie_locked_until timestamptz;
+create table if not exists public.jukebox_devices (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null
+    references public.jukebox_sessions(id)
+    on delete cascade,
+  token_hash text not null unique,
+  label text,
+  created_at timestamptz not null default now(),
+  last_seen timestamptz not null default now()
+);
+create index if not exists jukebox_devices_session_idx
+  on public.jukebox_devices(session_id);
+alter table public.jukebox_devices enable row level security;
+grant all on public.jukebox_devices to service_role;
