@@ -1,15 +1,18 @@
 "use client";
 /*
  * perf360.fr/tv — écran d'affichage du Jukebox sur une télé connectée (navigateur
- * de la télé, clé TV) : adresse courte, code de la soirée saisi au pavé
- * numérique de l'écran (flèches + OK de la télécommande) ou au clavier ; le
- * dernier code est retenu pour la fois suivante.
+ * de la télé, clé TV) : QR code à scanner avec le téléphone, qui choisit la
+ * soirée (jumelage, /api/jukebox/tv), ou code saisi au pavé numérique de
+ * l'écran (flèches + OK de la télécommande) ; dernier code retenu.
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { formatCode } from "@/components/jukebox/storage";
 
 const LAST_KEY = "jukebox:tvCode";
+const PAIR_KEY = "jukebox:tvPair";
+const newPairId = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
 
 export default function TvPage() {
@@ -18,12 +21,34 @@ export default function TvPage() {
   const [last, setLast] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pair, setPair] = useState("");
+  const [origin, setOrigin] = useState("");
   const firstKey = useRef(null);
 
   useEffect(() => {
-    try { setLast(localStorage.getItem(LAST_KEY) || ""); } catch (e) { /* stockage indisponible */ }
+    let id = "";
+    try {
+      setLast(localStorage.getItem(LAST_KEY) || "");
+      id = localStorage.getItem(PAIR_KEY) || "";
+      if (!id) { id = newPairId(); localStorage.setItem(PAIR_KEY, id); }
+    } catch (e) { id ||= newPairId(); /* stockage indisponible */ }
+    setPair(id);
+    setOrigin(window.location.origin);
     firstKey.current?.focus();
   }, []);
+
+  // jumelage : soirée choisie sur le téléphone qui a scanné le QR code
+  useEffect(() => {
+    if (!pair) return;
+    const t = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const d = await (await fetch(`/api/jukebox/tv?id=${pair}`, { cache: "no-store" })).json();
+        if (d.code) open(d.code);
+      } catch (e) { /* réseau : on retentera */ }
+    }, 2000);
+    return () => clearInterval(t);
+  }, [pair]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = async (c) => {
     if (c.length !== 6 || busy) return;
@@ -66,9 +91,14 @@ export default function TvPage() {
     <div className="min-h-screen bg-gradient-to-br from-fuchsia-700 via-purple-800 to-indigo-950 text-white flex items-center justify-center p-6">
       <div className="w-full max-w-4xl grid gap-10 md:grid-cols-2 items-center">
         <div className="text-center md:text-left space-y-5">
-          <p className="text-6xl">🎶📺</p>
-          <h1 className="text-5xl font-black">Jukebox sur la télé</h1>
-          <p className="text-2xl text-white/80">Saisissez le code de la soirée, affiché dans la régie.</p>
+          <h1 className="text-5xl font-black">🎶 Jukebox sur la télé</h1>
+          {pair && origin && (
+            <div className="flex items-center gap-5 justify-center md:justify-start">
+              <div className="bg-white p-3 rounded-2xl shrink-0"><QRCodeSVG value={`${origin}/tv/${pair}`} size={170} /></div>
+              <p className="text-2xl text-white/90 text-left">Scannez avec votre téléphone et choisissez la soirée.</p>
+            </div>
+          )}
+          <p className="text-xl text-white/70">Ou saisissez le code de la soirée, affiché dans la régie :</p>
           <p className="font-mono text-6xl font-black tracking-[0.25em]">
             {digits.slice(0, 3)} {digits.slice(3)}
           </p>
