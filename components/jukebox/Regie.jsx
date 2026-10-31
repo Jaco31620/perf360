@@ -492,6 +492,9 @@ export default function Regie({ code }) {
               <Link href={`/jukebox/${code}/ecran`} target="_blank" className="block text-center font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                 📺 Ouvrir l'écran d'affichage
               </Link>
+              <p className="text-xs text-white/50 text-center -mt-1">
+                Sur une télé connectée, sans PC : ouvrir <b className="text-white">perf360.fr/tv</b> dans son navigateur, code <b className="text-white font-mono">{formatCode(code)}</b>
+              </p>
               {token.current && (
                 <button onClick={copyRegieLink} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                   {copied ? "✓ Lien copié" : "🔗 Copier le lien régie (autre appareil)"}
