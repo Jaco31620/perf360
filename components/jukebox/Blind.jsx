@@ -148,12 +148,14 @@ function BlindLive({ settings, blind, now, act, controls }) {
             ) : settings.after > 0 && (
               <div className="flex items-center gap-3">
                 <p className="flex-1 text-xs text-white/50">
-                  {hold ? "♾️ Titre prolongé : il va jusqu'au bout." : blind.revealedFor != null ? `Titre suivant dans ${Math.max(0, Math.ceil(settings.after - blind.revealedFor))} s` : ""}
+                  {hold ? "♾️ Titre prolongé jusqu'au bout (⏭ pour passer)." : blind.revealedFor != null ? `Titre suivant dans ${Math.max(0, Math.ceil(settings.after - blind.revealedFor))} s` : ""}
                 </p>
-                <button onClick={() => act("blind", { holdId: hold ? null : now.id })}
-                  className={`shrink-0 text-xs font-bold rounded-full px-3 py-2 ${hold ? "bg-white/10" : "bg-fuchsia-600/80 hover:bg-fuchsia-600"}`}>
-                  {hold ? "Reprendre l'enchaînement" : "♾️ Laisser jouer ce titre"}
-                </button>
+                {!hold && (
+                  <button onClick={() => act("blind", { holdId: now.id })}
+                    className="shrink-0 text-xs font-bold rounded-full px-3 py-2 bg-fuchsia-600/80 hover:bg-fuchsia-600">
+                    ♾️ Laisser jouer ce titre
+                  </button>
+                )}
               </div>
             )}
           </>

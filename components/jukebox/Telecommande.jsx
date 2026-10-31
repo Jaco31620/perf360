@@ -2,7 +2,7 @@
 /*
  * Jukebox — télécommande (téléphone de l'organisateur), sans lecteur : la
  * musique est jouée par la régie (PC branché à la sono) ou par la télé en
- * mode son. Onglets en bas : Lecture, File, Blind (si activé), Plus
+ * mode son. Onglets en bas : Lecture (avec la file), Blind (si activé), Plus
  * (réglages, télé, QR invités, historique).
  *  - pause / lecture / volume : ordres transmis à la régie (champ `command`,
  *    lu à chaque rafraîchissement de la régie, ~1,5 s) ;
@@ -115,13 +115,11 @@ export default function Telecommande({ code }) {
   };
 
   const tabs = [
-    { id: "play", icon: "▶", label: "Lecture" },
-    { id: "queue", icon: "🎵", label: `File${queue.length ? ` (${queue.length})` : ""}` },
+    { id: "play", icon: "▶", label: `Lecture${queue.length ? ` · ${queue.length}` : ""}` },
     ...(session.blindSettings ? [{ id: "blind", icon: "🕵️", label: "Blind", dot: session.blindSettings.on }] : []),
     { id: "more", icon: "⚙️", label: "Plus" },
   ];
   const shown = tabs.some((t) => t.id === tab) ? tab : "play";
-  const next = queue[0];
   const joinUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/jukebox/${code}`;
 
   return (
@@ -184,25 +182,9 @@ export default function Telecommande({ code }) {
               <span className="w-8 text-right text-sm text-white/50 tabular-nums">{shownVolume}</span>
             </div>
 
-            {next && (
-              <button onClick={() => chooseTab("queue")} className="w-full flex items-center gap-3 bg-white/5 rounded-2xl p-3 text-left">
-                {next.thumb && <img src={next.thumb} alt="" className="w-12 h-12 object-cover rounded-lg shrink-0" />}
-                <span className="flex-1 min-w-0">
-                  <span className="block text-[11px] font-bold uppercase tracking-wider text-white/40">Ensuite</span>
-                  <span className="block text-sm font-semibold truncate">{next.title}</span>
-                  <span className="block text-xs text-white/50 truncate">{next.channel}</span>
-                </span>
-                <span className="text-xs text-white/40 shrink-0">{queue.length > 1 ? `+${queue.length - 1} ›` : "›"}</span>
-              </button>
-            )}
-          </section>
-        )}
-
-        {shown === "queue" && (
-          <>
             <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
             <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
-          </>
+          </section>
         )}
 
         {shown === "blind" && session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act}
