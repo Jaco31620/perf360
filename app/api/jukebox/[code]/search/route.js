@@ -1,12 +1,11 @@
 /*
- * Recherche de titres pour une soirée : ?q=<texte> — catalogue Deezer (moteur
- * « deezer », sans quota ; titres déjà en mémoire en tête) ou YouTube (catégorie Musique,
- * ou versions avec paroles / karaoké selon la régie ; cache 7 jours) ou lien YouTube /
- * YouTube Music collé (1 unité). Invités : chansons uniquement (la régie, non).
+ * Recherche de titres pour une soirée : ?q=<texte> — catalogue Deezer (sans
+ * quota ; titres déjà en mémoire en tête, la vidéo YouTube n'est cherchée
+ * qu'à l'ajout) ou lien YouTube / YouTube Music collé (1 unité). Invités :
+ * chansons uniquement (la régie, non).
  */
-import { loadSession, publicSession, isAdminReq, ytSearch, ytVideo, deezerSearch, preferKnown, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, publicSession, isAdminReq, ytVideo, deezerSearch, preferKnown, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_QUERY_LEN, parseVideoId } from "@/lib/jukebox";
-import { loadConfig } from "@/lib/jukeboxAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,10 +24,7 @@ export async function GET(req, { params }) {
       return Response.json(video ? { results: [video] } : { results: [], error: REJECT_MESSAGES[reason] });
     }
     const query = q.slice(0, MAX_QUERY_LEN);
-    const { searchEngine } = await loadConfig();
-    if (searchEngine === "deezer") // titres déjà en mémoire en tête (sans quota à l'ajout)
-      return Response.json({ results: await preferKnown(await deezerSearch(query), publicSession(s).searchMode, query) });
-    return Response.json({ results: await ytSearch(query, publicSession(s).searchMode) });
+    return Response.json({ results: await preferKnown(await deezerSearch(query), publicSession(s).searchMode, query) });
   } catch (e) {
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox search:", e);

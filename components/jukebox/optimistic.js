@@ -17,7 +17,7 @@ function applyLocally(data, action, extra) {
   if (action === "move") {
     const q = [...queue];
     const i = q.findIndex((t) => t.id === extra.id);
-    const j = extra.dir === "top" ? 0 : extra.dir === "up" ? i - 1 : i + 1;
+    const j = Number.isInteger(extra.to) ? Math.min(q.length - 1, extra.to) : extra.dir === "top" ? 0 : extra.dir === "up" ? i - 1 : i + 1;
     if (i < 0 || j < 0 || j >= q.length) return data;
     q.splice(j, 0, q.splice(i, 1)[0]);
     return { ...data, queue: q };

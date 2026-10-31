@@ -25,6 +25,14 @@ export default function JukeboxHome() {
   useEffect(() => {
     setMine(myParties());
     setIsSuper(!!getSuperToken());
+    // soirées supprimées depuis (à la main ou après inactivité) : retirées de la liste
+    for (const p of myParties()) {
+      fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then((r) => {
+        if (r.status !== 404) return;
+        forgetParty(p.code);
+        setMine(myParties());
+      }).catch(() => {});
+    }
     fetch("/api/jukebox", { cache: "no-store" }).then((r) => r.json()).then((d) => { setMode(d.creationMode || "open"); if (d.defaultMax != null) setMax(d.defaultMax); }).catch(() => {});
   }, []);
   const needCode = mode === "code" && !isSuper;

@@ -74,7 +74,7 @@ export async function POST(req, { params }) {
         res = await update({ max_per_participant: normalizeMax(body.max) });
         break;
       case "searchMode":
-        res = await update({ options: { ...(s.options || {}), searchMode: normalizeMode(body.mode) }, karaoke: false });
+        res = await update({ options: { ...(s.options || {}), searchMode: normalizeMode(body.mode) } });
         break;
       case "options": {
         const { searchMode, ...rest } = body; // le mode a sa propre action
@@ -133,6 +133,16 @@ export async function POST(req, { params }) {
         if (i < 0) return Response.json({ error: "Titre introuvable." }, { status: 404 });
         if (body.dir === "top") {
           if (i > 0) res = await tracks().update({ position: q[0].position - 1 }).eq("id", q[i].id);
+          break;
+        }
+        if (Number.isInteger(body.to)) { // glisser-déposer : place `to` dans la file
+          const rest = q.filter((t) => t.id !== body.id);
+          const to = Math.max(0, Math.min(rest.length, body.to));
+          if (to === i) break;
+          const prev = rest[to - 1], next = rest[to];
+          const position = prev && next ? (Number(prev.position) + Number(next.position)) / 2
+            : prev ? Number(prev.position) + 1 : Number(next.position) - 1;
+          res = await tracks().update({ position }).eq("id", body.id);
           break;
         }
         const j = body.dir === "up" ? i - 1 : i + 1;

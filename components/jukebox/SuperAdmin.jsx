@@ -208,23 +208,7 @@ export default function SuperAdmin() {
         <div className="grid gap-4 md:grid-cols-2 items-start">
           <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
-              <h2 className="font-bold text-base text-gray-900">Accès et recherche</h2>
-              <div>
-                <p className="font-semibold mb-1.5">Moteur de recherche des invités</p>
-                <div className="flex bg-gray-100 rounded-full p-0.5">
-                  {[["deezer", "Deezer (sans quota)"], ["youtube", "YouTube"]].map(([id, label]) => (
-                    <button key={id} onClick={() => id !== cfg.searchEngine && action({ action: "settings", searchEngine: id })}
-                      className={`flex-1 px-2 py-1.5 rounded-full font-bold ${id === cfg.searchEngine ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5">
-                  {cfg.searchEngine === "deezer"
-                    ? "Les invités cherchent dans le catalogue Deezer ; la vidéo YouTube n'est cherchée qu'à l'ajout (gardée 30 j, partagée entre soirées)."
-                    : "Chaque recherche d'invité consomme le quota YouTube (~100 recherches nouvelles par jour)."}
-                </p>
-              </div>
+              <h2 className="font-bold text-base text-gray-900">Accès</h2>
               <label className="flex items-center justify-between gap-3">
                 <span className="font-semibold">Suppression après inactivité</span>
                 <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}
@@ -1029,6 +1013,11 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
     lyrics: () => song && run({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
     blind: () => song && run({ action: "blindSong", key: song.key, blind: !song.blind }),
     fix: () => song && onFix(song),
+    forget: () => {
+      if (!song || !confirm(`Oublier « ${song.label || song.key} » (${modeLabel(song.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)) return;
+      run({ action: "forgetSong", key: song.key });
+      go(1);
+    },
     next: () => go(1),
     prev: () => go(-1),
   };
@@ -1039,7 +1028,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
       if (busy || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       const a = actRef.current;
       const k = e.key.toLowerCase();
-      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
+      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, o: a.forget, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
       if (fn) { e.preventDefault(); fn(); }
     };
     window.addEventListener("keydown", onKey);
@@ -1115,6 +1104,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
               <button onClick={act.fix} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">
                 {song.missing ? "Remplacer la vidéo" : "Changer la vidéo"}<Key k="C" />
               </button>
+              <button onClick={act.forget} className="text-sm font-bold text-red-600 bg-red-50 px-4 py-3 rounded-2xl">Oublier<Key k="O" /></button>
               <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">Passer<Key k="→" /></button>
               <button onClick={act.validate} disabled={song.missing}
                 className="flex-1 min-w-[180px] text-sm font-bold text-white bg-green-600 hover:bg-green-700 px-4 py-3 rounded-2xl disabled:opacity-40">

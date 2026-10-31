@@ -16,7 +16,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { getAdminToken, setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
-import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
+import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
 import { BlindPanel } from "./Blind";
@@ -374,9 +374,7 @@ export default function Regie({ code }) {
       <header className="flex flex-wrap items-center gap-3 px-4 sm:px-6 py-3 border-b border-white/10">
         <Link href="/jukebox" className="text-white/60 hover:text-white text-sm">← Jukebox</Link>
         <h1 className="font-extrabold text-lg truncate flex-1 min-w-0">{session.name}</h1>
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${open ? "bg-green-500/20 text-green-300" : "bg-white/10 text-white/60"}`}>
-          {open ? "Ajouts des invités autorisés" : "Ajouts des invités bloqués"}
-        </span>
+        <GuestsSwitch open={open} act={act} />
         <button onClick={toggleFullscreen} className="text-sm text-white/70 hover:text-white">⛶ Plein écran</button>
       </header>
 
@@ -451,9 +449,6 @@ export default function Regie({ code }) {
               <p className="font-bold text-sm break-all">{joinUrl.replace(/^https?:\/\//, "")}</p>
               <p className="text-xs text-white/60">code <span className="font-mono font-bold text-white text-base">{formatCode(code)}</span></p>
             </div>
-            <Link href={`/jukebox/${code}`} target="_blank" className="shrink-0 font-bold text-sm bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full px-3 py-2">
-              + Titre
-            </Link>
           </div>
 
           {/* onglets : la file reste à portée, les réglages ne l'écrasent plus */}
@@ -469,6 +464,7 @@ export default function Regie({ code }) {
 
           {shown === "queue" && (
             <>
+              <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
               <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
               {session.features.history && (
                 <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">

@@ -10,10 +10,9 @@
  * super-admin.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
-import { Settings, QueueList, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
+import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { formatDuration } from "@/lib/jukebox";
 import History from "./History";
 import { BlindPanel } from "./Blind";
@@ -115,6 +114,7 @@ export default function Telecommande({ code }) {
           </div>
           <span className="font-mono text-sm text-white/50">{formatCode(code)}</span>
         </header>
+        <GuestsSwitch open={session.status === "open"} act={act} className="w-full justify-center py-2" />
 
         <section className="bg-white/5 rounded-3xl p-4">
           {now ? (
@@ -163,12 +163,10 @@ export default function Telecommande({ code }) {
           </div>
         </section>
 
-        <Link href={`/jukebox/${code}`} className="block text-center font-bold bg-fuchsia-600 active:bg-fuchsia-700 rounded-full py-3">
-          + Ajouter un titre
-        </Link>
 
         {session.blindSettings && <BlindPanel settings={session.blindSettings} blind={data.blind} now={now} act={act} />}
 
+        <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
         <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
 
         {session.features.history && (

@@ -5,24 +5,16 @@
  * titre suivant, volume). `act(action, extra)` envoie une action à
  * /api/jukebox/<code>/admin.
  */
-import { useEffect, useState } from "react";
-import { Play, Pause, SkipForward, ChevronsUp, ChevronUp, ChevronDown, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
-import { authHeaders } from "./storage";
+import { useEffect, useRef, useState } from "react";
+import { Play, Pause, SkipForward, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
+import { authHeaders, participantId } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration } from "@/lib/jukebox";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
 export function Settings({ session, act }) {
-  const open = session.status === "open";
   return (
     <>
       <Group title="📱 Invités" first />
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Ajouts des invités</span>
-        <button onClick={() => act(open ? "close" : "open")}
-          className={`font-bold px-3 py-1.5 rounded-full ${open ? "bg-white/10 hover:bg-white/20" : "bg-green-600 hover:bg-green-700"}`}>
-          {open ? "Bloquer" : "Autoriser"}
-        </button>
-      </div>
       <label className="flex items-center justify-between gap-3">
         <span className="text-white/70">Titres en attente par invité</span>
         <select value={session.maxPerParticipant} onChange={(e) => act("max", { max: Number(e.target.value) })}
@@ -148,7 +140,137 @@ export function ThemeSettings({ code, theme, act }) {
   );
 }
 
+/* Ajouts des invités ouverts / bloqués : interrupteur en tête de la régie et
+ * de la télécommande. */
+export function GuestsSwitch({ open, act, className = "" }) {
+  return (
+    <button onClick={() => act(open ? "close" : "open")} role="switch" aria-checked={open}
+      title={open ? "Cliquer pour bloquer les ajouts des invités" : "Cliquer pour autoriser les ajouts des invités"}
+      className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full transition ${open ? "bg-green-500/20 text-green-300 hover:bg-green-500/30" : "bg-red-500/20 text-red-300 hover:bg-red-500/30"} ${className}`}>
+      <span className={`relative w-7 h-4 rounded-full ${open ? "bg-green-500" : "bg-white/25"}`}>
+        <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${open ? "left-3.5" : "left-0.5"}`} />
+      </span>
+      {open ? "Ajouts des invités ouverts" : "Ajouts des invités bloqués"}
+    </button>
+  );
+}
+
+/* Ajout d'un titre par la régie / la télécommande, sans quitter la page
+ * (mêmes recherche et ajout que les invités, sans limite). */
+export function AddTrack({ code, queue, now, onAdded }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState(null);
+  const [busy, setBusy] = useState(""); // "search" | id du titre en cours d'ajout
+  const [error, setError] = useState("");
+  const [flash, setFlash] = useState("");
+  const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId)]);
+
+  const search = async (e) => {
+    e.preventDefault();
+    if (q.trim().length < 2 || busy) return;
+    setBusy("search");
+    setError("");
+    try {
+      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store", headers: authHeaders(code) });
+      const d = await res.json();
+      setResults(d.results || []);
+      if (d.error) setError(d.error);
+    } catch (err) { setError("Recherche impossible."); } finally { setBusy(""); }
+  };
+  const add = async (v) => {
+    setBusy(v.id);
+    setError("");
+    try {
+      const res = await fetch(`/api/jukebox/${code}`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(code) },
+        body: JSON.stringify({ participantId: participantId(), author: "", ...(v.deezerId ? { deezerId: v.deezerId } : { videoId: v.id }) }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Ajout impossible.");
+      setFlash(v.title);
+      setTimeout(() => setFlash(""), 2500);
+      setResults(null);
+      setQ("");
+      onAdded?.();
+    } catch (err) { setError(err.message); } finally { setBusy(""); }
+  };
+
+  return (
+    <div className="bg-white/5 rounded-2xl p-3 space-y-2">
+      <form onSubmit={search} className="flex gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ajouter un titre : artiste, titre ou lien YouTube" enterKeyHint="search"
+            className="w-full bg-gray-900 border border-white/15 rounded-full pl-9 pr-3 py-2 text-sm focus:border-fuchsia-500 outline-none" />
+        </div>
+        <button disabled={busy === "search" || q.trim().length < 2} className="shrink-0 font-bold text-sm bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 rounded-full px-4">
+          {busy === "search" ? "…" : "Chercher"}
+        </button>
+      </form>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {flash && <p className="text-xs text-green-400 font-semibold">✓ « {flash} » ajouté à la file</p>}
+      {results && (
+        <div>
+          <div className="flex justify-between items-center text-xs text-white/40 mb-1">
+            <span>{results.length ? `${results.length} résultat${results.length > 1 ? "s" : ""} · ⚡ = déjà en mémoire` : "Aucun résultat."}</span>
+            <button onClick={() => setResults(null)} className="hover:text-white">Fermer ✕</button>
+          </div>
+          <ul className="max-h-72 overflow-y-auto space-y-1 pr-1">
+            {results.map((v) => (
+              <li key={v.id} className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-white/5">
+                {v.thumb && <img src={v.thumb} alt="" className="w-10 h-10 object-cover rounded shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{v.title}</p>
+                  <p className="text-xs text-white/50 truncate">
+                    {v.channel} · {formatDuration(v.duration)}{v.known ? ` · ⚡ ${v.known === 2 ? "validé" : "en mémoire"}` : ""}
+                  </p>
+                </div>
+                {inQueue.has(v.id) ? (
+                  <span className="text-xs text-white/40 shrink-0">Dans la file</span>
+                ) : (
+                  <button onClick={() => add(v)} disabled={!!busy && busy !== "search"}
+                    className="shrink-0 text-xs font-bold bg-white/10 hover:bg-fuchsia-600 disabled:opacity-40 rounded-full px-3 py-1.5">
+                    {busy === v.id ? "…" : "+ Ajouter"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* File d'attente : glisser-déposer (poignée ⠿, souris ou doigt), en tête,
+ * jouer maintenant, retirer ; clic sur le titre : « Mauvaise vidéo ? ». */
 export function QueueList({ queue, act, playNow, onFixVideo }) {
+  const [drag, setDrag] = useState(null); // { id, from, over }
+  const dragRef = useRef(null);
+  dragRef.current = drag;
+  const startDrag = (e, t, i) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setDrag({ id: t.id, from: i, over: i });
+  };
+  const moveDrag = (e) => {
+    if (!dragRef.current) return;
+    const li = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-qi]");
+    if (li) setDrag((d) => d && { ...d, over: Number(li.dataset.qi) });
+  };
+  const endDrag = () => {
+    const d = dragRef.current;
+    setDrag(null);
+    if (d && d.over !== d.from) act("move", { id: d.id, to: d.over });
+  };
+  // aperçu pendant le glisser : le titre déplacé à sa future place
+  const shown = (() => {
+    if (!drag || drag.over === drag.from) return queue;
+    const q = [...queue];
+    q.splice(drag.over, 0, q.splice(drag.from, 1)[0]);
+    return q;
+  })();
+
   return (
     <div className="bg-white/5 rounded-2xl p-4">
       <h2 className="font-bold mb-3">À suivre <span className="text-white/40 font-normal">({queue.length})</span></h2>
@@ -156,11 +278,24 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
         <p className="text-sm text-white/50">La file est vide.</p>
       ) : (
         <ol className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-          {queue.map((t, i) => (
-            <li key={t.id} className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+          {shown.map((t, i) => (
+            <li key={t.id} data-qi={i}
+              className={`flex items-center gap-2 rounded-xl p-2 transition-colors ${drag?.id === t.id ? "bg-fuchsia-600/30 ring-1 ring-fuchsia-400" : "bg-white/5"}`}>
+              {queue.length > 1 && (
+                <button onPointerDown={(e) => startDrag(e, t, queue.indexOf(t))} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => setDrag(null)}
+                  aria-label="Déplacer (glisser)" title="Glisser pour déplacer"
+                  className="shrink-0 -ml-1 p-1 text-white/30 hover:text-white cursor-grab active:cursor-grabbing touch-none">
+                  <GripVertical size={16} />
+                </button>
+              )}
               {t.thumb && <img src={t.thumb} alt="" className="w-14 h-8 object-cover rounded shrink-0" />}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{t.title}</p>
+                {onFixVideo ? (
+                  <button onClick={() => onFixVideo(t)} title="Mauvaise vidéo ? Cliquer pour en choisir une autre"
+                    className="group block max-w-full text-left text-sm font-semibold truncate hover:text-fuchsia-300">
+                    {t.title} <RefreshCw size={11} className="inline opacity-0 group-hover:opacity-60" />
+                  </button>
+                ) : <p className="text-sm font-semibold truncate">{t.title}</p>}
                 <p className="text-xs text-white/50 truncate">{t.author} · {formatDuration(t.duration)}</p>
                 {t.dedication && (
                   <p className="text-xs text-fuchsia-300 italic flex items-start gap-1">
@@ -173,9 +308,6 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
               <div className="flex shrink-0 text-white/50">
                 <IconBtn label="Jouer maintenant" onClick={() => playNow(t)}><Play size={15} fill="currentColor" /></IconBtn>
                 <IconBtn label="En tête de file" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "top" })}><ChevronsUp size={17} /></IconBtn>
-                <IconBtn label="Monter" disabled={i === 0} onClick={() => act("move", { id: t.id, dir: "up" })}><ChevronUp size={17} /></IconBtn>
-                <IconBtn label="Descendre" disabled={i === queue.length - 1} onClick={() => act("move", { id: t.id, dir: "down" })}><ChevronDown size={17} /></IconBtn>
-                {onFixVideo && <IconBtn label="Mauvaise vidéo ?" onClick={() => onFixVideo(t)}><RefreshCw size={15} /></IconBtn>}
                 <IconBtn label="Retirer" danger onClick={() => confirm(`Retirer « ${t.title} » ?`) && act("remove", { id: t.id })}><X size={16} /></IconBtn>
               </div>
             </li>
