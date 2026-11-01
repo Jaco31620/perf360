@@ -13,8 +13,13 @@ import { TV_PAIRED_KEY } from "@/lib/jukebox";
 
 const LAST_KEY = "jukebox:tvCode";
 const SOUND_KEY = "jukebox:tvSound"; // dernière soirée ouverte en mode son
-const PAIR_KEY = "jukebox:tvPair";
-const newPairId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+const SECRET_KEY = "jukebox:tvSecret";
+// Jumelage : la télé garde un secret ; le QR code ne montre que son empreinte
+// (identifiant de jumelage). Seule la télé peut donc relire la réponse du
+// téléphone (et le jeton du mode son) : photographier le QR ne suffit pas.
+const newSecret = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+const pairOf = async (secret) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))),
+  (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"];
 
 export default function TvPage() {
@@ -24,17 +29,19 @@ export default function TvPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pair, setPair] = useState("");
+  const secret = useRef("");
   const [origin, setOrigin] = useState("");
   const firstKey = useRef(null);
 
   useEffect(() => {
-    let id = "";
+    let sec = "";
     try {
       setLast(localStorage.getItem(LAST_KEY) || "");
-      id = localStorage.getItem(PAIR_KEY) || "";
-      if (!id) { id = newPairId(); localStorage.setItem(PAIR_KEY, id); }
-    } catch (e) { id ||= newPairId(); /* stockage indisponible */ }
-    setPair(id);
+      sec = localStorage.getItem(SECRET_KEY) || "";
+      if (!sec) { sec = newSecret(); localStorage.setItem(SECRET_KEY, sec); }
+    } catch (e) { sec ||= newSecret(); /* stockage indisponible */ }
+    secret.current = sec;
+    pairOf(sec).then(setPair).catch(() => {});
     setOrigin(window.location.origin);
     firstKey.current?.focus();
   }, []);
@@ -45,7 +52,7 @@ export default function TvPage() {
     const t = setInterval(async () => {
       if (document.hidden) return;
       try {
-        const d = await (await fetch(`/api/jukebox/tv?id=${pair}`, { cache: "no-store" })).json();
+        const d = await (await fetch(`/api/jukebox/tv?id=${pair}&s=${secret.current}`, { cache: "no-store" })).json();
         if (d.code) {
           if (d.token) setAdminToken(d.code, d.token); // mode son : la télé devient le lecteur de la régie
           open(d.code, !!d.token, true); // choix fait sur le téléphone : la télé prend le son

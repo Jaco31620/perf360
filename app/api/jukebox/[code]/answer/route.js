@@ -51,8 +51,19 @@ export async function POST(req, { params }) {
       points: (row?.points || 0) + gained, attempts: (row?.attempts || 0) + 1, last_answer: answer,
       tries: [...(Array.isArray(row?.tries) ? row.tries : []), { a: answer, artist: hit.artist, title: hit.title }],
     };
-    const { error } = await sb.from("jukebox_answers").upsert(next, { onConflict: "track_id,participant_id" });
-    if (error) throw error;
+    // écriture conditionnelle : des réponses envoyées en rafale ne contournent
+    // pas la limite d'essais et n'écrasent pas un élément trouvé
+    const busy = () => Response.json({ error: "Une réponse à la fois !" }, { status: 409 });
+    if (row) {
+      const { data: done, error } = await sb.from("jukebox_answers").update(next)
+        .eq("track_id", now.id).eq("participant_id", pid).eq("attempts", row.attempts || 0).select("track_id");
+      if (error) throw error;
+      if (!done?.length) return busy();
+    } else {
+      const { error } = await sb.from("jukebox_answers").insert(next);
+      if (error?.code === "23505") return busy(); // première réponse envoyée deux fois
+      if (error) throw error;
+    }
     return Response.json({
       ok: true, artist: next.artist_ok, title: next.title_ok, newArtist, newTitle, gained,
       points: next.points, attemptsLeft: MAX_ATTEMPTS - next.attempts,

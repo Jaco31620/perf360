@@ -21,6 +21,7 @@
  *            (en-tête admin) n'est soumise ni à la limite ni à la fermeture.
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
+import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims } from "@/lib/jukeboxTrim";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
@@ -30,7 +31,8 @@ import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const validPid = (pid) => /^[a-z0-9-]{8,64}$/i.test(String(pid || ""));
+// identifiants réservés au serveur (titres piochés par le blind test, rejoués par la régie)
+const validPid = (pid) => /^[a-z0-9-]{8,64}$/i.test(String(pid || "")) && !/^(blind-|regie-)/i.test(String(pid));
 
 async function activeTracks(sb, sessionId) {
   const { data, error } = await sb.from("jukebox_tracks").select("*")
@@ -130,6 +132,10 @@ export async function POST(req, { params }) {
         return Response.json({ error: `Vous avez déjà ${mine} titre${mine > 1 ? "s" : ""} en attente : patientez qu'il${mine > 1 ? "s" : ""} passe${mine > 1 ? "nt" : ""}.` }, { status: 429 });
     }
 
+    // quota YouTube partagé par toutes les soirées : ajouts des invités limités
+    if (!admin && (await tooMany(`add:${s.id}`, 60, 600) || await tooMany(`addip:${clientIp(req)}`, 20, 600)))
+      return Response.json({ error: "Beaucoup d'ajouts en ce moment : réessayez dans quelques minutes." }, { status: 429 });
+
     let v;
     if (deezerId > 0) {
       // titre Deezer → sa vidéo YouTube (affichage : titre, artiste et pochette Deezer)
@@ -168,6 +174,7 @@ export async function DELETE(req, { params }) {
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
   const pid = body?.participantId;
   if (!validPid(pid)) return Response.json({ error: "Participant invalide." }, { status: 400 });
+  if (!/^[0-9a-f-]{36}$/i.test(String(body?.id || ""))) return Response.json({ error: "Titre introuvable." }, { status: 404 });
 
   try {
     const s = await loadSession(code);

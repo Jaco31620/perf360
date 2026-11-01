@@ -4,6 +4,7 @@
  * qu'à l'ajout) ou lien YouTube / YouTube Music collé (1 unité). Invités :
  * chansons uniquement (la régie, non).
  */
+import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { loadSession, publicSession, isAdminReq, ytVideo, deezerSearch, preferKnown, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_QUERY_LEN, parseVideoId } from "@/lib/jukebox";
 
@@ -18,6 +19,8 @@ export async function GET(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
+    if (await tooMany(`search:${clientIp(req)}`, 150, 600))
+      return Response.json({ results: [], error: "Beaucoup de recherches : patientez quelques minutes." }, { status: 429 });
     const id = parseVideoId(q);
     if (id) {
       const { video, reason } = await ytVideo(id, { musicOnly: !(await isAdminReq(req, s)) });

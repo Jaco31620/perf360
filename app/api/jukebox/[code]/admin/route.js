@@ -38,6 +38,7 @@
  *   revokeDevice { id }    → retirer un appareil
  *   regieCode { logoutAll } → nouveau code régie (appareils déconnectés si logoutAll)
  */
+import { tooMany } from "@/lib/jukeboxRate";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { soireeVideoChange } from "@/lib/jukeboxChanges";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
@@ -62,6 +63,10 @@ export async function POST(req, { params }) {
     if (!access.ok)
       return Response.json({ error: "Accès refusé." }, { status: 401 });
 
+    // identifiant de titre (uuid) : refusé proprement plutôt qu'une erreur base
+    if (body?.action !== "playback" && body?.id !== undefined && !/^[0-9a-f-]{36}$/i.test(String(body.id)))
+      return Response.json({ error: "Titre introuvable." }, { status: 404 });
+
     const sb = getSupabaseAdmin();
     const update = (patch) => sb.from("jukebox_sessions").update(patch).eq("id", s.id);
     const tracks = () => sb.from("jukebox_tracks");
@@ -72,6 +77,30 @@ export async function POST(req, { params }) {
       return data;
     };
     let res = { error: null };
+    // `playback` (lecteur qui joue le son, position, renvoi vers la télé) : écrit
+    // par plusieurs appareils à la fois → mise à jour conditionnelle (version `v`)
+    // recalculée sur la valeur relue en cas de conflit. make(prev) → nouvel état
+    // ou Response (refus).
+    const casPlayback = async (make) => {
+      let prev = s.playback || null;
+      for (let i = 0; i < 4; i++) {
+        const next = make(prev);
+        if (next instanceof Response) return { response: next };
+        let q = sb.from("jukebox_sessions").update({ playback: { ...next, v: (Number(prev?.v) || 0) + 1 } }).eq("id", s.id);
+        q = !prev ? q.is("playback", null) : prev.v != null ? q.eq("playback->>v", String(prev.v)) : q.eq("playback->>at", String(prev.at));
+        const { data, error } = await q.select("id");
+        if (error) return { error };
+        if (data?.length) return { next };
+        const { data: row, error: e2 } = await sb.from("jukebox_sessions").select("playback").eq("id", s.id).maybeSingle();
+        if (e2) return { error: e2 };
+        prev = row?.playback || null;
+      }
+      // conflits répétés (ou filtre JSON refusé) : écriture simple, comme avant
+      const next = make(prev);
+      if (next instanceof Response) return { response: next };
+      const { error } = await update({ playback: { ...next, v: (Number(prev?.v) || 0) + 1 } });
+      return error ? { error } : { next };
+    };
 
     switch (body?.action) {
       case "open":
@@ -125,21 +154,25 @@ export async function POST(req, { params }) {
         // apprend qui joue (il se coupe). Lecteur muet depuis 20 s : place libre.
         const me = body.player && typeof body.player.id === "string"
           ? { id: body.player.id.slice(0, 40), kind: body.player.kind === "tv" ? "tv" : "pc" } : null;
-        const holder = s.playback?.player || null;
-        const alive = !!s.playback && receivedAt - (Number(s.playback.at) || 0) < 20000;
-        if (me && holder && holder.id !== me.id && alive && !body.claim)
-          return Response.json({ ok: false, owner: holder });
-        const player = me ? { ...me, since: body.claim || !holder || holder.id !== me.id ? receivedAt : holder.since } : holder;
-        // demande « renvoyer le son sur la télé » gardée 30 s (jusqu'à ce qu'une télé le prenne)
-        const ho = s.playback?.handoff;
-        const handoff = ho && !body.claim && receivedAt - (Number(ho.at) || 0) < HANDOFF_MS ? { handoff: ho } : {};
-        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}), ...handoff } });
-        if (!res.error) return Response.json({ ok: true, since: player?.since ?? null });
-        break;
+        const r = await casPlayback((prev) => {
+          const holder = prev?.player || null;
+          const alive = !!prev && receivedAt - (Number(prev.at) || 0) < 20000;
+          if (me && holder && holder.id !== me.id && alive && !body.claim)
+            return Response.json({ ok: false, owner: holder });
+          const player = me ? { ...me, since: body.claim || !holder || holder.id !== me.id ? receivedAt : holder.since } : holder;
+          // demande « renvoyer le son sur la télé » gardée HANDOFF_MS (jusqu'à ce qu'une télé le prenne)
+          const ho = prev?.handoff;
+          const handoff = ho && !body.claim && receivedAt - (Number(ho.at) || 0) < HANDOFF_MS ? { handoff: ho } : {};
+          return { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}), ...handoff };
+        });
+        if (r.response) return r.response;
+        if (r.error) { res = r; break; }
+        return Response.json({ ok: true, since: r.next.player?.since ?? null });
       }
-      case "handoff": { // l'ordinateur rend le son : une télé en affichage seul (avec accès son) le reprend
+      case "handoff": { // l'ordinateur rend le son : une télé jumelée (affichage seul, avec accès son) le reprend
         if (!s.playback) return Response.json({ error: "Rien n'est en cours de lecture." }, { status: 400 });
-        res = await update({ playback: { ...s.playback, handoff: { to: "tv", at: receivedAt } } });
+        const r = await casPlayback((prev) => ({ ...(prev || {}), handoff: { to: "tv", at: receivedAt } }));
+        if (r.error) res = r;
         break;
       }
       case "command": {
@@ -187,6 +220,8 @@ export async function POST(req, { params }) {
         break;
       case "videos":
       case "replaceVideo": {
+        if (body.action === "videos" && await tooMany(`videos:${s.id}`, 30, 3600)) // recherche YouTube : 100 unités
+          return Response.json({ error: "Trop de recherches de vidéos pour cette soirée : réessayez dans une heure." }, { status: 429 });
         const { data: t, error } = await tracks().select("*")
           .eq("session_id", s.id).eq("id", String(body.id || "")).in("status", ["queued", "playing"]).maybeSingle();
         if (error) throw error;
@@ -262,6 +297,8 @@ export async function POST(req, { params }) {
       case "blindAccept":
       case "blindNewGame":
       case "blindReset": {
+        if (body.action === "blindAccept" && (!/^[a-z0-9-]{8,64}$/i.test(String(body.participantId || "")) || !["artist", "title"].includes(body.part)))
+          return Response.json({ error: "Requête invalide." }, { status: 400 });
         const blind = sessionBlind(s);
         if (!blind) return Response.json({ error: "Blind test non activé pour cette soirée." }, { status: 403 });
         if (body.action === "blindReset") {

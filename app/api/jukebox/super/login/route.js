@@ -1,5 +1,6 @@
 /* Super-admin Jukebox : mot de passe (celui de Clic-Clac) → jeton (3 jours). */
 import { checkSuperPassword, superToken } from "@/lib/jukeboxAdmin";
+import { tooMany, clientIp } from "@/lib/jukeboxRate";
 
 export const runtime = "nodejs";
 
@@ -7,6 +8,8 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
   try {
+    if (await tooMany(`super:${clientIp(req)}`, 10, 900))
+      return Response.json({ error: "Trop d'essais : réessayez dans un quart d'heure." }, { status: 429 });
     if (!(await checkSuperPassword(body?.password))) {
       await new Promise((r) => setTimeout(r, 600)); // ralentit les essais
       return Response.json({ error: "Mot de passe incorrect." }, { status: 401 });

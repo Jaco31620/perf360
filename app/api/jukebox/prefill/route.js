@@ -6,6 +6,7 @@
  * Deezer + MusicBrainz, sans quota YouTube ; lib/jukeboxEnrich.js).
  * Même protection que /api/keep-alive (CRON_SECRET si défini).
  */
+import { tooMany } from "@/lib/jukeboxRate";
 import { runPrefill } from "@/lib/jukeboxPrefill";
 import { enrichSongs } from "@/lib/jukeboxEnrich";
 
@@ -21,6 +22,8 @@ export async function GET(request) {
   const h = new Date().getUTCHours();
   if (!secret && (h < 5 || h > 6))
     return Response.json({ status: "error", reason: "outside window" }, { status: 403 });
+  if (!secret && await tooMany("prefill", 2, 7200)) // sans secret : pas d'appels répétés dans le créneau
+    return Response.json({ status: "error", reason: "too many" }, { status: 429 });
   try {
     const start = Date.now();
     const prefill = await runPrefill(150e3);

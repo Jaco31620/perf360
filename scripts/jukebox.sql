@@ -273,3 +273,31 @@ create index if not exists jukebox_video_changes_status_idx
   on public.jukebox_video_changes(status);
 alter table public.jukebox_video_changes enable row level security;
 grant all on public.jukebox_video_changes to service_role;
+
+-- v22 (01/11/2026) : audit. Compteur atomique pour limiter les abus
+-- (essais du code régie, ajouts / recherches qui consomment le quota
+-- YouTube, connexion super-admin) : jukebox_hit(clé, fenêtre en s) renvoie
+-- le nombre d'appels dans la fenêtre en cours. + index manquants.
+create table if not exists public.jukebox_rate (
+  k text primary key,
+  n int not null default 0,
+  until timestamptz not null
+);
+alter table public.jukebox_rate enable row level security;
+grant all on public.jukebox_rate to service_role;
+
+create or replace function public.jukebox_hit(p_key text, p_window_s int)
+returns int language sql security definer set search_path = public as $$
+  insert into public.jukebox_rate as r (k, n, until)
+  values (p_key, 1, now() + make_interval(secs => p_window_s))
+  on conflict (k) do update set
+    n = case when r.until < now() then 1 else r.n + 1 end,
+    until = case when r.until < now() then now() + make_interval(secs => p_window_s) else r.until end
+  returning n;
+$$;
+revoke all on function public.jukebox_hit(text, int) from public, anon, authenticated;
+grant execute on function public.jukebox_hit(text, int) to service_role;
+
+create index if not exists jukebox_songs_video_idx on public.jukebox_songs(video_id);
+create index if not exists jukebox_cache_created_idx on public.jukebox_cache(created_at);
+create index if not exists jukebox_answers_session_idx on public.jukebox_answers(session_id);
