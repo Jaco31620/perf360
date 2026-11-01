@@ -6,7 +6,7 @@
  * /api/jukebox/<code>/admin.
  */
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, SkipForward, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
+import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
 import { authHeaders, participantId } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration } from "@/lib/jukebox";
 
@@ -367,7 +367,7 @@ export function SkipButton({ onClick, disabled, size = "md" }) {
     <button onClick={onClick} disabled={disabled} aria-label="Titre suivant" title="Titre suivant"
       className={`inline-flex items-center justify-center rounded-full text-white bg-white/10 ring-1 ring-white/15 backdrop-blur
         transition hover:bg-white/20 hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 ${big ? "w-14 h-14" : "w-11 h-11"}`}>
-      <SkipForward size={big ? 24 : 19} fill="currentColor" strokeWidth={1.5} />
+      <ChevronsRight size={big ? 28 : 24} strokeWidth={2.5} />
     </button>
   );
 }
