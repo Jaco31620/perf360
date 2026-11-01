@@ -93,13 +93,15 @@ export default function TvPage() {
   const digits = code.padEnd(6, "·");
   return (
     <div className="min-h-screen bg-gradient-to-br from-fuchsia-700 via-purple-800 to-indigo-950 text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-4xl grid gap-10 md:grid-cols-2 items-center">
+      <div className="w-full max-w-6xl grid gap-10 md:grid-cols-2 items-center">
         <div className="text-center md:text-left space-y-5">
           <h1 className="text-5xl font-black">🎶 Jukebox sur la télé</h1>
           {pair && origin && (
-            <div className="flex items-center gap-5 justify-center md:justify-start">
-              <div className="bg-white p-3 rounded-2xl shrink-0"><QRCodeSVG value={`${origin}/tv/${pair}`} size={170} /></div>
-              <div className="text-left space-y-2">
+            <div className="flex flex-col items-center md:items-start gap-4">
+              <div className="bg-white p-4 rounded-3xl shrink-0">
+                <QRCodeSVG value={`${origin}/tv/${pair}`} size={512} style={{ width: "min(26vw, 42vh)", height: "min(26vw, 42vh)", minWidth: 220, minHeight: 220 }} />
+              </div>
+              <div className="text-center md:text-left space-y-2">
                 <p className="text-2xl text-white/90">Scannez avec la télécommande Jukebox du téléphone (📺 Connecter une télé), ou l'appareil photo.</p>
                 <p className="text-lg text-white/60">Code télé : <span className="font-mono font-bold text-white tracking-widest">{pair.toUpperCase().replace(/(.{4})(?=.)/g, "$1 ")}</span></p>
               </div>
