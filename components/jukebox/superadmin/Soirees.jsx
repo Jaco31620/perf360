@@ -24,7 +24,7 @@ const STATUSES = [
   { id: "ready", label: "🟡 Prêtes", hint: "Aucun titre joué pour l'instant." },
   { id: "past", label: "⚪ Passées", hint: "Des titres ont été joués, plus de lecteur actif." },
   { id: "stale", label: "💤 Inactives", hint: "Sans activité depuis le délai choisi dans les Réglages, ou terminées : à supprimer si elles ne servent plus." },
-  { id: "ended", label: "⛔ Terminées", hint: "Durée d'utilisation dépassée : plus accessible. Prolongez-la en changeant sa durée, ou supprimez-la." },
+  { id: "ended", label: "🔒 Fermées", hint: "Fermée automatiquement (délai après création dépassé) : plus accessible. Rouvrez-la en allongeant le délai, ou supprimez-la." },
 ];
 const DOT = { live: "bg-green-500 animate-pulse", ready: "bg-amber-400", past: "bg-gray-300", ended: "bg-red-400" };
 
@@ -94,11 +94,12 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${DOT[st]}`} title={STATUSES.find((x) => x.id === st)?.hint} />
                 <span className="min-w-0">
                   <span className="block font-bold text-gray-900 truncate">
+                    <span className={`inline-block align-middle mr-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${st === "ended" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{st === "ended" ? "🔒 Fermée" : "Ouverte"}</span>
                     {s.name} <span className="font-mono text-fuchsia-600 text-sm ml-1">{formatCode(s.code)}</span>
                   </span>
                   <span className="block text-xs text-gray-500 truncate">
                     {s.organizer ? `👤 ${s.organizer} · ` : ""}
-                    {st === "ended" ? "⛔ terminée · " : ""}{st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : (stale ? <span className="text-amber-700">💤 inactive depuis {idle} j</span> : `activité ${ago(s.lastActivity)}`)}
+                    {st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : (stale ? <span className="text-amber-700">💤 inactive depuis {idle} j</span> : `activité ${ago(s.lastActivity)}`)}
                     {" · "}{s.played} titre{s.played > 1 ? "s" : ""}
                     {" · "}{used ? <span className="text-green-700">lien ouvert</span> : <span className="text-amber-700">⚠️ lien jamais ouvert</span>}
                   </span>
@@ -120,7 +121,7 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <ValiditySelect value={s.validDays} className="text-xs"
                         onChange={(days) => action({ action: "validity", code: s.code, days })} />
-                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `⛔ terminée le ${fmtDay(s.endsAt)}` : `jusqu'au ${fmtDay(s.endsAt)}`}</span>}
+                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `🔒 fermée le ${fmtDay(s.endsAt)}` : `ouverte jusqu'au ${fmtDay(s.endsAt)}`}</span>}
                       {idle >= 1 && <span className={`text-xs ${stale ? "text-amber-700 font-semibold" : "text-gray-400"}`}>💤 inactive depuis {idle} jour{idle > 1 ? "s" : ""}</span>}
                     </div>
                   </div>

@@ -45,7 +45,8 @@ export async function GET(req, { params }) {
   const { code } = await params;
   try {
     const s = await loadSession(code);
-    if (!s) return Response.json({ session: null }, { status: 404 });
+    // closed : la soirée existe mais sa durée d'utilisation est passée (fermée)
+    if (!s) return Response.json({ session: null, closed: !!(await loadSession(code, { any: true })) }, { status: 404 });
     const url = new URL(req.url);
     const pid = url.searchParams.get("pid");
     const me = validPid(pid) ? pid : null;

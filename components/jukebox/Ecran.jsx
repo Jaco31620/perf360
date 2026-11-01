@@ -56,7 +56,7 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
     try {
       const t0 = Date.now();
       const res = await fetch(`/api/jukebox/${code}?view=ecran${sound ? "&engine=1" : ""}`, { cache: "no-store", headers: sound ? authHeaders(code) : {} });
-      if (res.status === 404) return setMissing(true);
+      if (res.status === 404) return setMissing((await res.json().catch(() => ({}))).closed ? "closed" : true);
       if (!res.ok) return;
       const d = await res.json();
       const t1 = Date.now();
@@ -211,7 +211,7 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
     else document.documentElement.requestFullscreen?.();
   };
 
-  if (missing) return <Center>La soirée {formatCode(code)} n'existe pas (ou plus).</Center>;
+  if (missing) return <Center>{missing === "closed" ? `🔒 La soirée ${formatCode(code)} est fermée. Merci et à bientôt !` : `La soirée ${formatCode(code)} n'existe pas (ou plus).`}</Center>;
   if (!data || sound === null) return <Center>Chargement…</Center>;
 
   const { session, now, queue, total, blind } = data;

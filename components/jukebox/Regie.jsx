@@ -54,7 +54,7 @@ export default function Regie({ code }) {
         cache: "no-store",
         headers: authHeaders(code),
       });
-      if (res.status === 404) return setMissing(true);
+      if (res.status === 404) return setMissing((await res.json().catch(() => ({}))).closed ? "closed" : true);
       if (res.ok) {
         const d = await res.json();
         if (!fresh(started)) return; // une action a eu lieu entre-temps : réponse périmée
@@ -104,7 +104,7 @@ export default function Regie({ code }) {
     return (
       <Center>
         <p className="text-4xl mb-3">🤔</p>
-        <p className="mb-6">La soirée {formatCode(code)} n'existe pas (ou plus).</p>
+        <p className="mb-6">{missing === "closed" ? `La soirée ${formatCode(code)} est fermée : sa durée d'utilisation est terminée. Contactez-nous pour la prolonger.` : `La soirée ${formatCode(code)} n'existe pas (ou plus).`}</p>
         <Link href="/jukebox" className="bg-fuchsia-600 text-white font-bold px-6 py-3 rounded-full">Retour</Link>
       </Center>
     );

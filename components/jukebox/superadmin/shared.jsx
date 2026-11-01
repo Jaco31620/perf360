@@ -13,14 +13,14 @@ export const MODE_TAG = {
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
-/* Durée d'utilisation d'une soirée depuis sa création ; value null = sans limite. */
+/* Fermeture automatique d'une soirée, N jours après sa création ; value null = jamais. */
 export function ValiditySelect({ value, onChange, className = "" }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-      title="Durée pendant laquelle la soirée est utilisable, à partir de sa création. Ensuite elle est terminée (plus accessible) ; vous pouvez la prolonger ou la supprimer."
+      title="La soirée se ferme automatiquement ce délai après sa création : plus accessible aux invités ni à l'organisateur. Vous pouvez la rouvrir en allongeant le délai, ou la supprimer."
       className={`border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold ${className}`}>
-      <option value="">Utilisable sans limite de durée</option>
-      {VALID_CHOICES.map((n) => <option key={n} value={n}>Utilisable {validLabel(n)}</option>)}
+      <option value="">Fermeture : jamais</option>
+      {VALID_CHOICES.map((n) => <option key={n} value={n}>Fermeture : {validLabel(n)} après création</option>)}
     </select>
   );
 }

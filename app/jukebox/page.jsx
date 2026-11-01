@@ -46,8 +46,9 @@ export default function JukeboxHome() {
     if (fromLink || saved) setCreationCode((fromLink || saved).toUpperCase());
     // soirées supprimées depuis (par le super-admin) : retirées de la liste
     for (const p of myParties()) {
-      fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then((r) => {
+      fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then(async (r) => {
         if (r.status !== 404) return;
+        if ((await r.json().catch(() => ({}))).closed) return; // fermée, pas supprimée : on la garde
         forgetParty(p.code);
         setMine(myParties());
       }).catch(() => {});

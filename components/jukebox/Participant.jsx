@@ -16,6 +16,7 @@ import { useWakeLock } from "./useWakeLock";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
+  const [closed, setClosed] = useState(false); // soirée fermée (durée d'utilisation passée)
   const [name, setNameState] = useState("");
   const [nameDraft, setNameDraft] = useState("");
   const [q, setQ] = useState("");
@@ -39,7 +40,7 @@ export default function Participant({ code }) {
     const started = Date.now();
     try {
       const res = await fetch(`/api/jukebox/${code}?pid=${pid.current}`, { cache: "no-store", headers: headers() });
-      if (res.status === 404) return setData(null);
+      if (res.status === 404) { setClosed(!!(await res.json().catch(() => ({}))).closed); return setData(null); }
       if (res.ok) {
         const d = await res.json();
         if (started > lastAct.current) setData(d);
@@ -150,8 +151,8 @@ export default function Participant({ code }) {
       <Shell>
         <div className="bg-white rounded-3xl p-8 text-center shadow-xl">
           <p className="text-4xl mb-3">🤔</p>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Soirée introuvable</h1>
-          <p className="text-gray-500 mb-6">Le code {formatCode(code)} ne correspond à aucune soirée.</p>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{closed ? "Soirée fermée" : "Soirée introuvable"}</h1>
+          <p className="text-gray-500 mb-6">{closed ? "Cette soirée est terminée : on ne peut plus proposer de titres. Merci d'avoir participé !" : `Le code ${formatCode(code)} ne correspond à aucune soirée.`}</p>
           <Link href="/jukebox" className="inline-block bg-[var(--jb-accent)] text-white font-bold px-6 py-3 rounded-full">Saisir un autre code</Link>
         </div>
       </Shell>
