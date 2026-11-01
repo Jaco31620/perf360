@@ -11,6 +11,9 @@
  * démarre au clic sur « Lancer la musique » (start()).
  * Rognage (start / end du titre, lib/jukeboxTrim.js) : la vidéo démarre à
  * `start` et le titre est considéré comme fini à `end` (habillage sauté).
+ * Pauses involontaires (autoResume, télé en mode son) : si la vidéo se met en
+ * pause sans qu'on l'ait demandé (télé, YouTube, économie d'énergie), elle est
+ * relancée ; un chargement bloqué plus de 12 s est relancé aussi.
  * `data` : état de la soirée vu par la régie (titre en cours et file complets) ;
  * `act` : actions régie (useAdminActions) ; `enabled` : conteneurs des
  * lecteurs (playerEls) affichés.
@@ -26,7 +29,7 @@ const loadArgs = (t, from) => {
   return { videoId: t.videoId, startSeconds: Math.max(start, from || 0), ...(trimmed && end ? { endSeconds: end } : {}) };
 };
 
-export function usePlayerEngine({ code, data, act, enabled }) {
+export function usePlayerEngine({ code, data, act, enabled, autoResume = false }) {
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -47,6 +50,11 @@ export function usePlayerEngine({ code, data, act, enabled }) {
   const loaded = useRef(null); // id du titre joué par le lecteur actif
   const loadedVideo = useRef(null); // sa vidéo (peut être corrigée en cours de soirée)
   const advancing = useRef(false);
+  // la lecture doit-elle tourner ? (faux après une pause demandée par la
+  // régie ou la télécommande) — sert à repérer les pauses involontaires
+  const wantPlay = useRef(false);
+  const resumes = useRef([]); // relances récentes (limitées : 3 par minute)
+  const stallSince = useRef(0); // chargement (état 3) en cours depuis…
   const dataRef = useRef(null);
   dataRef.current = data;
 
@@ -96,6 +104,7 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     switching.current = { from: loaded.current, to: pr.id, until: Date.now() + 15000 };
     loaded.current = pr.id;
     loadedVideo.current = pr.videoId;
+    wantPlay.current = true;
     setActive(pr.idx);
     newP.seekTo(pr.start || 0, true);
     newP.playVideo();
@@ -135,6 +144,19 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     state: (i, e) => {
       if (i === active.current) {
         setPlaying(e.data === 1);
+        stallSince.current = e.data === 3 ? Date.now() : 0;
+        if (e.data === 2 && autoResume && wantPlay.current && !fading.current) {
+          // pause que personne n'a demandée : relance après 1,5 s si rien n'a changé
+          const p = e.target;
+          setTimeout(() => {
+            const t = Date.now();
+            resumes.current = resumes.current.filter((x) => t - x < 60000);
+            if (p !== cur() || !wantPlay.current || p.getPlayerState?.() !== 2 || resumes.current.length >= 3) return;
+            resumes.current.push(t);
+            console.warn("jukebox: pause involontaire, relance");
+            p.playVideo();
+          }, 1500);
+        }
         if (e.data === 0 && !fading.current) ended(); // terminé
         if (e.data === 1 || e.data === 2) report(); // lecture / pause → écran
       } else if (primed.current?.idx === i && !primed.current.ready && e.data === 1) {
@@ -184,9 +206,11 @@ export function usePlayerEngine({ code, data, act, enabled }) {
       loaded.current = now.id;
       loadedVideo.current = now.videoId;
       cur().setVolume(master.current);
+      wantPlay.current = true;
       cur().loadVideoById(loadArgs(now));
     } else if (!now) {
       if (loaded.current) { cur().stopVideo(); loaded.current = null; }
+      wantPlay.current = false;
       dropPrimed();
       if (data.queue.length) advance(false);
     }
@@ -201,13 +225,20 @@ export function usePlayerEngine({ code, data, act, enabled }) {
       const now = d?.now;
       const next = d?.queue?.[0];
       const p = cur();
+      // chargement bloqué (Wi-Fi) : on relance à la même position
+      if (now && stallSince.current && Date.now() - stallSince.current > 12000 && wantPlay.current) {
+        stallSince.current = Date.now();
+        console.warn("jukebox: chargement bloqué, relance");
+        p.seekTo(p.getCurrentTime(), true);
+        p.playVideo();
+      }
       if (!now || fading.current || loaded.current !== now.id || p.getPlayerState() !== 1) return;
       const fadeSec = d.session.fade;
       const span = playSpan(now);
       const rem = (span.end || p.getDuration()) - p.getCurrentTime();
       // fin de la partie gardée (rognage) : on n'attend pas la fin de la vidéo
       if (span.trimmed && rem <= 0.3 && !(fadeSec > 0 && primed.current?.ready && next)) {
-        if (!next) p.pauseVideo(); // rien après : on s'arrête là
+        if (!next) { wantPlay.current = false; p.pauseVideo(); } // rien après : on s'arrête là
         ended();
         return;
       }
@@ -244,6 +275,7 @@ export function usePlayerEngine({ code, data, act, enabled }) {
 
   const start = () => {
     setStarted(true);
+    wantPlay.current = true;
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       loaded.current = data.now.id;
@@ -252,7 +284,10 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     }
   };
 
-  const togglePlay = () => (playing ? cur()?.pauseVideo() : cur()?.playVideo());
+  const togglePlay = () => {
+    wantPlay.current = !playing;
+    return playing ? cur()?.pauseVideo() : cur()?.playVideo();
+  };
   const volumeReport = useRef(null);
   const changeVolume = (v) => {
     setVolume(v);
@@ -271,8 +306,8 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     if (!c || c.id === lastCommand.current) return;
     lastCommand.current = c.id;
     if (!started || !ready) return;
-    if (c.type === "pause") cur().pauseVideo();
-    else if (c.type === "play") cur().playVideo();
+    if (c.type === "pause") { wantPlay.current = false; cur().pauseVideo(); }
+    else if (c.type === "play") { wantPlay.current = true; cur().playVideo(); }
     else if (c.type === "volume") changeVolume(c.value);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
