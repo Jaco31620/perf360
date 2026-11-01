@@ -3,8 +3,8 @@ import { activationText as buildActivationText } from "@/lib/jukeboxMessages";
 import DateInput from "@/components/DateInput";
 import { useState } from "react";
 import { formatCode } from "../storage";
-import { FEATURES } from "@/lib/jukebox";
-import { CREATION_MODES, fmtDate, SearchInput, RetentionSelect } from "./shared";
+import { FEATURES, validLabel } from "@/lib/jukebox";
+import { CREATION_MODES, fmtDate, SearchInput, ValiditySelect } from "./shared";
 import { ShareBox, FeatureToggles } from "./SoireeForms";
 
 /* ---------- Codes d'activation individuels ---------- */
@@ -25,9 +25,10 @@ const activationText = ({ origin, a }) => buildActivationText({
   origin, code: a.code, label: a.label,
   partiesText: a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties),
   expiresText: a.expiresAt ? fmtDay(a.expiresAt) : null,
+  validText: a.validDays ? validLabel(a.validDays) : null,
 });
 
-export function Activations({ list, globalRetention, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
+export function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
   const [shared, setShared] = useState(null); // code dont le message est affiché
   if (list == null) {
     return (
@@ -48,7 +49,7 @@ export function Activations({ list, globalRetention, sessions, defaults, origin,
           <button onClick={onUseCodes} className="font-bold bg-amber-600 text-white px-4 py-1.5 rounded-full">Passer en « Avec un code »</button>
         </div>
       )}
-      <ActivationForm defaults={defaults} globalRetention={globalRetention} onCreate={async (body) => {
+      <ActivationForm defaults={defaults} onCreate={async (body) => {
         const d = await action({ action: "actCreate", ...body });
         if (d?.activation) setShared(d.activation.id);
         return !!d;
@@ -101,8 +102,8 @@ export function Activations({ list, globalRetention, sessions, defaults, origin,
                   className="border-2 border-gray-200 rounded-xl px-2 py-0.5" />
                 {a.expiresAt && <button onClick={() => action({ action: "actUpdate", id: a.id, expiresAt: null })} className="text-xs text-gray-400 underline">jamais</button>}
               </label>
-              <RetentionSelect value={a.retentionDays} global={globalRetention} className="text-xs"
-                onChange={(days) => action({ action: "actUpdate", id: a.id, retentionDays: days })} />
+              <ValiditySelect value={a.validDays} className="text-xs"
+                onChange={(days) => action({ action: "actUpdate", id: a.id, validDays: days })} />
               {a.used > 0 && (
                 <button onClick={() => action({ action: "actUpdate", id: a.id, resetUsed: true }, `Remettre à zéro le compteur de ${a.label} ? Il pourra de nouveau créer ${actMaxLabel(a.maxParties)}.`)}
                   className="text-xs text-fuchsia-600 underline">remettre le compteur à zéro</button>
@@ -145,7 +146,7 @@ export function Activations({ list, globalRetention, sessions, defaults, origin,
   );
 }
 
-function ActivationForm({ defaults, onCreate, globalRetention }) {
+function ActivationForm({ defaults, onCreate }) {
   const [label, setLabel] = useState("");
   const [retention, setRetention] = useState(null);
   const [max, setMax] = useState(1);
@@ -160,7 +161,7 @@ function ActivationForm({ defaults, onCreate, globalRetention }) {
     const ok = await onCreate({
       label, maxParties: max,
       expiresAt: expiry ? new Date(Date.now() + Number(expiry) * 864e5).toISOString() : null,
-      features, retentionDays: retention,
+      features, validDays: retention,
     });
     setBusy(false);
     if (ok) { setLabel(""); setFeatures(null); setRetention(null); setOpen(false); }
@@ -178,7 +179,7 @@ function ActivationForm({ defaults, onCreate, globalRetention }) {
         <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="border-2 border-gray-200 rounded-xl px-3 py-2 font-semibold">
           {ACT_EXPIRY_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <RetentionSelect value={retention} onChange={setRetention} global={globalRetention} className="py-2" />
+        <ValiditySelect value={retention} onChange={setRetention} className="py-2" />
         <button disabled={busy || !label.trim()} className="bg-fuchsia-600 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-full">
           {busy ? "Création…" : "Créer le code"}
         </button>

@@ -6,7 +6,7 @@ import Link from "next/link";
 import ShareActions from "./ShareActions";
 import { guestText } from "@/lib/jukeboxMessages";
 
-export default function GuestShare({ code, name }) {
+export default function GuestShare({ code, name, endsAt }) {
   const [open, setOpen] = useState(false);
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
@@ -23,6 +23,7 @@ export default function GuestShare({ code, name }) {
           <ShareActions dark subject={`Jukebox « ${name} »`} message={guestText({ origin, code, name })} />
         </div>
       )}
+      {endsAt && <p className="text-center text-xs text-white/60">⏳ Soirée utilisable jusqu'au {new Date(endsAt).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</p>}
       <Link href="/jukebox/aide" target="_blank" className="block text-center text-xs text-white/50 hover:text-white underline">❓ Mode d'emploi</Link>
     </div>
   );

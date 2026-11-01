@@ -11,19 +11,21 @@ import { formatCode } from "../storage";
 import { fmtRegieCode } from "../Access";
 import { FEATURES } from "@/lib/jukebox";
 import { inviteText, guestText } from "@/lib/jukeboxMessages";
-import { fmtDate, SearchInput, RetentionSelect } from "./shared";
+import { fmtDate, SearchInput, ValiditySelect } from "./shared";
 import { ShareBox } from "./SoireeForms";
 
 const LIVE_MS = 3 * 60e3; // lecteur actif il y a moins de 3 min : soirée en cours
 
-export const soireeStatus = (s) => (s.player && Date.now() - s.player.at < LIVE_MS ? "live" : s.played === 0 ? "ready" : "past");
+export const soireeStatus = (s) => (s.endsAt && s.endsAt <= Date.now() ? "ended" : s.player && Date.now() - s.player.at < LIVE_MS ? "live" : s.played === 0 ? "ready" : "past");
+const fmtDay = (ms) => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const STATUSES = [
   { id: "all", label: "Toutes" },
   { id: "live", label: "🟢 En cours", hint: "La musique joue (lecteur actif il y a moins de 3 min)." },
   { id: "ready", label: "🟡 Prêtes", hint: "Aucun titre joué pour l'instant." },
   { id: "past", label: "⚪ Passées", hint: "Des titres ont été joués, plus de lecteur actif." },
+  { id: "ended", label: "⛔ Terminées", hint: "Durée d'utilisation dépassée : plus accessible, supprimée plus tard (prolongez-la en changeant sa durée)." },
 ];
-const DOT = { live: "bg-green-500 animate-pulse", ready: "bg-amber-400", past: "bg-gray-300" };
+const DOT = { live: "bg-green-500 animate-pulse", ready: "bg-amber-400", past: "bg-gray-300", ended: "bg-red-400" };
 
 function ago(ms) {
   const d = Date.now() - ms;
@@ -39,7 +41,7 @@ function fmtIn(ms) {
   return h < 48 ? `dans ${h} h` : `dans ${Math.round(h / 24)} j`;
 }
 
-export function Soirees({ sessions, globalRetention, origin, action, filter, setFilter, onShowCode }) {
+export function Soirees({ sessions, origin, action, filter, setFilter, onShowCode }) {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(null); // code de la soirée dépliée
   const [share, setShare] = useState(null); // { code, kind: "orga" | "guests", regieCode? }
@@ -94,7 +96,7 @@ export function Soirees({ sessions, globalRetention, origin, action, filter, set
                   </span>
                   <span className="block text-xs text-gray-500 truncate">
                     {s.organizer ? `👤 ${s.organizer} · ` : ""}
-                    {st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : `activité ${ago(s.lastActivity)}`}
+                    {st === "ended" ? "⛔ terminée · " : ""}{st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : `activité ${ago(s.lastActivity)}`}
                     {" · "}{s.played} titre{s.played > 1 ? "s" : ""}
                     {" · "}{used ? <span className="text-green-700">lien ouvert</span> : <span className="text-amber-700">⚠️ lien jamais ouvert</span>}
                   </span>
@@ -113,8 +115,9 @@ export function Soirees({ sessions, globalRetention, origin, action, filter, set
                     <p className="text-gray-600">{s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente · dernière activité {ago(s.lastActivity)}</p>
                     {s.player && <p className="text-gray-600">🔊 Son {st === "live" ? "en ce moment" : `joué pour la dernière fois ${ago(s.player.at)}`} sur {s.player.kind === "tv" ? "la télé" : "l'ordinateur"}</p>}
                     <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <RetentionSelect value={s.retentionDays} global={globalRetention} className="text-xs"
-                        onChange={(days) => action({ action: "retention", code: s.code, days })} />
+                      <ValiditySelect value={s.validDays} className="text-xs"
+                        onChange={(days) => action({ action: "validity", code: s.code, days })} />
+                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `⛔ terminée le ${fmtDay(s.endsAt)}` : `jusqu'au ${fmtDay(s.endsAt)}`}</span>}
                       <span className="text-xs text-gray-400">suppression {fmtIn(s.expiresAt)}</span>
                     </div>
                   </div>

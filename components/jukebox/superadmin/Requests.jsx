@@ -8,12 +8,13 @@ import { useEffect, useRef, useState } from "react";
 import { activationText } from "@/lib/jukeboxMessages";
 import { ACT_MAX_CHOICES, ACT_EXPIRY_CHOICES, actMaxLabel, fmtDay } from "./Activations";
 import { FeatureToggles, ShareBox } from "./SoireeForms";
-import { fmtDate, RetentionSelect } from "./shared";
+import { fmtDate, ValiditySelect } from "./shared";
 import { fmtDateFr } from "@/lib/dates";
+import { validLabel } from "@/lib/jukebox";
 
 const STATUS = { approved: ["✓ Validée", "bg-green-100 text-green-700"], rejected: ["Refusée", "bg-gray-100 text-gray-500"] };
 
-export function Requests({ list, globalRetention, activations, defaults, origin, action, highlight, onShowCode }) {
+export function Requests({ list, activations, defaults, origin, action, highlight, onShowCode }) {
   const [history, setHistory] = useState(false);
   const [failed, setFailed] = useState(null); // { activation, mailError } : code créé, e-mail non parti
   if (list == null) {
@@ -35,7 +36,7 @@ export function Requests({ list, globalRetention, activations, defaults, origin,
       {failed && <MailFailed result={failed} origin={origin} onClose={() => setFailed(null)} />}
       {pending.length === 0 && <p className="text-gray-400 text-center py-8">Aucune demande en attente.</p>}
       {pending.map((r) => (
-        <Pending key={r.id} r={r} globalRetention={globalRetention} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
+        <Pending key={r.id} r={r} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
       ))}
       {done.length > 0 && (
         <div>
@@ -69,6 +70,7 @@ export function Requests({ list, globalRetention, activations, defaults, origin,
 const texts = (a) => ({
   partiesText: a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties),
   expiresText: a.expiresAt ? fmtDay(a.expiresAt) : null,
+  validText: a.validDays ? validLabel(a.validDays) : null,
 });
 
 function MailFailed({ result, origin, onClose }) {
@@ -81,7 +83,7 @@ function MailFailed({ result, origin, onClose }) {
   );
 }
 
-function Pending({ r, globalRetention, defaults, origin, action, highlight, onFailed }) {
+function Pending({ r, defaults, origin, action, highlight, onFailed }) {
   const [retention, setRetention] = useState(null);
   const [label, setLabel] = useState(r.name);
   const [max, setMax] = useState(1);
@@ -98,8 +100,8 @@ function Pending({ r, globalRetention, defaults, origin, action, highlight, onFa
     if (!label.trim()) return;
     setBusy(true);
     const d = await action({
-      action: "reqApprove", id: r.id, label: label.trim(), maxParties: max, expiresAt, features, retentionDays: retention, origin,
-      ...texts({ maxParties: max, expiresAt }),
+      action: "reqApprove", id: r.id, label: label.trim(), maxParties: max, expiresAt, features, validDays: retention, origin,
+      ...texts({ maxParties: max, expiresAt, validDays: retention }),
     }, `Valider la demande de ${r.name} ?\n\nUn code d'activation (${actMaxLabel(max)}) sera créé et envoyé à ${r.email}.`);
     setBusy(false);
     if (d?.mailError) onFailed(d); // e-mail non parti : message à envoyer à la main
@@ -122,7 +124,7 @@ function Pending({ r, globalRetention, defaults, origin, action, highlight, onFa
         <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold">
           {ACT_EXPIRY_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <RetentionSelect value={retention} onChange={setRetention} global={globalRetention} />
+        <ValiditySelect value={retention} onChange={setRetention} />
       </div>
       <button type="button" onClick={() => setShowFeat((v) => !v)} className="text-xs text-fuchsia-600 underline">
         {showFeat ? "Masquer les fonctions" : `Fonctions des soirées : ${features ? "personnalisées" : "par défaut"}`}

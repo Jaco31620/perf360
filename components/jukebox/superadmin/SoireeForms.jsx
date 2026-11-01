@@ -1,5 +1,5 @@
 "use client";
-import { RetentionSelect } from "./shared";
+import { ValiditySelect } from "./shared";
 import { useState } from "react";
 import { inviteText } from "@/lib/jukeboxMessages";
 import ShareActions from "../ShareActions";
@@ -8,9 +8,9 @@ import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS } f
 
 /* Création d'une soirée déjà configurée : fonctions activées et réglages de
  * la régie (modifiables ensuite par la régie, sauf les fonctions). */
-export function CreateForm({ token, defaults, defaultOptions, onCreated, globalRetention }) {
+export function CreateForm({ token, defaults, defaultOptions, onCreated }) {
   const [name, setName] = useState("");
-  const [retention, setRetention] = useState(null); // null : réglage global
+  const [retention, setRetention] = useState(null); // durée d'utilisation, null : sans limite
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const [features, setFeatures] = useState(null);
@@ -28,7 +28,7 @@ export function CreateForm({ token, defaults, defaultOptions, onCreated, globalR
       const res = await fetch("/api/jukebox", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-jukebox-super": token },
-        body: JSON.stringify({ name, maxPerParticipant: opts.maxPerParticipant, features: feats, options: opts, retentionDays: retention }),
+        body: JSON.stringify({ name, maxPerParticipant: opts.maxPerParticipant, features: feats, options: opts, validDays: retention }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Création impossible.");
@@ -48,7 +48,7 @@ export function CreateForm({ token, defaults, defaultOptions, onCreated, globalR
       <div className="flex flex-wrap items-center gap-3">
         <input maxLength={MAX_NAME_LEN} placeholder="Nom d'une nouvelle soirée" value={name} onChange={(e) => setName(e.target.value)}
           className="flex-1 min-w-[200px] border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-fuchsia-500 outline-none" />
-        <RetentionSelect value={retention} onChange={setRetention} global={globalRetention} className="text-sm" />
+        <ValiditySelect value={retention} onChange={setRetention} className="text-sm" />
         <button type="button" onClick={() => setMore((v) => !v)} className="text-sm font-bold text-fuchsia-600">
           ⚙️ Configuration {more ? "▲" : "▼"}
         </button>

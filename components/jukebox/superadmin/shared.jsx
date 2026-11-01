@@ -1,5 +1,5 @@
 "use client";
-import { SEARCH_MODES, RETENTION_CHOICES, retentionLabel } from "@/lib/jukebox";
+import { SEARCH_MODES, VALID_CHOICES, validLabel } from "@/lib/jukebox";
 
 export const CREATION_MODES = [
   { id: "open", label: "Tout le monde", hint: "Toute personne qui connaît l'adresse /jukebox peut créer une soirée." },
@@ -13,14 +13,14 @@ export const MODE_TAG = {
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
-/* Conservation (jours après la dernière activité) ; value null = réglage global. */
-export function RetentionSelect({ value, onChange, global, className = "" }) {
+/* Durée d'utilisation d'une soirée depuis sa création ; value null = sans limite. */
+export function ValiditySelect({ value, onChange, className = "" }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-      title="Suppression automatique après ce délai sans activité"
+      title="Durée pendant laquelle la soirée est utilisable, à partir de sa création. Ensuite elle est terminée, puis supprimée."
       className={`border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold ${className}`}>
-      <option value="">Conservation par défaut{global ? ` (${retentionLabel(global)})` : ""}</option>
-      {RETENTION_CHOICES.map((n) => <option key={n} value={n}>Conservée {retentionLabel(n)}</option>)}
+      <option value="">Utilisable sans limite de durée</option>
+      {VALID_CHOICES.map((n) => <option key={n} value={n}>Utilisable {validLabel(n)}</option>)}
     </select>
   );
 }
