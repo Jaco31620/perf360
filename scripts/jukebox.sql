@@ -301,3 +301,22 @@ grant execute on function public.jukebox_hit(text, int) to service_role;
 create index if not exists jukebox_songs_video_idx on public.jukebox_songs(video_id);
 create index if not exists jukebox_cache_created_idx on public.jukebox_cache(created_at);
 create index if not exists jukebox_answers_session_idx on public.jukebox_answers(session_id);
+
+-- v23 (01/11/2026) : demandes d'accès (formulaire de /jukebox). Chaque
+-- demande attend la validation du super-admin (onglet Demandes) ; validée,
+-- elle crée un code d'activation envoyé par e-mail au demandeur.
+-- status : pending | approved | rejected.
+create table if not exists public.jukebox_requests (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text not null,
+  event_date text,
+  guests text,
+  message text,
+  status text not null default 'pending',
+  activation_id uuid,
+  created_at timestamptz not null default now(),
+  handled_at timestamptz
+);
+alter table public.jukebox_requests enable row level security;
+grant all on public.jukebox_requests to service_role;

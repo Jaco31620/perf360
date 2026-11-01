@@ -16,6 +16,7 @@ import { CREATION_MODES } from "./shared";
 import { CreateForm, SoireeFields, FeatureToggles, InviteBox } from "./SoireeForms";
 import { Activations } from "./Activations";
 import { Soirees } from "./Soirees";
+import { Requests } from "./Requests";
 import { Prefill } from "./Prefill";
 import { SongMemory } from "./SongMemory";
 
@@ -35,7 +36,12 @@ export default function SuperAdmin() {
   const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
   const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
-  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  const [demande, setDemande] = useState(null); // demande ouverte depuis l'e-mail
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "demandes", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ }
+    // lien de l'e-mail de demande : /jukebox/admin?demande=<id>
+    const d = new URLSearchParams(window.location.search).get("demande");
+    if (d) { setTab("demandes"); setDemande(d); }
+  }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
 
 
@@ -100,8 +106,10 @@ export default function SuperAdmin() {
 
   const cfg = data?.config;
   const nSessions = data?.sessions.length ?? 0;
+  const nPending = data?.requests?.filter((r) => r.status === "pending").length ?? 0;
   const tabs = [
     { id: "soirees", label: `🎉 Soirées${nSessions ? ` (${nSessions})` : ""}` },
+    { id: "demandes", label: `📥 Demandes${nPending ? ` (${nPending})` : ""}`, alert: nPending > 0 },
     { id: "codes", label: `🎟️ Codes${data?.activations?.length ? ` (${data.activations.length})` : ""}` },
     { id: "reglages", label: "⚙️ Réglages" },
   ];
@@ -132,7 +140,7 @@ export default function SuperAdmin() {
       <div className="flex overflow-x-auto bg-white border border-purple-100 rounded-full p-1 mb-4 w-full sm:w-fit">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => chooseTab(t.id)}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab === t.id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab === t.id ? "bg-fuchsia-600 text-white" : t.alert ? "text-fuchsia-700 bg-fuchsia-50" : "text-gray-500 hover:text-gray-900"}`}>
             {t.label}
           </button>
         ))}
@@ -150,6 +158,11 @@ export default function SuperAdmin() {
           {data && <Soirees sessions={data.sessions} origin={origin} action={action} filter={filter} setFilter={setFilter}
             onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
+      )}
+
+      {tab === "demandes" && data && (
+        <Requests list={data.requests} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
+          onShowCode={(c) => { setActFilter(c); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />
       )}
 
       {tab === "codes" && data && (

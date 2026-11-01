@@ -14,6 +14,8 @@
  *     actCreate { label, maxParties?, expiresAt?, features? } → nouveau code d'activation
  *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
  *     actDelete { id } → supprimer un code (les soirées créées restent)
+ *     reqApprove { id, label?, maxParties?, expiresAt?, features?, partiesText, expiresText?, origin } → demande d'accès validée : code créé + e-mail
+ *     reqReject { id, notify? } / reqDelete { id } → demande refusée (e-mail si notify) / supprimée
  *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
@@ -35,6 +37,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
 import { withChanges, proposedKeys, acceptChange, rejectChange, revertChange, logChange } from "@/lib/jukeboxChanges";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
+import { listRequests, approveRequest, rejectRequest, deleteRequest, RequestError } from "@/lib/jukeboxRequests";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
@@ -70,6 +73,7 @@ export async function GET(req) {
     const [config, sessions, searches, songs, prefill, enrich] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null)]);
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
+    const requests = await listRequests().catch(() => null); // null : SQL v23 à appliquer
     const proposals = (await proposedKeys()).length; // titres avec un changement de vidéo proposé
     return Response.json({
       config,
@@ -78,6 +82,7 @@ export async function GET(req) {
       prefill,
       enrich, // titres pas encore enrichis (année, langue)
       activations,
+      requests,
       proposals,
       sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
     }, { headers: { "cache-control": "no-store" } });
@@ -180,6 +185,14 @@ export async function POST(req) {
       case "actUpdate":
         await updateActivation(body.id, body);
         return Response.json({ ok: true });
+      case "reqApprove":
+        return Response.json({ ok: true, ...(await approveRequest(body)) });
+      case "reqReject":
+        await rejectRequest(body);
+        return Response.json({ ok: true });
+      case "reqDelete":
+        await deleteRequest(body.id);
+        return Response.json({ ok: true });
       case "actDelete":
         await deleteActivation(body.id);
         return Response.json({ ok: true });
@@ -224,6 +237,7 @@ export async function POST(req) {
         return Response.json({ error: "Action inconnue." }, { status: 400 });
     }
   } catch (e) {
+    if (e instanceof RequestError) return Response.json({ error: e.message }, { status: 409 });
     if (e instanceof ActivationError) return Response.json({ error: e.message }, { status: 400 });
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox super POST:", e);

@@ -8,16 +8,16 @@ import { ShareBox, FeatureToggles } from "./SoireeForms";
 
 /* ---------- Codes d'activation individuels ---------- */
 
-const ACT_MAX_CHOICES = [1, 2, 3, 5, 10, 20, null]; // null : illimité
-const ACT_EXPIRY_CHOICES = [["", "Sans expiration"], ["7", "7 jours"], ["30", "1 mois"], ["90", "3 mois"], ["365", "1 an"]];
+export const ACT_MAX_CHOICES = [1, 2, 3, 5, 10, 20, null]; // null : illimité
+export const ACT_EXPIRY_CHOICES = [["", "Sans expiration"], ["7", "7 jours"], ["30", "1 mois"], ["90", "3 mois"], ["365", "1 an"]];
 const ACT_STATUS = {
   active: ["Actif", "bg-green-100 text-green-700"],
   spent: ["Épuisé", "bg-amber-100 text-amber-700"],
   expired: ["Expiré", "bg-gray-100 text-gray-500"],
   revoked: ["Désactivé", "bg-red-100 text-red-600"],
 };
-const actMaxLabel = (n) => (n == null ? "Illimité" : `${n} soirée${n > 1 ? "s" : ""}`);
-const fmtDay = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+export const actMaxLabel = (n) => (n == null ? "Illimité" : `${n} soirée${n > 1 ? "s" : ""}`);
+export const fmtDay = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const dayInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
 
 const activationText = ({ origin, a }) => buildActivationText({
