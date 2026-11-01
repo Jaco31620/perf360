@@ -851,7 +851,17 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           )}
           {(() => {
             const todo = (songs || []).filter((s) => !s.validated && !s.missing);
-            return todo.length > 0 && (
+            const shown = (songs || []).filter((s) => !s.missing);
+            if (!todo.length) return shown.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
+                <button onClick={() => { setPreview(null); setReview({ keys: shown.map((s) => s.key), i: 0 }); }}
+                  className="text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 px-4 py-1.5 rounded-full">
+                  ▶ Revue de la liste affichée ({shown.length})
+                </button>
+                <span className="text-xs text-gray-500">Rien à vérifier ici : la revue repasse les titres affichés (validés compris), pour rogner une vidéo par exemple.</span>
+              </div>
+            );
+            return (
               <div className="flex flex-wrap items-center gap-3 bg-fuchsia-50 rounded-xl px-3 py-2">
                 <button onClick={() => { setPreview(null); setReview({ keys: todo.map((s) => s.key), i: 0 }); }}
                   className="text-sm font-bold text-white bg-fuchsia-600 hover:bg-fuchsia-700 px-4 py-1.5 rounded-full">
@@ -954,6 +964,11 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                         📝 Paroles{s.lyrics ? "" : " ?"}
                       </button>
+                      {(s.start > 0 || s.end != null) && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-700" title="Vidéo rognée : partie jouée en soirée">
+                          ✂️ {formatDuration(Math.floor(s.start || 0))} → {s.end != null ? formatDuration(Math.round(s.end)) : "fin"}
+                        </span>
+                      )}
                       {s.suspect?.length > 0 && (
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700" title="Vidéo à vérifier en priorité">🧐 {s.suspect.join(" · ")}</span>
                       )}
@@ -967,6 +982,14 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         run({ action: "mergeSongs", keep: s.key, keys: others.map((x) => x.key) },
                           `Garder « ${s.artist} – ${s.title} » et y fusionner :\n${others.map((x) => `• ${x.artist} – ${x.title}`).join("\n")}\n\nLes autres titres joueront cette vidéo.`);
                       }} className="text-xs font-bold text-white bg-fuchsia-600 px-3 py-1.5 rounded-full">⭐ Garder celui-ci</button>
+                    )}
+                    {!s.missing && (
+                      <button onClick={() => {
+                        const keys = songs.filter((x) => !x.missing).map((x) => x.key);
+                        setPreview(null);
+                        setReview({ keys, i: Math.max(0, keys.indexOf(s.key)) });
+                      }} title="Ouvrir ce titre dans la revue (vérifier, rogner la vidéo…), puis continuer avec les suivants de la liste"
+                        className="text-xs font-bold bg-fuchsia-50 text-fuchsia-700 px-3 py-1.5 rounded-full">🔎 Revue</button>
                     )}
                     {s.missing ? null : s.validated ? (
                       <button onClick={() => run({ action: "validateSong", key: s.key, validated: false })}
