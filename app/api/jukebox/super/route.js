@@ -2,7 +2,7 @@
  * Route SUPER-ADMIN du jukebox (en-tête x-jukebox-super requis).
  * - GET  : toutes les soirées (activité, compteurs, date de suppression),
  *          réglages, recherches YouTube du jour.
- *          ?songs=1&q=…&status=all|todo|ok|missing|blind|lyrics&mode=…&lang=fr|intl|unknown&decade=1980 : mémoire des titres.
+ *          ?songs=1&q=…&status=all|todo|ok|missing|blind|lyrics|suspect|dups&mode=…&lang=fr|intl|unknown&decade=1980&sort=added|plays|rank|year|alpha : mémoire des titres.
  *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, creationCode?, defaultFeatures?, defaultOptions? }
@@ -26,6 +26,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
+import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
@@ -119,6 +120,21 @@ export async function POST(req) {
       case "clearPrefill":
         await clearPrefill();
         return Response.json({ ok: true });
+      case "songText":
+        await setSongText(body.key, body.artist, body.title);
+        return Response.json({ ok: true });
+      case "mergeSongs": {
+        const err = await mergeSongs(String(body.keep || ""), body.keys);
+        if (err) return Response.json({ error: err }, { status: 422 });
+        return Response.json({ ok: true });
+      }
+      case "ignoreDup":
+        await ignoreDuplicates(body.keys);
+        return Response.json({ ok: true });
+      case "exportSongs":
+        return Response.json({ ok: true, rows: await exportSongs() });
+      case "importSongs":
+        return Response.json({ ok: true, ...(await importSongs(body.rows)) });
       case "forgetSong":
         await forgetSong(body.key);
         return Response.json({ ok: true });

@@ -6,7 +6,7 @@
  * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
  * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
@@ -279,6 +279,11 @@ function applySong(list, body) {
   const id = String(body.key || "").split(":")[1];
   switch (body.action) {
     case "forgetSong": return list.filter((s) => s.key !== body.key);
+    case "mergeSongs": return list.filter((s) => !body.keys.includes(s.key)).map((s) => (s.key === body.keep ? { ...s, group: undefined } : s));
+    case "ignoreDup": return list.filter((s) => s.group !== body.group);
+    case "songText": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
+      ...s, fixed: true, ...(body.artist.trim() ? { artist: body.artist.trim() } : {}), ...(body.title.trim() ? { title: body.title.trim() } : {}),
+    }));
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key === body.key ? { ...s, blind: !!body.blind } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
@@ -518,7 +523,8 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["todo", "À vérifier"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"], ["all", "Tous"]];
+const STATUS_FILTERS = [["all", "Tous"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
+const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 const MODE_TAG = {
@@ -529,7 +535,9 @@ const MODE_TAG = {
 function SongMemory({ call, total, focus, enrich, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("todo");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("added");
+  const [editing, setEditing] = useState(null); // clé du titre dont on corrige le texte
   // tuile « Titres en mémoire » : liste complète, sans filtre
   useEffect(() => {
     if (!focus) return;
@@ -555,7 +563,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
   const load = useCallback(async () => {
     const started = Date.now();
     try {
-      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade });
+      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
@@ -567,7 +575,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, mode, lang, decade]);
+  }, [q, status, mode, lang, decade, sort]);
 
   useEffect(() => {
     if (!open) return;
@@ -644,7 +652,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                   ▶ Revue des titres à vérifier ({todo.length})
                 </button>
                 <span className="text-xs text-fuchsia-900/70">
-                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. {status === "todo" ? "Les plus joués en soirée d'abord, puis les plus connus." : "Titres non validés de la liste affichée."}
+                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. Titres non validés de la liste affichée, dans son ordre (tri « Plus joués » : les plus utiles d'abord).
                 </span>
               </div>
             );
@@ -670,8 +678,15 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
               <option value="unknown">❓ Année inconnue</option>
             </select>
+            {status !== "dups" && (
+              <select value={sort} onChange={(e) => setSort(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+                {SORTS.map(([id, label]) => <option key={id} value={id}>↕ {label}</option>)}
+              </select>
+            )}
             <SearchInput value={q} onChange={setQ} placeholder="Rechercher un artiste, un titre…" className="flex-1 min-w-[180px]" />
           </div>
+          {status === "suspect" && <p className="text-xs text-gray-500">Titres non validés dont la vidéo semble ne pas correspondre : durée très différente du titre, titre absent de la vidéo, version live, reprise… Vérifiez-les puis validez ou changez la vidéo.</p>}
+          {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
             <SongReview review={review} setReview={setReview} songs={songs} run={run} editYear={editYear}
@@ -689,14 +704,23 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
             <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {songs.map((s) => (
-                <li key={s.key} className="flex flex-wrap items-center gap-3 py-2.5">
+              {songs.map((s, i) => (<Fragment key={s.key}>
+                {s.group != null && s.group !== songs[i - 1]?.group && (
+                  <li className="flex flex-wrap items-center justify-between gap-2 pt-4 pb-1">
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">👯 Doublons possibles · {s.dupWhy}</span>
+                    <button onClick={() => run({ action: "ignoreDup", group: s.group, keys: songs.filter((x) => x.group === s.group).map((x) => x.key) })}
+                      className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Ce ne sont pas des doublons</button>
+                  </li>
+                )}
+                <li className="flex flex-wrap items-center gap-3 py-2.5">
                   <PreviewThumb videoId={s.videoId} active={preview === s.key} onClick={() => setPreview(preview === s.key ? null : s.key)} />
                   <div className="flex-1 min-w-[160px]">
-                    <button onClick={() => setRetitling(s)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
-                      className="block max-w-full text-left text-sm font-semibold text-gray-900 truncate hover:text-fuchsia-700">
-                      {s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}
-                    </button>
+                    {editing === s.key ? (
+                      <SongTextForm song={s} onCancel={() => setEditing(null)}
+                        onSave={(artist, title) => { setEditing(null); run({ action: "songText", key: s.key, artist, title }); }} />
+                    ) : (
+                      <SongName song={s} onArtist={(a) => { setQ(a); setStatus("all"); }} onTitle={() => setRetitling(s)} onEdit={() => setEditing(s.key)} />
+                    )}
                     <VideoTitle song={s} className="truncate" />
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
@@ -724,10 +748,20 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                         className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${s.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                         📝 Paroles{s.lyrics ? "" : " ?"}
                       </button>
+                      {s.suspect?.length > 0 && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700" title="Vidéo à vérifier en priorité">🧐 {s.suspect.join(" · ")}</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{s.plays > 0 && <span className="font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {s.plays}× · </span>}{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
+                    {s.group != null && (
+                      <button onClick={() => {
+                        const others = songs.filter((x) => x.group === s.group && x.key !== s.key);
+                        run({ action: "mergeSongs", keep: s.key, keys: others.map((x) => x.key) },
+                          `Garder « ${s.artist} – ${s.title} » et y fusionner :\n${others.map((x) => `• ${x.artist} – ${x.title}`).join("\n")}\n\nLes autres titres joueront cette vidéo.`);
+                      }} className="text-xs font-bold text-white bg-fuchsia-600 px-3 py-1.5 rounded-full">⭐ Garder celui-ci</button>
+                    )}
                     {s.missing ? null : s.validated ? (
                       <button onClick={() => run({ action: "validateSong", key: s.key, validated: false })}
                         className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Retirer la validation</button>
@@ -745,9 +779,11 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                     <div className="w-full max-w-xl"><VideoPreview videoId={s.videoId} onClose={() => setPreview(null)} /></div>
                   )}
                 </li>
-              ))}
+              </Fragment>))}
             </ul>
           )}
+          {songs?.length === 200 && <p className="text-xs text-gray-400 text-center">200 premiers titres affichés : affinez avec les filtres ou la recherche.</p>}
+          <Backup call={call} onImported={() => { load(); onChanged?.(); }} />
         </div>
       )}
     </div>
@@ -1075,7 +1111,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
           <>
             <div>
               <button onClick={() => onRetitle(song)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
-                className="text-left text-lg font-bold text-gray-900 hover:text-fuchsia-700 leading-snug">{song.label || song.key}</button>
+                className="text-left text-lg font-bold text-gray-900 hover:text-fuchsia-700 leading-snug">{song.artist} – {song.title}</button>
               <VideoTitle song={song} />
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(song.mode)}</span>
@@ -1224,5 +1260,110 @@ function VideoTitle({ song, className = "" }) {
     <p className={`text-[11px] text-gray-400 ${className}`} title={`Vidéo YouTube : ${song.videoTitle}${song.videoChannel ? ` · ${song.videoChannel}` : ""}`}>
       ▶ {song.videoTitle}{song.videoChannel && <span className="text-gray-300"> · {song.videoChannel}</span>}
     </p>
+  );
+}
+
+/* Interprète (clic : tous ses titres) – titre (clic : rattacher à un autre
+ * titre Deezer) ; ✏️ corrige le texte affiché sans changer de titre. */
+function SongName({ song, onArtist, onTitle, onEdit }) {
+  if (!song.label) return <span className="text-gray-400 font-mono text-xs">{song.key}</span>;
+  return (
+    <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold text-gray-900" title={song.fixed || song.label !== `${song.artist} – ${song.title}` ? `Libellé Deezer : ${song.label}` : undefined}>
+      <span className="truncate">
+        {song.artist && <><button onClick={() => onArtist(song.artist)} title="Voir tous les titres de cet interprète" className="hover:text-fuchsia-700 hover:underline">{song.artist}</button>{" – "}</>}
+        <button onClick={onTitle} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour rattacher au bon titre Deezer" className="hover:text-fuchsia-700 text-left">{song.title}</button>
+      </span>
+      {song.fixed && <span className="shrink-0 text-[10px] font-bold text-fuchsia-600" title={`Corrigé à la main · libellé Deezer : ${song.label}`}>✏️</span>}
+      <button onClick={onEdit} title="Corriger le texte (interprète, titre) sans changer de titre ni de vidéo"
+        className="shrink-0 text-xs text-gray-400 hover:text-fuchsia-700 px-1">✎</button>
+    </div>
+  );
+}
+
+function SongTextForm({ song, onSave, onCancel }) {
+  const [artist, setArtist] = useState(song.artist || "");
+  const [title, setTitle] = useState(song.title || "");
+  const submit = (e) => { e.preventDefault(); onSave(artist, title); };
+  return (
+    <form onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && onCancel()} className="space-y-1.5">
+      <div className="flex flex-wrap gap-1.5">
+        <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Interprète" autoFocus
+          className="flex-1 min-w-[120px] border-2 border-gray-200 rounded-lg px-2 py-1 text-sm focus:border-fuchsia-500 outline-none" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titre"
+          className="flex-[2] min-w-[160px] border-2 border-gray-200 rounded-lg px-2 py-1 text-sm focus:border-fuchsia-500 outline-none" />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <button className="font-bold text-white bg-fuchsia-600 px-3 py-1 rounded-full">Enregistrer</button>
+        <button type="button" onClick={onCancel} className="font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Annuler</button>
+        {song.fixed && <button type="button" onClick={() => onSave("", "")} className="text-gray-500 underline">Revenir au texte automatique</button>}
+        <span className="text-gray-400">Libellé Deezer : {song.label}</span>
+      </div>
+    </form>
+  );
+}
+
+/* Sauvegarde de la mémoire : export CSV (toutes les colonnes), import pour
+ * restaurer (titres ajoutés ou mis à jour, jamais supprimés). */
+const CSV_COLS = ["key", "label", "artist_fix", "title_fix", "video_id", "video_title", "video_channel", "duration", "song_duration",
+  "validated", "blind", "lyrics", "missing", "plays", "rank", "year", "fr", "merged_into", "checked_at", "enriched_at", "created_at"];
+const csvCell = (v) => (v == null ? "" : /[",\n;]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') quoted = false; else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { row.push(cell); cell = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell); cell = "";
+      if (row.some((x) => x !== "")) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  row.push(cell);
+  if (row.some((x) => x !== "")) rows.push(row);
+  const [head, ...body] = rows;
+  return (body || []).map((r) => Object.fromEntries((head || []).map((h, i) => [h.replace(/^\uFEFF/, "").trim(), r[i] ?? ""])));
+}
+function Backup({ call, onImported }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const file = useRef(null);
+  const exportCsv = async () => {
+    setBusy(true);
+    try {
+      const { rows } = await call("POST", { action: "exportSongs" });
+      const csv = "\uFEFF" + [CSV_COLS.join(","), ...rows.map((r) => CSV_COLS.map((c) => csvCell(r[c])).join(","))].join("\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      a.download = `jukebox-memoire-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setMsg(`${rows.length} lignes exportées.`);
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  };
+  const importCsv = async (f) => {
+    if (!f) return;
+    const rows = parseCsv(await f.text());
+    if (!rows.length || !("key" in rows[0]) || !("video_id" in rows[0])) { setMsg("Fichier non reconnu (export de la mémoire attendu)."); return; }
+    if (!confirm(`Importer ${rows.length} lignes ?\nLes titres absents sont ajoutés, ceux déjà en mémoire sont remplacés par la version du fichier. Rien n'est supprimé.`)) return;
+    setBusy(true);
+    try {
+      const d = await call("POST", { action: "importSongs", rows });
+      setMsg(`${d.imported} lignes importées${d.skipped ? `, ${d.skipped} ignorées (incomplètes)` : ""}.`);
+      onImported();
+    } catch (e) { setMsg(e.message); } finally { setBusy(false); if (file.current) file.current.value = ""; }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 text-xs">
+      <span className="font-bold text-gray-500">💾 Sauvegarde</span>
+      <button disabled={busy} onClick={exportCsv} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full disabled:opacity-50">⬇️ Exporter (CSV)</button>
+      <button disabled={busy} onClick={() => file.current?.click()} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full disabled:opacity-50">⬆️ Importer</button>
+      <input ref={file} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => importCsv(e.target.files?.[0])} />
+      {msg && <span className="text-gray-500">{msg}</span>}
+    </div>
   );
 }

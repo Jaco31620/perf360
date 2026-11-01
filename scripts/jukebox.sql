@@ -192,3 +192,22 @@ alter table public.jukebox_songs
   add column if not exists video_channel text;
 alter table public.jukebox_tracks
   add column if not exists video_title text;
+
+-- v18 (01/11/2026) : gestion de la mémoire. Texte corrigé à la main
+-- (interprète, titre), durée du titre Deezer (vidéos suspectes),
+-- doublons fusionnés (alias vers la ligne gardée), date d'ajout.
+alter table public.jukebox_songs
+  add column if not exists artist_fix text;
+alter table public.jukebox_songs
+  add column if not exists title_fix text;
+alter table public.jukebox_songs
+  add column if not exists song_duration int;
+alter table public.jukebox_songs
+  add column if not exists merged_into text;
+alter table public.jukebox_songs
+  add column if not exists created_at timestamptz;
+update public.jukebox_songs
+  set created_at = checked_at
+  where created_at is null;
+alter table public.jukebox_songs
+  alter column created_at set default now();
