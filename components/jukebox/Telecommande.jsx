@@ -137,10 +137,11 @@ export default function Telecommande({ code }) {
           <section className="space-y-5">
             {now ? (
               <div className="space-y-3">
-                {now.thumb && <img src={now.thumb} alt="" className="w-full aspect-video object-cover rounded-3xl shadow-xl" />}
-                <div>
-                  <p className="text-xl font-bold leading-snug line-clamp-2">{now.title}</p>
-                  {now.channel && <p className="text-white/70 truncate">{now.channel}</p>}
+                <div className="flex gap-3 items-start">
+                {now.thumb && <img src={now.thumb} alt="" className="w-[42%] shrink-0 aspect-video object-cover rounded-2xl shadow-xl" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>
+                  {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
                   <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
@@ -150,6 +151,7 @@ export default function Telecommande({ code }) {
                     </p>
                   )}
                   <div className="mt-1"><FixVideoButton onClick={() => setFixing(now)} /></div>
+                </div>
                 </div>
                 <div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
