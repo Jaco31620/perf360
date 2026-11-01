@@ -107,6 +107,9 @@ export async function GET(req, { params }) {
   }
 }
 
+const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const sameSong = (r, song) => norm(r.title) === norm(song.title) && norm(r.channel) === norm(song.channel);
+
 export async function POST(req, { params }) {
   const { code } = await params;
   let body;
@@ -137,8 +140,11 @@ export async function POST(req, { params }) {
         return Response.json({ error: `Vous avez déjà ${mine} titre${mine > 1 ? "s" : ""} en attente : patientez qu'il${mine > 1 ? "s" : ""} passe${mine > 1 ? "nt" : ""}.` }, { status: 429 });
     }
 
-    // quota YouTube partagé par toutes les soirées : ajouts des invités limités
-    if (!admin && (await tooMany(`add:${s.id}`, 60, 600) || await tooMany(`addip:${clientIp(req)}`, 20, 600)))
+    // quota YouTube partagé par toutes les soirées : ajouts des invités limités, surtout PAR INVITÉ
+    // (tous les invités d'une salle partagent souvent la même adresse IP : limite IP large, anti-abus seulement)
+    if (!admin && await tooMany(`addp:${s.id}:${pid}`, 10, 600))
+      return Response.json({ error: "Vous avez proposé beaucoup de titres d'un coup : réessayez dans quelques minutes." }, { status: 429 });
+    if (!admin && (await tooMany(`add:${s.id}`, 150, 600) || await tooMany(`addip:${clientIp(req)}`, 120, 600)))
       return Response.json({ error: "Beaucoup d'ajouts en ce moment : réessayez dans quelques minutes." }, { status: 429 });
 
     let v;
@@ -146,6 +152,8 @@ export async function POST(req, { params }) {
       // titre Deezer → sa vidéo YouTube (affichage : titre, artiste et pochette Deezer)
       const song = await deezerTrack(deezerId);
       if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
+      // déjà dans la file (même titre, même artiste) : refusé avant toute recherche YouTube
+      if (rows.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
       const yt = await youtubeForSong(song, publicSession(s).searchMode);
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
       v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };

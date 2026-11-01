@@ -29,14 +29,14 @@ export default function Affiche({ code }) {
 
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white py-6 print:py-0" style={themeVars(theme)}>
-      <style>{"@page { size: A4; margin: 0; } @media print { html, body { background: #fff; } }"}</style>
+      <style>{"@page { size: A4; margin: 0; } @media print { html, body { background: #fff; } } .jb-affiche, .jb-affiche * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }"}</style>
       <div className="max-w-[210mm] mx-auto mb-4 flex justify-center gap-3 print:hidden">
         <button onClick={() => window.print()} className="bg-gray-900 text-white font-bold px-6 py-2.5 rounded-full">🖨️ Imprimer</button>
         <p className="self-center text-sm text-gray-500">Format A4, à afficher près du bar ou de l'entrée.</p>
       </div>
-      <div className="mx-auto bg-white shadow-xl print:shadow-none w-[210mm] min-h-[297mm] print:h-[297mm] overflow-hidden flex flex-col items-center text-center px-[18mm] py-[16mm]">
+      <div className="jb-affiche mx-auto bg-white shadow-xl print:shadow-none w-[210mm] min-h-[297mm] print:h-[297mm] overflow-hidden flex flex-col items-center text-center px-[18mm] py-[16mm]">
         {theme?.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="" className="h-[22mm] max-w-[80mm] object-contain mb-[6mm]" />}
-        <p className="text-[13pt] font-bold tracking-[0.25em] uppercase text-gray-500">{theme?.title || session.name}</p>
+        <p className={`${(theme?.title || session.name).length > 40 ? "text-[10pt] tracking-[0.12em]" : "text-[13pt] tracking-[0.25em]"} font-bold uppercase text-gray-500 line-clamp-2`}>{theme?.title || session.name}</p>
         <h1 className="mt-[4mm] text-[38pt] leading-[1.05] font-black text-gray-900">C'est vous qui choisissez la musique&nbsp;! 🎶</h1>
         <div className="mt-[10mm] p-[5mm] rounded-[8mm] border-[3mm]" style={{ borderColor: "var(--jb-accent)" }}>
           <QRCodeSVG value={url} size={340} level="M" style={{ width: "95mm", height: "95mm" }} />

@@ -224,6 +224,7 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   const since = (Date.now() - data.fetchedAt) / 1000;
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
+  const bigQr = !showQueue || queue.length === 0; // file vide : QR en grand, pour attirer les premiers titres
   const cover = now && !hidden ? `https://i.ytimg.com/vi/${now.videoId}/hqdefault.jpg` : null;
   // mode son : la vidéo reste à sa taille pendant le blind test (un lecteur
   // trop petit s'arrête), masquée par un cache
@@ -307,7 +308,7 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
         <aside className={`shrink-0 flex flex-col gap-[3vh] ${showQueue ? "lg:w-[30vw]" : "lg:w-[32vw] justify-center"}`}>
           <div className="bg-white/10 backdrop-blur rounded-[1.5vw] p-[1.5vw] flex flex-col items-center text-center">
             {origin && (
-              <div className={`bg-white p-[0.8vw] rounded-[1vw] ${showQueue ? "w-[min(16vw,30vh)]" : "w-[min(26vw,52vh)]"}`}>
+              <div className={`bg-white p-[0.8vw] rounded-[1vw] ${bigQr ? "w-[min(26vw,52vh)]" : "w-[min(16vw,30vh)]"}`}>
                 <QRCodeSVG value={joinUrl} size={512} style={{ width: "100%", height: "auto" }} fgColor="#0f172a" />
               </div>
             )}

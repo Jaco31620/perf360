@@ -163,7 +163,10 @@ export default function Participant({ code }) {
   const open = session.status === "open";
   const limit = session.maxPerParticipant || UNLIMITED_CAP;
   const full = !admin && pending >= limit;
-  const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId)]);
+  const songKey = (t) => `${String(t.title || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}|${String(t.channel || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}`;
+  const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId), ...[now, ...queue].filter(Boolean).map(songKey)]);
+  const isQueued = (v) => inQueue.has(v.id) || inQueue.has(songKey(v)); // résultats Deezer : même titre + artiste
+  const blocked = !open && !admin; // ajouts bloqués : on peut chercher, pas ajouter
 
   const theme = session.theme;
   return (
@@ -188,14 +191,14 @@ export default function Participant({ code }) {
         ) : data.blind?.on && !admin ? (
           <BlindGuest blind={data.blind} now={now} name={name} answer={answer} setAnswer={setAnswer}
             onSubmit={sendAnswer} sending={sending} verdict={verdict} />
-        ) : !open && !admin ? (
-          <p className="text-center bg-gray-100 text-gray-600 rounded-2xl py-4 font-medium">🔒 Les ajouts de titres sont bloqués pour le moment.</p>
-        ) : full ? (
-          <p className="text-center bg-amber-50 text-amber-800 rounded-2xl py-4 px-3 font-medium">
-            ⏳ Vous avez {pending} titre{pending > 1 ? "s" : ""} en attente. Vous pourrez en proposer un autre dès qu'il{pending > 1 ? "s" : ""} passe{pending > 1 ? "nt" : ""}.
-          </p>
         ) : (
           <>
+            {blocked && <p className="text-center bg-gray-100 text-gray-600 rounded-2xl py-3 px-3 font-medium mb-3">🔒 Les ajouts de titres sont bloqués pour le moment. Vous pouvez déjà chercher votre prochain titre.</p>}
+            {!blocked && full && (
+              <p className="text-center bg-amber-50 text-amber-800 rounded-2xl py-3 px-3 font-medium mb-3">
+                ⏳ Vous avez {pending} titre{pending > 1 ? "s" : ""} en attente. Vous pourrez en proposer un autre dès qu'il{pending > 1 ? "s" : ""} passe{pending > 1 ? "nt" : ""}.
+              </p>
+            )}
             {session.searchMode === "karaoke" && (
               <p className="text-sm font-semibold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl px-3 py-2 mb-3">
                 🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké.
@@ -217,7 +220,12 @@ export default function Participant({ code }) {
 
             {results && (
               <ul className="mt-4 divide-y divide-gray-100">
-                {results.length === 0 && !error && <li className="py-4 text-center text-gray-500">Aucun résultat.</li>}
+                {results.length === 0 && !error && (
+                  <li className="py-4 text-center text-gray-500 text-sm space-y-1">
+                    <p className="font-semibold text-gray-700">Aucun résultat.</p>
+                    <p>Essayez seulement l'artiste ou seulement le titre, vérifiez l'orthographe, ou collez un lien YouTube.</p>
+                  </li>
+                )}
                 {results.map((v) => (
                   <li key={v.id} className="flex items-center gap-3 py-2.5">
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
@@ -228,10 +236,11 @@ export default function Participant({ code }) {
                         {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span> : null}
                       </p>
                     </div>
-                    {inQueue.has(v.id) ? (
+                    {isQueued(v) ? (
                       <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
                     ) : (
-                      <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding}
+                      <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding || blocked || full}
+                        title={blocked ? "Ajouts bloqués pour le moment" : full ? "Attendez qu'un de vos titres passe" : undefined}
                         className="shrink-0 bg-[var(--jb-accent2)] hover:brightness-110 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
                         {adding === v.id ? "…" : "+ Ajouter"}
                       </button>
