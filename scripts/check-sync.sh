@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Garde-fou multi-machine : averti si la branche locale n'est pas synchro avec origin.
+# Garde-fou multi-machine : met à jour la branche si elle est seulement en retard (sans
+# travail local), sinon avertit. Lancé à l'ouverture du dossier dans VSCode (voir
+# .vscode/tasks.json).
 # Lancé automatiquement à l'ouverture du dossier dans VSCode (voir .vscode/tasks.json).
 set -u
 
@@ -30,6 +32,13 @@ echo "────────────────────────�
 if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
   echo "⚠️  DIVERGENCE : $behind commit(s) en retard ET $ahead en avance sur $upstream."
   echo "    Ne force rien — fais un 'git pull' et règle le merge (appelle Claude si besoin).$dirty"
+elif [ "$behind" -gt 0 ] && [ -z "$dirty" ] && timeout 60 git pull --ff-only -q 2>/dev/null; then
+  # en retard, sans travail local : mise à jour automatique (avance rapide, rien à fusionner)
+  echo "✅  Mis à jour automatiquement : $behind commit(s) récupéré(s) de $upstream."
+  if ! git diff --quiet "HEAD@{1}" HEAD -- package.json package-lock.json 2>/dev/null; then
+    echo "    Dépendances modifiées : npm install…"
+    npm install --no-audit --no-fund --loglevel=error >/dev/null 2>&1 && echo "    npm install OK" || echo "    ⚠️ npm install a échoué : lance-le à la main."
+  fi
 elif [ "$behind" -gt 0 ]; then
   echo "⚠️  EN RETARD de $behind commit(s) sur $upstream."
   echo "    Avant de coder, lance :  git pull$dirty"
