@@ -9,6 +9,8 @@
  * de lecture (écran, télécommande, délais du blind test).
  * Les navigateurs bloquent le son sans geste de l'utilisateur : la lecture
  * démarre au clic sur « Lancer la musique » (start()).
+ * Rognage (start / end du titre, lib/jukeboxTrim.js) : la vidéo démarre à
+ * `start` et le titre est considéré comme fini à `end` (habillage sauté).
  * `data` : état de la soirée vu par la régie (titre en cours et file complets) ;
  * `act` : actions régie (useAdminActions) ; `enabled` : conteneurs des
  * lecteurs (playerEls) affichés.
@@ -16,6 +18,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 import { authHeaders } from "./storage";
+import { playSpan } from "@/lib/jukebox";
+
+// chargement d'un titre : début et fin de la partie gardée
+const loadArgs = (t, from) => {
+  const { start, end, trimmed } = playSpan(t);
+  return { videoId: t.videoId, startSeconds: Math.max(start, from || 0), ...(trimmed && end ? { endSeconds: end } : {}) };
+};
 
 export function usePlayerEngine({ code, data, act, enabled }) {
   const [ready, setReady] = useState(false);
@@ -88,7 +97,7 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     loaded.current = pr.id;
     loadedVideo.current = pr.videoId;
     setActive(pr.idx);
-    newP.seekTo(0, true);
+    newP.seekTo(pr.start || 0, true);
     newP.playVideo();
     if (!fadeSec) {
       oldP.stopVideo();
@@ -110,25 +119,28 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     }, 100);
   };
 
+  // Fin du titre (fin de la vidéo, ou fin de la partie gardée si rognée).
+  const ended = () => {
+    // suivant déjà préchargé : on enchaîne tout de suite, sans attendre le serveur
+    if (primed.current?.ready && primed.current.id === dataRef.current?.queue?.[0]?.id) {
+      const from = loaded.current;
+      switchToPrimed(0);
+      advance(false, from);
+    } else advance(false);
+  };
+
   // Les événements des lecteurs sont branchés une fois : ils passent par une ref.
   const onEvent = useRef({});
   onEvent.current = {
     state: (i, e) => {
       if (i === active.current) {
         setPlaying(e.data === 1);
-        if (e.data === 0 && !fading.current) { // terminé
-          // suivant déjà préchargé : on enchaîne tout de suite, sans attendre le serveur
-          if (primed.current?.ready && primed.current.id === dataRef.current?.queue?.[0]?.id) {
-            const from = loaded.current;
-            switchToPrimed(0);
-            advance(false, from);
-          } else advance(false);
-        }
+        if (e.data === 0 && !fading.current) ended(); // terminé
         if (e.data === 1 || e.data === 2) report(); // lecture / pause → écran
       } else if (primed.current?.idx === i && !primed.current.ready && e.data === 1) {
         // préchargé : on le met en attente au début, en silence
         e.target.pauseVideo();
-        e.target.seekTo(0, true);
+        e.target.seekTo(primed.current.start || 0, true);
         primed.current.ready = true;
       }
     },
@@ -172,7 +184,7 @@ export function usePlayerEngine({ code, data, act, enabled }) {
       loaded.current = now.id;
       loadedVideo.current = now.videoId;
       cur().setVolume(master.current);
-      cur().loadVideoById(now.videoId);
+      cur().loadVideoById(loadArgs(now));
     } else if (!now) {
       if (loaded.current) { cur().stopVideo(); loaded.current = null; }
       dropPrimed();
@@ -190,16 +202,23 @@ export function usePlayerEngine({ code, data, act, enabled }) {
       const next = d?.queue?.[0];
       const p = cur();
       if (!now || fading.current || loaded.current !== now.id || p.getPlayerState() !== 1) return;
-      if (!next) { dropPrimed(); return; }
       const fadeSec = d.session.fade;
-      const rem = (now.duration || p.getDuration()) - p.getCurrentTime();
+      const span = playSpan(now);
+      const rem = (span.end || p.getDuration()) - p.getCurrentTime();
+      // fin de la partie gardée (rognage) : on n'attend pas la fin de la vidéo
+      if (span.trimmed && rem <= 0.3 && !(fadeSec > 0 && primed.current?.ready && next)) {
+        if (!next) p.pauseVideo(); // rien après : on s'arrête là
+        ended();
+        return;
+      }
+      if (!next) { dropPrimed(); return; }
       if (primed.current && (primed.current.id !== next.id || primed.current.videoId !== next.videoId)) dropPrimed(); // file réordonnée, vidéo corrigée
       if (!primed.current) {
         if (rem <= fadeSec + 10) {
           const idx = 1 - active.current;
-          primed.current = { id: next.id, videoId: next.videoId, idx, ready: false };
+          primed.current = { id: next.id, videoId: next.videoId, start: playSpan(next).start, idx, ready: false };
           players.current[idx].setVolume(0);
-          players.current[idx].loadVideoById(next.videoId);
+          players.current[idx].loadVideoById(loadArgs(next));
         }
         return;
       }
@@ -219,7 +238,8 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     if (!pb || pb.id !== d.now.id) return 0;
     const elapsed = pb.playing ? (d.serverTime - pb.at + (Date.now() - d.fetchedAt)) / 1000 : 0;
     const pos = pb.pos + elapsed;
-    return d.now.duration && pos > d.now.duration - 3 ? 0 : Math.max(0, pos);
+    const { start, end } = playSpan(d.now);
+    return end && pos > end - 3 ? start : Math.max(start, pos);
   };
 
   const start = () => {
@@ -228,7 +248,7 @@ export function usePlayerEngine({ code, data, act, enabled }) {
     if (data?.now) {
       loaded.current = data.now.id;
       loadedVideo.current = data.now.videoId;
-      cur().loadVideoById({ videoId: data.now.videoId, startSeconds: resumeAt(data) });
+      cur().loadVideoById(loadArgs(data.now, resumeAt(data)));
     }
   };
 

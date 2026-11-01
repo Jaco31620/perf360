@@ -17,7 +17,7 @@ import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { QRCodeSVG } from "qrcode.react";
-import { formatDuration } from "@/lib/jukebox";
+import { formatDuration, playSpan } from "@/lib/jukebox";
 import History from "./History";
 import TvLink from "./TvLink";
 import { JoinForm, AccessPanel, useJoinPass } from "./Access";
@@ -98,7 +98,9 @@ export default function Telecommande({ code }) {
   const regieOk = !!pb && age < 15000 && !lagging;
   const playerSeen = pb && age < 60000; // un lecteur (régie ou télé) a donné signe de vie récemment
   const isPlaying = pending ? pending === "play" : !!(live && pb.playing);
-  const pos = live ? Math.min(now.duration || Infinity, pb.pos + (pb.playing ? age / 1000 : 0)) : 0;
+  // position dans la partie jouée (rognage : début et fin d'habillage retirés)
+  const span = now ? playSpan(now) : null;
+  const pos = live ? Math.max(0, Math.min(span.length || Infinity, pb.pos + (pb.playing ? age / 1000 : 0) - span.start)) : 0;
   const shownVolume = volume ?? pb?.volume ?? 100;
 
   const send = (type, value) => act("command", { type, value }, true);
@@ -162,10 +164,10 @@ export default function Telecommande({ code }) {
                 </div>
                 <div>
                   <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-fuchsia-500" style={{ width: `${now.duration ? Math.min(100, (pos / now.duration) * 100) : 0}%` }} />
+                    <div className="h-full bg-fuchsia-500" style={{ width: `${span.length ? Math.min(100, (pos / span.length) * 100) : 0}%` }} />
                   </div>
                   <div className="flex justify-between text-xs text-white/40 mt-1">
-                    <span>{formatDuration(Math.floor(pos))}</span><span>{formatDuration(now.duration)}</span>
+                    <span>{formatDuration(Math.floor(pos))}</span><span>{span.trimmed && <span title="Vidéo rognée : début ou fin d'habillage sauté">✂️ </span>}{formatDuration(Math.round(span.length))}</span>
                   </div>
                 </div>
               </div>

@@ -231,3 +231,17 @@ create table if not exists public.jukebox_activations (
 );
 alter table public.jukebox_activations enable row level security;
 grant all on public.jukebox_activations to service_role;
+
+-- v20 (01/11/2026) : rognage des vidéos (habillage au début ou à la fin :
+-- intro, logo, scène parlée…). Par vidéo YouTube : la partie gardée va de
+-- start_at à end_at (secondes, end_at null = jusqu'au bout). source :
+-- manual (réglé à la main) ou sponsorblock (suggestion acceptée).
+create table if not exists public.jukebox_trims (
+  video_id text primary key,
+  start_at real not null default 0,
+  end_at real,
+  source text not null default 'manual',
+  updated_at timestamptz not null default now()
+);
+alter table public.jukebox_trims enable row level security;
+grant all on public.jukebox_trims to service_role;

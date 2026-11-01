@@ -13,6 +13,7 @@ import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "./storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "./Controls";
+import TrimPlayer from "./TrimPlayer";
 import { inviteText, fmtRegieCode } from "./Access";
 import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel, formatDuration } from "@/lib/jukebox";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
@@ -294,6 +295,7 @@ function applySong(list, body) {
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key === body.key ? { ...s, blind: !!body.blind } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
+    case "trimVideo": return list.map((s) => (s.videoId === body.videoId ? { ...s, start: body.start || 0, end: body.end ?? null } : s));
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
       ...s, enriched: true,
       ...("year" in body ? { year: parseInt(body.year, 10) || null } : {}),
@@ -893,7 +895,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
-            <SongReview review={review} setReview={setReview} songs={songs} run={run} editYear={editYear}
+            <SongReview review={review} setReview={setReview} songs={songs} run={run} call={call} editYear={editYear}
               busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
           )}
           {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)}
@@ -1252,7 +1254,7 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
  * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
  * passent par run() (effet immédiat sur la liste de la mémoire). */
 const REVIEW_START = 40;
-function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRetitle, onClose }) {
+function SongReview({ review, setReview, songs, run, call, editYear, busy, onFix, onRetitle, onClose }) {
   const { keys, i } = review;
   const [editing, setEditing] = useState(null); // correction du texte : champ à éditer (artist | title)
   const [artistOpen, setArtistOpen] = useState(false); // autres titres de l'interprète, sans quitter la revue
@@ -1321,8 +1323,10 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
           </div>
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,1fr)] items-start">
-            <div className="mx-auto w-full" style={{ maxWidth: "calc((97vh - 120px) * 16 / 9)" }}>
-              <VideoPreview videoId={song.videoId} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
+            <div className="mx-auto w-full" style={{ maxWidth: "calc((97vh - 250px) * 16 / 9)" }}>
+              <TrimPlayer key={song.videoId} song={song} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
+                onSave={(t) => run({ action: "trimVideo", ...t })}
+                suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />
               <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
                 <div className="flex-1 min-w-0"><VideoTitle song={song} className="truncate" /></div>
                 <a href={`https://www.youtube.com/watch?v=${song.videoId}`} target="_blank" rel="noreferrer" className="shrink-0 hover:text-gray-700 underline">YouTube ↗</a>
@@ -1389,7 +1393,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
                 <details className="flex-1 text-xs text-gray-400">
                   <summary className="cursor-pointer hover:text-gray-600">Aide</summary>
                   <p className="mt-1">
-                    Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. <b>✎ Texte</b> corrige l'interprète
+                    Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. <b>⏮ Début ici / Fin ici ⏭</b> (D / F) rognent l'habillage de la vidéo (intro, logo, scène parlée) : réglé pour cette vidéo dans toutes les soirées. <b>✎ Texte</b> corrige l'interprète
                     ou le titre affichés (faute, majuscules ; clic sur le titre aussi) ; <b>👤 Interprète</b> montre ses autres titres en mémoire (clic sur
                     son nom aussi) ; <b>🔁 Autre titre</b> rattache au bon titre Deezer (reprise, compilation). On reste dans la revue. Échap pour fermer.
                   </p>

@@ -22,6 +22,7 @@
  * - DELETE : retrait d'un de SES titres encore en attente { participantId, id }.
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { withTrims } from "@/lib/jukeboxTrim";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
 import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
@@ -82,6 +83,9 @@ export async function GET(req, { params }) {
       queue: queue.map((r) => trackOut(r, null)),
       command: s.command || null,
     };
+    // rognage (début / fin d'habillage) : pour les lecteurs et la télécommande
+    if (admin) await withTrims([out.now, ...out.queue]);
+    if (engine) await withTrims([out.engine.now, ...out.engine.queue]);
     if (admin) {
       out.admin = true;
       out.command = s.command || null; // dernier ordre de la télécommande

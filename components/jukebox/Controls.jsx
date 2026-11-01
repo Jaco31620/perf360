@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
 import { authHeaders, participantId } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan } from "@/lib/jukebox";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
 export function Settings({ session, act }) {
@@ -296,7 +296,7 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
                     {t.title} <RefreshCw size={11} className="inline opacity-0 group-hover:opacity-60" />
                   </button>
                 ) : <p className="text-sm font-semibold truncate">{t.title}</p>}
-                <p className="text-xs text-white/50 truncate">{[t.channel, t.author, formatDuration(t.duration)].filter(Boolean).join(" · ")}</p>
+                <p className="text-xs text-white/50 truncate">{[t.channel, t.author, formatDuration(Math.round(playSpan(t).length) || t.duration)].filter(Boolean).join(" · ")}</p>
                 {t.dedication && (
                   <p className="text-xs text-fuchsia-300 italic flex items-start gap-1">
                     <span className="min-w-0 break-words">💌 « {t.dedication} »</span>

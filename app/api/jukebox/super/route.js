@@ -7,6 +7,8 @@
  * - POST : { action, ... }
  *     settings { retentionDays?, creationMode?, defaultFeatures?, defaultOptions? }
  *     features { code, features } → fonctions activées pour une soirée
+ *     trimVideo { videoId, start, end, source? } → rognage de la vidéo (toutes soirées)
+ *     trimSuggest { videoId, duration } → suggestion SponsorBlock { start, end, segments }
  *     actCreate { label, maxParties?, expiresAt?, features? } → nouveau code d'activation
  *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
  *     actDelete { id } → supprimer un code (les soirées créées restent)
@@ -28,6 +30,7 @@
  *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
@@ -52,8 +55,11 @@ export async function GET(req) {
       return Response.json({ items: await prefillItems() }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("playlists"))
       return Response.json({ playlists: await deezerPlaylistSearch(url.searchParams.get("playlists")) }, { headers: { "cache-control": "no-store" } });
-    if (url.searchParams.get("songs"))
-      return Response.json({ songs: await listSongs(Object.fromEntries(url.searchParams)) }, { headers: { "cache-control": "no-store" } });
+    if (url.searchParams.get("songs")) {
+      const songs = await listSongs(Object.fromEntries(url.searchParams));
+      await withTrims(songs); // rognage de chaque vidéo (start / end)
+      return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
+    }
     const [config, sessions, searches, songs, prefill, enrich] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null)]);
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
@@ -145,6 +151,10 @@ export async function POST(req) {
       case "forgetSong":
         await forgetSong(body.key);
         return Response.json({ ok: true });
+      case "trimVideo":
+        return Response.json({ ok: true, trim: await saveTrim(body.videoId, body) });
+      case "trimSuggest":
+        return Response.json({ ok: true, hint: await sponsorBlockTrim(body.videoId, body.duration) });
       case "actCreate":
         return Response.json({ ok: true, activation: await createActivation(body) });
       case "actUpdate":
