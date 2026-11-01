@@ -117,7 +117,7 @@ export default function Regie({ code }) {
   const { session, now, queue } = data;
   const open = session.status === "open";
   // blind test : masqué tant que non dévoilé, et dès que le lecteur passe au titre suivant (avant la mise à jour du serveur)
-  const masked = !!(data.blind?.on && now && ((!data.blind.revealed && peek !== now.id) || (started && currentId && currentId !== now.id)));
+  const masked = !!(data.blind?.on && now && ((!data.blind.revealed && !session.blindSettings?.peek && peek !== now.id) || (started && currentId && currentId !== now.id)));
   const tabs = [
     { id: "queue", label: `🎵 File${queue.length ? ` (${queue.length})` : ""}` },
     { id: "settings", label: "⚙️ Réglages" },

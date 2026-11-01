@@ -88,7 +88,8 @@ export default function Telecommande({ code }) {
   }
 
   const { session, now, queue, playback: pb } = data;
-  const masked = !!(data.blind?.on && now && !data.blind.revealed && peek !== now.id); // blind test : comme la régie
+  // blind test : titre masqué avant la réponse, sauf option « visible pour l'organisateur »
+  const masked = !!(data.blind?.on && now && !data.blind.revealed && !session.blindSettings?.peek && peek !== now.id);
   const live = pb && now && pb.id === now.id;
   const age = pb ? data.serverTime - pb.at + (Date.now() - data.fetchedAt) : Infinity;
   // Le lecteur envoie son état toutes les 5 s. Au changement de titre, il

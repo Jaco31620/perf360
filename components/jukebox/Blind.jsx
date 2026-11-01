@@ -71,6 +71,12 @@ function Timing({ settings, act }) {
         </select>
       </label>
       <p className="text-xs text-white/40">Les délais comptent le temps de lecture : ils s'arrêtent pendant une pause.</p>
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-white/70">Titre visible pour l'organisateur</span>
+        <button type="button" role="switch" aria-checked={settings.peek} onClick={() => act("blind", { peek: !settings.peek })}
+          className={`font-bold px-3 py-1 rounded-full shrink-0 ${settings.peek ? "bg-fuchsia-600" : "bg-white/10"}`}>{settings.peek ? "Oui" : "Non"}</button>
+      </label>
+      <p className="text-xs text-white/40">Régie et télécommande montrent le titre avant la réponse (pour aider, ou accepter une réponse approchante). « Non » si l'organisateur joue aussi.</p>
     </>
   );
 }
