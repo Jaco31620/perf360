@@ -211,3 +211,23 @@ update public.jukebox_songs
   where created_at is null;
 alter table public.jukebox_songs
   alter column created_at set default now();
+
+-- v19 (01/11/2026) : codes d'activation individuels (mode de création
+-- « Avec un code »). Un code par organisateur : nombre de soirées
+-- (null = illimité), expiration, désactivation, fonctions des soirées
+-- créées avec ce code. Les soirées gardent le lien vers leur code dans
+-- options (organizer, activationId) : pas de colonne à ajouter.
+create table if not exists public.jukebox_activations (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  label text not null,
+  max_parties int,
+  used int not null default 0,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  features jsonb,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+alter table public.jukebox_activations enable row level security;
+grant all on public.jukebox_activations to service_role;

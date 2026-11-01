@@ -2,8 +2,12 @@
 /*
  * Jukebox — accueil : rejoindre une soirée avec son code, ou en créer une
  * (le créateur devient régie et reçoit un jeton gardé en local). La création
- * suit le réglage du super-admin : libre, sur code de création, ou réservée.
+ * suit le réglage du super-admin : libre, sur code d'activation individuel
+ * (pré-rempli par le lien ?activation=…, retenu sur l'appareil tant qu'il
+ * reste des soirées), ou réservée.
  */
+const ACT_KEY = "jukebox:activation";
+const actReady = (c) => c.replace(/[^A-Za-z0-9]/g, "").length === 8;
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,10 +25,16 @@ export default function JukeboxHome() {
   const [mode, setMode] = useState("open");
   const [creationCode, setCreationCode] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+  const [actInfo, setActInfo] = useState(null); // { ok, label, remaining } | { ok: false, error }
 
   useEffect(() => {
     setMine(myParties());
     setIsSuper(!!getSuperToken());
+    // code d'activation : lien reçu, sinon dernier code utilisé sur cet appareil
+    const fromLink = new URLSearchParams(window.location.search).get("activation");
+    let saved = "";
+    try { saved = localStorage.getItem(ACT_KEY) || ""; } catch (e) { /* stockage indisponible */ }
+    if (fromLink || saved) setCreationCode((fromLink || saved).toUpperCase());
     // soirées supprimées depuis (à la main ou après inactivité) : retirées de la liste
     for (const p of myParties()) {
       fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then((r) => {
@@ -37,6 +47,20 @@ export default function JukeboxHome() {
   }, []);
   const needCode = mode === "code" && !isSuper;
   const closed = mode === "super" && !isSuper;
+
+  // vérification du code d'activation dès qu'il est complet
+  useEffect(() => {
+    setActInfo(null);
+    if (!needCode || !actReady(creationCode)) return;
+    let gone = false;
+    const t = setTimeout(async () => {
+      try {
+        const d = await (await fetch(`/api/jukebox?check=${encodeURIComponent(creationCode)}`, { cache: "no-store" })).json();
+        if (!gone) setActInfo(d);
+      } catch (e) { /* réseau : vérifié à la création */ }
+    }, 300);
+    return () => { gone = true; clearTimeout(t); };
+  }, [creationCode, needCode]);
 
   const join = (e) => {
     e.preventDefault();
@@ -58,6 +82,11 @@ export default function JukeboxHome() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Création impossible.");
       setAdminToken(data.code, data.adminToken);
+      try {
+        // code gardé pour la prochaine soirée s'il en reste
+        if (needCode && actInfo?.ok && actInfo.remaining !== 1) localStorage.setItem(ACT_KEY, creationCode);
+        else if (needCode) localStorage.removeItem(ACT_KEY);
+      } catch (e) { /* stockage indisponible */ }
       rememberParty(data.code, name.trim());
       // téléphone : la télécommande (la musique viendra d'une télé ou d'un ordinateur) ; ordinateur : la régie
       const phone = window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
@@ -123,14 +152,22 @@ export default function JukeboxHome() {
               </select>
             </label>
             {needCode && (
-              <input
-                placeholder="Code de création" autoComplete="off" value={creationCode}
-                onChange={(e) => setCreationCode(e.target.value.toUpperCase())}
-                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 font-mono tracking-widest focus:border-indigo-500 outline-none"
-              />
+              <div className="space-y-1.5">
+                <input
+                  placeholder="Code d'activation (ABCD-EFGH)" autoComplete="off" autoCapitalize="characters" value={creationCode}
+                  onChange={(e) => setCreationCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-\s]/g, "").slice(0, 10))}
+                  className={`w-full border-2 rounded-2xl px-4 py-3 font-mono tracking-widest outline-none ${actInfo?.ok ? "border-green-400" : actInfo ? "border-red-300" : "border-gray-200 focus:border-indigo-500"}`}
+                />
+                {actInfo?.ok ? (
+                  <p className="text-sm text-green-700">
+                    👋 {actInfo.label} · {actInfo.remaining == null ? "soirées illimitées" : `${actInfo.remaining} soirée${actInfo.remaining > 1 ? "s" : ""} restante${actInfo.remaining > 1 ? "s" : ""}`}
+                  </p>
+                ) : actInfo ? <p className="text-sm text-red-600">{actInfo.error}</p>
+                  : <p className="text-xs text-gray-400">Code reçu de l'organisateur du service.</p>}
+              </div>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button disabled={busy || !name.trim() || (needCode && !creationCode.trim())}
+            <button disabled={busy || !name.trim() || (needCode && (!actReady(creationCode) || actInfo?.ok === false))}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-3 rounded-full transition-colors">
               {busy ? "Création…" : "Ouvrir la régie"}
             </button>

@@ -2,7 +2,8 @@
 /*
  * Jukebox — super-admin (/jukebox/admin), mot de passe de Clic-Clac :
  * toutes les soirées (activité, suppression prévue), accès à leur régie,
- * nouveau lien régie, suppression ; réglages de conservation et de création ;
+ * nouveau lien régie, suppression ; codes d'activation individuels des
+ * organisateurs (onglet Codes) ; réglages de conservation et de création ;
  * recherches YouTube du jour ; mémoire des titres (recherche, oubli) et
  * son pré-remplissage (titres cherchés par le cron de 6 h).
  */
@@ -19,7 +20,7 @@ import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DE
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const CREATION_MODES = [
   { id: "open", label: "Tout le monde", hint: "Toute personne qui connaît l'adresse /jukebox peut créer une soirée." },
-  { id: "code", label: "Avec un code", hint: "Il faut saisir le code de création ci-dessous." },
+  { id: "code", label: "Avec un code", hint: "Chaque organisateur saisit son propre code d'activation (onglet 🎟️ Codes)." },
   { id: "super", label: "Super-admin seul", hint: "Vous créez les soirées ici et transmettez le lien régie." },
 ];
 const SEARCH_QUOTA = 100; // ~10 000 unités / jour, 100 par recherche
@@ -32,7 +33,6 @@ function fmtIn(ms) {
   const h = Math.round(d / 3600e3);
   return h < 48 ? `dans ${h} h` : `dans ${Math.round(h / 24)} j`;
 }
-const randomCode = () => Array.from({ length: 6 }, () => "ABCDEFGHJKMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 31)]).join("");
 
 export default function SuperAdmin() {
   const [token, setToken] = useState(undefined);
@@ -45,11 +45,11 @@ export default function SuperAdmin() {
   const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
   const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
-  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ } }, []);
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
   const matches = (s) => {
     const q = filter.trim().toLowerCase();
-    return !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, ""));
+    return !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q);
   };
 
   useEffect(() => { setToken(getSuperToken()); setOrigin(window.location.origin); }, []);
@@ -115,6 +115,7 @@ export default function SuperAdmin() {
   const nSessions = data?.sessions.length ?? 0;
   const tabs = [
     { id: "soirees", label: `🎉 Soirées${nSessions ? ` (${nSessions})` : ""}` },
+    { id: "codes", label: `🎟️ Codes${data?.activations?.length ? ` (${data.activations.length})` : ""}` },
     { id: "reglages", label: "⚙️ Réglages" },
   ];
   const quotaPct = data ? Math.min(100, (data.searches / SEARCH_QUOTA) * 100) : 0;
@@ -160,7 +161,7 @@ export default function SuperAdmin() {
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
           {nSessions > 5 && (
-            <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher une soirée (nom ou code)" className="mt-4 w-full" />
+            <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher une soirée (nom, code ou organisateur)" className="mt-4 w-full" />
           )}
           <div className="space-y-3 mt-4">
             {data && nSessions === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
@@ -171,6 +172,12 @@ export default function SuperAdmin() {
                   <p className="text-xs text-gray-500">
                     Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
                   </p>
+                  {s.organizer && (
+                    <p className="text-xs text-gray-600">
+                      👤 {s.organizer}
+                      <button onClick={() => { chooseTab("codes"); }} className="ml-2 text-fuchsia-600 underline">code d'activation</button>
+                    </p>
+                  )}
                   <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
                   <p className="text-xs text-gray-600 mt-1">
                     🔑 Code régie <b className="font-mono text-sm tracking-wider">{s.regieCode ? fmtRegieCode(s.regieCode) : "—"}</b>
@@ -208,6 +215,11 @@ export default function SuperAdmin() {
         </>
       )}
 
+      {tab === "codes" && data && (
+        <Activations list={data.activations} sessions={data.sessions} defaults={cfg?.defaultFeatures} origin={origin}
+          creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
+      )}
+
       {tab === "memory" && <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} onChanged={load} />}
       {tab === "queue" && <Prefill call={call} state={data?.prefill} onChanged={load} />}
 
@@ -227,9 +239,7 @@ export default function SuperAdmin() {
                 <p className="font-semibold mb-1.5">Qui peut créer une soirée ?</p>
                 <div className="flex bg-gray-100 rounded-full p-0.5">
                   {CREATION_MODES.map((m) => (
-                    <button key={m.id} onClick={() => m.id !== cfg.creationMode && action({
-                      action: "settings", creationMode: m.id, ...(m.id === "code" && !cfg.creationCode ? { creationCode: randomCode() } : {}),
-                    })}
+                    <button key={m.id} onClick={() => m.id !== cfg.creationMode && action({ action: "settings", creationMode: m.id })}
                       className={`flex-1 px-2 py-1.5 rounded-full font-bold ${m.id === cfg.creationMode ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
                       {m.label}
                     </button>
@@ -238,12 +248,7 @@ export default function SuperAdmin() {
                 <p className="text-xs text-gray-400 mt-1.5">{CREATION_MODES.find((m) => m.id === cfg.creationMode)?.hint}</p>
               </div>
               {cfg.creationMode === "code" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-600">Code de création :</span>
-                  <span className="font-mono font-black text-lg tracking-widest">{cfg.creationCode}</span>
-                  <button onClick={() => action({ action: "settings", creationCode: randomCode() }, "Générer un nouveau code ? L'ancien ne fonctionnera plus.")}
-                    className="ml-auto text-xs text-fuchsia-600 underline">Nouveau code</button>
-                </div>
+                <button onClick={() => chooseTab("codes")} className="text-xs text-fuchsia-600 underline">🎟️ Gérer les codes d'activation</button>
               )}
               <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">Quota YouTube : {QUOTA_NOTE}</p>
             </div>
@@ -466,6 +471,211 @@ function SoireeFields({ value, features, onChange }) {
   );
 }
 
+/* ---------- Codes d'activation individuels ---------- */
+
+const ACT_MAX_CHOICES = [1, 2, 3, 5, 10, 20, null]; // null : illimité
+const ACT_EXPIRY_CHOICES = [["", "Sans expiration"], ["7", "7 jours"], ["30", "1 mois"], ["90", "3 mois"], ["365", "1 an"]];
+const ACT_STATUS = {
+  active: ["Actif", "bg-green-100 text-green-700"],
+  spent: ["Épuisé", "bg-amber-100 text-amber-700"],
+  expired: ["Expiré", "bg-gray-100 text-gray-500"],
+  revoked: ["Désactivé", "bg-red-100 text-red-600"],
+};
+const actMaxLabel = (n) => (n == null ? "Illimité" : `${n} soirée${n > 1 ? "s" : ""}`);
+const fmtDay = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const dayInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+
+function activationText({ origin, a }) {
+  const link = `${origin}/jukebox?activation=${a.code}`;
+  const host = origin.replace(/^https?:\/\//, "");
+  return [
+    `Bonjour ${a.label},`,
+    "",
+    `Voici votre code d'activation Jukebox : ${a.code}`,
+    `Il vous permet de créer ${a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties)}${a.expiresAt ? `, jusqu'au ${fmtDay(a.expiresAt)}` : ""}.`,
+    "",
+    `Pour lancer une soirée : ${link}`,
+    `Depuis un téléphone, vous arrivez sur la télécommande ; pour la musique, ouvrez ${host}/tv sur la télé (ou la régie sur un ordinateur).`,
+  ].join("\n");
+}
+
+function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes }) {
+  const [shared, setShared] = useState(null); // code dont le message est affiché
+  const [filter, setFilter] = useState("");
+  if (list == null) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
+        La table des codes d'activation n'existe pas encore : exécutez la partie <b>v19</b> de <code>scripts/jukebox.sql</code> dans Supabase.
+      </div>
+    );
+  }
+  const q = filter.trim().toLowerCase();
+  const shown = list.filter((a) => !q || a.label.toLowerCase().includes(q) || a.code.toLowerCase().includes(q));
+  return (
+    <div className="space-y-4">
+      {creationMode !== "code" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800 flex flex-wrap items-center gap-3">
+          <span className="flex-1 min-w-[220px]">
+            Les codes ne sont demandés qu'en mode de création « Avec un code » (actuellement : {CREATION_MODES.find((m) => m.id === creationMode)?.label}).
+          </span>
+          <button onClick={onUseCodes} className="font-bold bg-amber-600 text-white px-4 py-1.5 rounded-full">Passer en « Avec un code »</button>
+        </div>
+      )}
+      <ActivationForm defaults={defaults} onCreate={async (body) => {
+        const d = await action({ action: "actCreate", ...body });
+        if (d?.activation) setShared(d.activation.id);
+        return !!d;
+      }} />
+      {list.length > 5 && <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher (organisateur ou code)" className="w-full" />}
+      {list.length === 0 && <p className="text-gray-400 text-center py-8">Aucun code d'activation.</p>}
+      {shown.map((a) => {
+        const parties = sessions.filter((s) => s.activationId === a.id);
+        const [label, cls] = ACT_STATUS[a.status] || ACT_STATUS.active;
+        return (
+          <div key={a.id} className="bg-white rounded-2xl border border-purple-100 p-4 space-y-3">
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+              <div className="flex-1 min-w-[220px]">
+                <p className="font-bold text-gray-900">
+                  {a.label}
+                  <span className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
+                </p>
+                <p className="font-mono font-black text-xl tracking-widest text-fuchsia-600 select-all">{a.code}</p>
+                <p className="text-xs text-gray-500">
+                  {a.used} soirée{a.used > 1 ? "s" : ""} créée{a.used > 1 ? "s" : ""} sur {a.maxParties == null ? "illimité" : a.maxParties}
+                  {" · "}créé le {fmtDate(Date.parse(a.createdAt))}
+                  {a.lastUsedAt && <> · dernière utilisation {fmtDate(Date.parse(a.lastUsedAt))}</>}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm">
+                <button onClick={() => setShared(shared === a.id ? null : a.id)} className="font-bold bg-fuchsia-600 text-white px-3 py-1.5 rounded-full">📨 Envoyer</button>
+                <button onClick={() => action({ action: "actUpdate", id: a.id, revoked: !a.revoked },
+                  a.revoked ? null : `Désactiver le code de ${a.label} ? Il ne permettra plus de créer de soirée (les soirées déjà créées continuent).`)}
+                  className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">{a.revoked ? "Réactiver" : "Désactiver"}</button>
+                <button onClick={() => action({ action: "actDelete", id: a.id }, `Supprimer le code de ${a.label} ? Les soirées déjà créées sont gardées.`)}
+                  className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <label className="flex items-center gap-2">
+                <span className="text-gray-500">Soirées</span>
+                <select value={a.maxParties ?? ""} onChange={(e) => action({ action: "actUpdate", id: a.id, maxParties: e.target.value === "" ? null : Number(e.target.value) })}
+                  className="border-2 border-gray-200 rounded-xl px-2 py-1 font-semibold">
+                  {[...new Set([...ACT_MAX_CHOICES, a.maxParties])].sort((x, y) => (x ?? 1e9) - (y ?? 1e9)).map((n) => (
+                    <option key={n ?? "inf"} value={n ?? ""}>{actMaxLabel(n)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-gray-500">Expire le</span>
+                <input type="date" value={dayInput(a.expiresAt)}
+                  onChange={(e) => action({ action: "actUpdate", id: a.id, expiresAt: e.target.value ? `${e.target.value}T23:59:59` : null })}
+                  className="border-2 border-gray-200 rounded-xl px-2 py-0.5" />
+                {a.expiresAt && <button onClick={() => action({ action: "actUpdate", id: a.id, expiresAt: null })} className="text-xs text-gray-400 underline">jamais</button>}
+              </label>
+              {a.used > 0 && (
+                <button onClick={() => action({ action: "actUpdate", id: a.id, resetUsed: true }, `Remettre à zéro le compteur de ${a.label} ? Il pourra de nouveau créer ${actMaxLabel(a.maxParties)}.`)}
+                  className="text-xs text-fuchsia-600 underline">remettre le compteur à zéro</button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-gray-500 mr-1">Fonctions :</span>
+              {FEATURES.map((f) => {
+                const on = (a.features || defaults || {})[f.id];
+                return (
+                  <button key={f.id} title={`${f.hint}\nPour les prochaines soirées créées avec ce code.`}
+                    onClick={() => action({ action: "actUpdate", id: a.id, features: { ...(a.features || defaults), [f.id]: !on } })}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
+                    {f.icon} {f.label}
+                  </button>
+                );
+              })}
+              {!a.features && <span className="text-[11px] text-gray-400">(par défaut)</span>}
+            </div>
+            {parties.length > 0 && (
+              <p className="text-xs text-gray-500">
+                🎉 {parties.map((p) => `${p.name} (${formatCode(p.code)})`).join(" · ")}
+              </p>
+            )}
+            {shared === a.id && <ShareBox title={`Code pour ${a.label}`} subject="Votre code d'activation Jukebox"
+              message={activationText({ origin, a })} onClose={() => setShared(null)} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ActivationForm({ defaults, onCreate }) {
+  const [label, setLabel] = useState("");
+  const [max, setMax] = useState(1);
+  const [expiry, setExpiry] = useState("");
+  const [features, setFeatures] = useState(null); // null : fonctions par défaut
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!label.trim()) return;
+    setBusy(true);
+    const ok = await onCreate({
+      label, maxParties: max,
+      expiresAt: expiry ? new Date(Date.now() + Number(expiry) * 864e5).toISOString() : null,
+      features,
+    });
+    setBusy(false);
+    if (ok) { setLabel(""); setFeatures(null); setOpen(false); }
+  };
+  return (
+    <form onSubmit={submit} className="bg-white rounded-2xl border border-purple-100 p-5 space-y-3 text-sm">
+      <h2 className="font-bold text-base text-gray-900">Nouveau code d'activation</h2>
+      <div className="flex flex-wrap gap-2">
+        <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} placeholder="Organisateur (ex. : Max Dupont)"
+          className="flex-1 min-w-[200px] border-2 border-gray-200 rounded-xl px-3 py-2 focus:border-fuchsia-500 outline-none" />
+        <select value={max ?? ""} onChange={(e) => setMax(e.target.value === "" ? null : Number(e.target.value))}
+          className="border-2 border-gray-200 rounded-xl px-3 py-2 font-semibold">
+          {ACT_MAX_CHOICES.map((n) => <option key={n ?? "inf"} value={n ?? ""}>{actMaxLabel(n)}</option>)}
+        </select>
+        <select value={expiry} onChange={(e) => setExpiry(e.target.value)} className="border-2 border-gray-200 rounded-xl px-3 py-2 font-semibold">
+          {ACT_EXPIRY_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <button disabled={busy || !label.trim()} className="bg-fuchsia-600 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-full">
+          {busy ? "Création…" : "Créer le code"}
+        </button>
+      </div>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs text-fuchsia-600 underline">
+        {open ? "Masquer les fonctions" : `Fonctions des soirées : ${features ? "personnalisées" : "par défaut"}`}
+      </button>
+      {open && (
+        <div className="space-y-2">
+          <FeatureToggles value={features || defaults} onChange={setFeatures} />
+          {features && <button type="button" onClick={() => setFeatures(null)} className="text-xs text-gray-400 underline">Revenir aux fonctions par défaut</button>}
+        </div>
+      )}
+    </form>
+  );
+}
+
+/* Message à transmettre : copie, partage (téléphone) ou e-mail. */
+function ShareBox({ title, subject, message, onClose }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4 space-y-2">
+      <p className="font-bold text-gray-900">{title}</p>
+      <pre className="whitespace-pre-wrap break-words bg-white rounded-xl px-3 py-2 text-xs text-gray-700 font-sans">{message}</pre>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(message); setCopied(true); } catch (e) { /* ignoré */ } }}
+          className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copié" : "Copier"}</button>
+        {typeof navigator !== "undefined" && navigator.share && (
+          <button type="button" onClick={async () => { try { await navigator.share({ title: subject, text: message }); } catch (e) { /* annulé */ } }}
+            className="bg-fuchsia-600 text-white text-sm font-bold px-4 py-2 rounded-full">Partager…</button>
+        )}
+        <a href={`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`}
+          className="bg-white border border-gray-200 text-sm font-bold px-4 py-2 rounded-full">✉️ E-mail</a>
+        <button type="button" onClick={onClose} className="text-sm text-gray-400 underline">Fermer</button>
+      </div>
+    </div>
+  );
+}
+
 /* Interrupteurs des fonctions (historique, thème, blind test). */
 function FeatureToggles({ value, onChange }) {
   return (
@@ -481,29 +691,13 @@ function FeatureToggles({ value, onChange }) {
   );
 }
 
-/* Lien régie à transmettre : copie, partage (téléphone) ou e-mail. */
 /* Invitation à transmettre à l'organisateur : adresses de la télécommande et
  * de la régie, code régie (Access.jsx). */
 function InviteBox({ name, code, regieCode, origin, onClose }) {
-  const [copied, setCopied] = useState(false);
-  const message = inviteText({ origin, code, name, regieCode });
-  const share = async () => {
-    try { await navigator.share({ title: `Jukebox « ${name} »`, text: message }); } catch (e) { /* annulé */ }
-  };
   return (
-    <div className="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4 space-y-2">
-      <p className="font-bold text-gray-900">Invitation pour l'organisateur de « {name} »</p>
-      <pre className="whitespace-pre-wrap break-words bg-white rounded-xl px-3 py-2 text-xs text-gray-700 font-sans">{message}</pre>
-      <div className="flex flex-wrap gap-2 items-center">
-        <button onClick={async () => { try { await navigator.clipboard.writeText(message); setCopied(true); } catch (e) { /* ignoré */ } }}
-          className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copiée" : "Copier"}</button>
-        {typeof navigator !== "undefined" && navigator.share && (
-          <button onClick={share} className="bg-fuchsia-600 text-white text-sm font-bold px-4 py-2 rounded-full">Partager…</button>
-        )}
-        <a href={`mailto:?subject=${encodeURIComponent(`Jukebox · soirée « ${name} »`)}&body=${encodeURIComponent(message)}`}
-          className="bg-white border border-gray-200 text-sm font-bold px-4 py-2 rounded-full">✉️ E-mail</a>
-        <button onClick={onClose} className="text-sm text-gray-400 underline">Fermer</button>
-      </div>
+    <div className="mt-4">
+      <ShareBox title={`Invitation pour l'organisateur de « ${name} »`} subject={`Jukebox · soirée « ${name} »`}
+        message={inviteText({ origin, code, name, regieCode })} onClose={onClose} />
     </div>
   );
 }

@@ -5,8 +5,11 @@
  *          ?songs=1&q=…&status=all|todo|ok|missing|blind|lyrics|suspect|dups&mode=…&lang=fr|intl|unknown&decade=1980&sort=added|plays|rank|year|alpha : mémoire des titres.
  *          ?prefill=1 : file du pré-remplissage ; ?playlists=… : playlists Deezer.
  * - POST : { action, ... }
- *     settings { retentionDays?, creationMode?, creationCode?, defaultFeatures?, defaultOptions? }
+ *     settings { retentionDays?, creationMode?, defaultFeatures?, defaultOptions? }
  *     features { code, features } → fonctions activées pour une soirée
+ *     actCreate { label, maxParties?, expiresAt?, features? } → nouveau code d'activation
+ *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
+ *     actDelete { id } → supprimer un code (les soirées créées restent)
  *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
@@ -25,6 +28,7 @@
  *                      (commun avec Clic-Clac)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
@@ -51,12 +55,15 @@ export async function GET(req) {
     if (url.searchParams.get("songs"))
       return Response.json({ songs: await listSongs(Object.fromEntries(url.searchParams)) }, { headers: { "cache-control": "no-store" } });
     const [config, sessions, searches, songs, prefill, enrich] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null)]);
+    // null : table jukebox_activations absente (SQL v19 à appliquer)
+    const activations = await listActivations().catch(() => null);
     return Response.json({
       config,
       searches,
       songs,
       prefill,
       enrich, // titres pas encore enrichis (année, langue)
+      activations,
       sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
@@ -138,6 +145,14 @@ export async function POST(req) {
       case "forgetSong":
         await forgetSong(body.key);
         return Response.json({ ok: true });
+      case "actCreate":
+        return Response.json({ ok: true, activation: await createActivation(body) });
+      case "actUpdate":
+        await updateActivation(body.id, body);
+        return Response.json({ ok: true });
+      case "actDelete":
+        await deleteActivation(body.id);
+        return Response.json({ ok: true });
       case "password": {
         const err = await changeMasterPassword(body.current, body.next);
         if (err) {
@@ -171,6 +186,7 @@ export async function POST(req) {
         return Response.json({ error: "Action inconnue." }, { status: 400 });
     }
   } catch (e) {
+    if (e instanceof ActivationError) return Response.json({ error: e.message }, { status: 400 });
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox super POST:", e);
     return Response.json({ error: "Action impossible." }, { status: 502 });
