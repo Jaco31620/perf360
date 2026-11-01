@@ -72,7 +72,7 @@ export default function Ecran({ code, sound: wantSound }) {
   // mode son : le moteur voit le titre en cours et la file complets
   const engineData = sound && data?.engine
     ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null;
-  const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data, autoResume: true });
+  const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data, autoResume: true, single: true }); // télé : un seul décodeur vidéo
 
   // Mode son : lancement automatique ; si le navigateur de la télé bloque le
   // son sans geste (vidéo qui ne démarre pas), on affiche le bouton « Lancer ».

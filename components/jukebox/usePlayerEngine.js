@@ -14,6 +14,10 @@
  * Pauses involontaires (autoResume, télé en mode son) : si la vidéo se met en
  * pause sans qu'on l'ait demandé (télé, YouTube, économie d'énergie), elle est
  * relancée ; un chargement bloqué plus de 12 s est relancé aussi.
+ * Un seul lecteur (single, télé en mode son) : beaucoup de télés n'ont qu'un
+ * décodeur vidéo, charger le titre suivant dans un 2e lecteur met le 1er en
+ * pause. Pas de préchargement : le son baisse sur la fin du titre (fondu),
+ * puis le suivant est chargé dans le même lecteur et le son remonte.
  * `data` : état de la soirée vu par la régie (titre en cours et file complets) ;
  * `act` : actions régie (useAdminActions) ; `enabled` : conteneurs des
  * lecteurs (playerEls) affichés.
@@ -29,7 +33,7 @@ const loadArgs = (t, from) => {
   return { videoId: t.videoId, startSeconds: Math.max(start, from || 0), ...(trimmed && end ? { endSeconds: end } : {}) };
 };
 
-export function usePlayerEngine({ code, data, act, enabled, autoResume = false }) {
+export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false }) {
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -128,8 +132,34 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false }
     }, 100);
   };
 
+  // Un seul lecteur : le son remonte au début du titre suivant.
+  const fadeIn = (sec) => {
+    const p = cur();
+    if (!sec) { p.setVolume(master.current); return; }
+    p.setVolume(0);
+    const t0 = Date.now();
+    const id = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / (sec * 1000));
+      p.setVolume(Math.round(master.current * k));
+      if (k >= 1) clearInterval(id);
+    }, 100);
+  };
+
   // Fin du titre (fin de la vidéo, ou fin de la partie gardée si rognée).
   const ended = () => {
+    const next = dataRef.current?.queue?.[0];
+    if (single && next) {
+      // le suivant tout de suite dans le même lecteur, sans attendre le serveur
+      const from = loaded.current;
+      switching.current = { from, to: next.id, until: Date.now() + 15000 };
+      loaded.current = next.id;
+      loadedVideo.current = next.videoId;
+      wantPlay.current = true;
+      fadeIn(Math.min(3, dataRef.current?.session?.fade || 0));
+      cur().loadVideoById(loadArgs(next));
+      advance(false, from);
+      return;
+    }
     // suivant déjà préchargé : on enchaîne tout de suite, sans attendre le serveur
     if (primed.current?.ready && primed.current.id === dataRef.current?.queue?.[0]?.id) {
       const from = loaded.current;
@@ -240,6 +270,11 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false }
       if (span.trimmed && rem <= 0.3 && !(fadeSec > 0 && primed.current?.ready && next)) {
         if (!next) { wantPlay.current = false; p.pauseVideo(); } // rien après : on s'arrête là
         ended();
+        return;
+      }
+      if (single) {
+        // fondu sur un seul lecteur : le son baisse sur les dernières secondes
+        if (fadeSec > 0 && next && rem <= fadeSec) p.setVolume(Math.round(master.current * Math.max(0, rem / fadeSec)));
         return;
       }
       if (!next) { dropPrimed(); return; }
