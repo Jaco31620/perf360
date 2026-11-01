@@ -130,7 +130,7 @@ export async function POST(req, { params }) {
       if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
       const yt = await youtubeForSong(song, publicSession(s).searchMode);
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
-      v = { id: yt.id, title: song.title, channel: song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration };
+      v = { id: yt.id, title: song.title, channel: song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };
     } else {
       // chansons uniquement pour les invités ; la régie peut ajouter n'importe quelle vidéo jouable
       const { video, reason } = await ytVideo(videoId, { musicOnly: !admin });
@@ -142,7 +142,7 @@ export async function POST(req, { params }) {
 
     const { error } = await sb.from("jukebox_tracks").insert({
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,
-      duration: v.duration, participant_id: pid, author: author || "Régie",
+      duration: v.duration, video_title: v.videoTitle || v.title || null, participant_id: pid, author: author || "Régie",
       ...(dedication && publicSession(s).dedications ? { dedication } : {}),
       position: publicSession(s).fairQueue ? fairPosition(rows.filter((r) => r.status === "queued"), pid) : Date.now(),
     });

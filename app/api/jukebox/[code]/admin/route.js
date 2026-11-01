@@ -175,7 +175,7 @@ export async function POST(req, { params }) {
         if (!video) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
         const key = await findSongKey(t.video_id, mode);
         res = await tracks().update({
-          video_id: video.id, duration: video.duration,
+          video_id: video.id, duration: video.duration, video_title: video.title || null,
           ...(String(t.thumb || "").includes("ytimg") ? { thumb: video.thumb } : {}), // pochette Deezer conservée
         }).eq("id", t.id);
         if (!res.error && key) await rememberSong(key, video, null, false); // corrigé pour les prochaines soirées, à valider dans le super-admin
@@ -289,7 +289,7 @@ export async function POST(req, { params }) {
         if (active?.length) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
         res = await tracks().insert({
           session_id: s.id, video_id: t.video_id, title: t.title, channel: t.channel, thumb: t.thumb,
-          duration: t.duration, participant_id: "regie-replay", author: t.author, position: Date.now(),
+          duration: t.duration, video_title: t.video_title || null, participant_id: "regie-replay", author: t.author, position: Date.now(),
         });
         break;
       }

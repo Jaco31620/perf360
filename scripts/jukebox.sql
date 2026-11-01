@@ -190,3 +190,5 @@ alter table public.jukebox_songs
   add column if not exists video_title text;
 alter table public.jukebox_songs
   add column if not exists video_channel text;
+alter table public.jukebox_tracks
+  add column if not exists video_title text;
