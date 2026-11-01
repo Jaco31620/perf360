@@ -42,6 +42,7 @@ export default function SuperAdmin() {
   const [origin, setOrigin] = useState("");
   const [link, setLink] = useState(null); // { name, code, regieCode } invitation à transmettre à l'organisateur
   const [filter, setFilter] = useState("");
+  const [actFilter, setActFilter] = useState(""); // recherche de l'onglet Codes
   const [focus, setFocus] = useState(null); // { on: "memory" | "queue", at } : tuile cliquée
   const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
@@ -160,7 +161,7 @@ export default function SuperAdmin() {
             load();
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
-          {nSessions > 5 && (
+          {(nSessions > 5 || filter) && (
             <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher une soirée (nom, code ou organisateur)" className="mt-4 w-full" />
           )}
           <div className="space-y-3 mt-4">
@@ -175,7 +176,7 @@ export default function SuperAdmin() {
                   {s.organizer && (
                     <p className="text-xs text-gray-600">
                       👤 {s.organizer}
-                      <button onClick={() => { chooseTab("codes"); }} className="ml-2 text-fuchsia-600 underline">code d'activation</button>
+                      <button onClick={() => { setActFilter(s.organizer); chooseTab("codes"); window.scrollTo({ top: 0 }); }} className="ml-2 text-fuchsia-600 underline">voir son code</button>
                     </p>
                   )}
                   <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
@@ -216,7 +217,8 @@ export default function SuperAdmin() {
       )}
 
       {tab === "codes" && data && (
-        <Activations list={data.activations} sessions={data.sessions} defaults={cfg?.defaultFeatures} origin={origin}
+        <Activations list={data.activations} filter={actFilter} setFilter={setActFilter}
+          onOpenParty={(code) => { setFilter(code); chooseTab("soirees"); window.scrollTo({ top: 0 }); }} sessions={data.sessions} defaults={cfg?.defaultFeatures} origin={origin}
           creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
       )}
 
@@ -499,9 +501,8 @@ function activationText({ origin, a }) {
   ].join("\n");
 }
 
-function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes }) {
+function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
   const [shared, setShared] = useState(null); // code dont le message est affiché
-  const [filter, setFilter] = useState("");
   if (list == null) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
@@ -526,7 +527,7 @@ function Activations({ list, sessions, defaults, origin, creationMode, action, o
         if (d?.activation) setShared(d.activation.id);
         return !!d;
       }} />
-      {list.length > 5 && <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher (organisateur ou code)" className="w-full" />}
+      {(list.length > 5 || filter) && <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher (organisateur ou code)" className="w-full" />}
       {list.length === 0 && <p className="text-gray-400 text-center py-8">Aucun code d'activation.</p>}
       {shown.map((a) => {
         const parties = sessions.filter((s) => s.activationId === a.id);
@@ -592,9 +593,18 @@ function Activations({ list, sessions, defaults, origin, creationMode, action, o
               {!a.features && <span className="text-[11px] text-gray-400">(par défaut)</span>}
             </div>
             {parties.length > 0 && (
-              <p className="text-xs text-gray-500">
-                🎉 {parties.map((p) => `${p.name} (${formatCode(p.code)})`).join(" · ")}
-              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-gray-500 mr-1">🎉 Soirées :</span>
+                {parties.map((p) => (
+                  <button key={p.code} onClick={() => onOpenParty(p.code)} title="Gérer cette soirée (régie, écran, invitation, réglages)"
+                    className="text-xs font-semibold bg-purple-50 hover:bg-fuchsia-100 text-gray-800 px-2.5 py-1 rounded-full">
+                    {p.name} <span className="font-mono text-fuchsia-600">{formatCode(p.code)}</span> →
+                  </button>
+                ))}
+              </div>
+            )}
+            {a.used > parties.length && (
+              <p className="text-[11px] text-gray-400">{a.used - parties.length} soirée{a.used - parties.length > 1 ? "s" : ""} déjà supprimée{a.used - parties.length > 1 ? "s" : ""}.</p>
             )}
             {shared === a.id && <ShareBox title={`Code pour ${a.label}`} subject="Votre code d'activation Jukebox"
               message={activationText({ origin, a })} onClose={() => setShared(null)} />}
