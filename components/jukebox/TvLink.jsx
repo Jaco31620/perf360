@@ -7,7 +7,7 @@
  * musique ; le jeton régie lui est transmis).
  */
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X, ZoomIn } from "lucide-react";
 import { getAdminToken } from "./storage";
 
 const pairFrom = (text) => {
@@ -150,6 +150,16 @@ export default function TvLink({ code, onClose, defaultSound = true, beat = null
     track?.applyConstraints({ advanced: [{ zoom: value }] }).catch(() => {});
   }, [zoom, zoomRange, camera]);
   const zoomMax = zoomRange ? zoomRange.max : 4;
+  // pincer pour zoomer (deux doigts sur l'image)
+  const pinch = useRef(null);
+  const fingers = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  const onTouchStart = (e) => { if (e.touches.length === 2) pinch.current = { d: fingers(e), z: zoomRef.current }; };
+  const onTouchMove = (e) => {
+    if (e.touches.length !== 2 || !pinch.current) return;
+    const z = Math.min(zoomMax, Math.max(1, pinch.current.z * fingers(e) / pinch.current.d));
+    setZoom(Math.round(z * 10) / 10);
+  };
+  const onTouchEnd = (e) => { if (e.touches.length < 2) pinch.current = null; };
 
   const close = () => { stop(); onClose(); };
   const choice = (on, label, hint) => (
@@ -187,19 +197,22 @@ export default function TvLink({ code, onClose, defaultSound = true, beat = null
               {choice(false, "📺 Affichage seul", "Le son reste sur la régie")}
             </div>
             {camera === "on" ? (
-              <div className="relative rounded-2xl overflow-hidden bg-black aspect-square">
+              <div className="relative rounded-2xl overflow-hidden bg-black aspect-square touch-none"
+                onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
                 <video ref={video} playsInline muted className="absolute inset-0 w-full h-full object-cover"
                   style={!zoomRange && zoom > 1 ? { transform: `scale(${zoom})` } : undefined} />
                 <div className="absolute inset-[15%] border-4 border-white/70 rounded-2xl pointer-events-none" />
-                <p className="absolute bottom-2 inset-x-0 text-center text-xs text-white/80">{busy ? "Connexion…" : "Visez le QR code de la télé"}</p>
-              </div>
-            ) : null}
-            {camera === "on" ? (
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 4].filter((z) => z <= zoomMax).map((z) => (
-                  <button key={z} type="button" onClick={() => setZoom(z)}
-                    className={`flex-1 rounded-full py-2 text-sm font-bold ${Math.round(zoom) === z ? "bg-fuchsia-600" : "bg-white/10"}`}>×{z}</button>
-                ))}
+                {/* zoom bien visible, sur l'image : boutons + pincement */}
+                <div className="absolute top-2 inset-x-2 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur p-1">
+                  <ZoomIn size={18} className="shrink-0 ml-1.5 text-white" />
+                  {[1, 2, 3, 4].filter((z) => z <= zoomMax).map((z) => (
+                    <button key={z} type="button" onClick={() => setZoom(z)}
+                      className={`flex-1 rounded-full py-1.5 text-sm font-bold ${Math.round(zoom) === z ? "bg-fuchsia-600 text-white" : "text-white/85 hover:bg-white/15"}`}>×{z}</button>
+                  ))}
+                </div>
+                <p className="absolute bottom-2 inset-x-0 text-center text-xs text-white/90 drop-shadow">
+                  {busy ? "Connexion…" : <>Visez le QR code de la télé · <b>trop loin ? zoomez</b> (boutons ou 2 doigts){zoom > 1 && !Number.isInteger(zoom) ? ` · ×${zoom}` : ""}</>}
+                </p>
               </div>
             ) : (
               <button onClick={startCamera} className="w-full font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-3">📷 Scanner le QR code de la télé</button>
