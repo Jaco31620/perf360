@@ -56,9 +56,29 @@ function deviceId(code) {
 }
 const NB = (single) => (single ? 1 : 2);
 
+/* Onglet dupliqué : il hérite du sessionStorage, donc du même identifiant de
+ * lecteur (deux sons à la fois). Les onglets se signalent leur identifiant ;
+ * le nouveau venu qui retrouve le sien chez un autre en change. */
+function watchDuplicate(code, idRef) {
+  if (typeof BroadcastChannel === "undefined") return () => {};
+  const ch = new BroadcastChannel(`jukebox:player:${code}`);
+  ch.onmessage = (e) => {
+    const m = e.data || {};
+    if (m.type === "hello" && m.id === idRef.current) ch.postMessage({ type: "taken", id: m.id, nonce: m.nonce });
+    if (m.type === "taken" && m.id === idRef.current && m.nonce === nonce) {
+      idRef.current = Math.random().toString(36).slice(2, 12);
+      try { sessionStorage.setItem(`jukebox:player:${code}`, idRef.current); } catch (err) { /* ignoré */ }
+    }
+  };
+  const nonce = Math.random().toString(36).slice(2);
+  ch.postMessage({ type: "hello", id: idRef.current, nonce });
+  return () => ch.close();
+}
+
 export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false, kind = "pc" }) {
   const myId = useRef(null);
   if (myId.current === null && typeof window !== "undefined") myId.current = deviceId(code);
+  useEffect(() => watchDuplicate(code, myId), [code]);
   const claimNext = useRef(false); // prochain envoi d'état : « je prends le son »
   const mySince = useRef(null); // heure (serveur) de notre prise du son
   const [yielded, setYielded] = useState(false); // un autre appareil a pris le son
@@ -84,6 +104,8 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   const setLoaded = (id) => { loaded.current = id; setCurrentId(id); };
   const loadedVideo = useRef(null); // sa vidéo (peut être corrigée en cours de soirée)
   const advancing = useRef(false);
+  const pendingSkip = useRef(false); // erreur de lecture arrivée pendant un « suivant »
+  const lastRetry = useRef(0); // dernière relance après un titre terminé resté sans suite
   // la lecture doit-elle tourner ? (faux après une pause demandée par la
   // régie ou la télécommande) — sert à repérer les pauses involontaires
   const wantPlay = useRef(false);
@@ -105,7 +127,11 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
         await new Promise((r) => setTimeout(r, 1500));
       }
     } finally { advancing.current = false; }
+    // vidéo illisible signalée pendant l'appel : on la saute maintenant
+    if (pendingSkip.current) { pendingSkip.current = false; setTimeout(() => advanceRef.current(true, loaded.current), 0); }
   }, [act]);
+  const advanceRef = useRef(advance);
+  advanceRef.current = advance;
 
   // Position de lecture transmise à l'écran d'affichage (qui suit en muet) :
   // à chaque lecture / pause et toutes les 5 s. Sans titre en cours : signe de
@@ -254,7 +280,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       }
     },
     error: (i) => {
-      if (i === active.current) advance(true); // lecture bloquée, vidéo retirée…
+      if (i === active.current) { if (advancing.current) pendingSkip.current = true; else advance(true); } // lecture bloquée, vidéo retirée…
       else if (primed.current?.idx === i) primed.current = null;
     },
   };
@@ -328,6 +354,12 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
         p.seekTo(p.getCurrentTime(), true);
         p.playVideo();
       }
+      // titre terminé mais le serveur n'a pas suivi (réseau coupé pendant le « suivant ») : relance toutes les 5 s
+      if (now && loaded.current === now.id && p.getPlayerState?.() === 0 && !advancing.current && !switching.current && Date.now() - lastRetry.current > 5000) {
+        lastRetry.current = Date.now();
+        console.warn("jukebox: titre terminé sans suite, relance du suivant");
+        advance(false, now.id);
+      }
       if (!now || fading.current || loaded.current !== now.id || p.getPlayerState() !== 1) return;
       const fadeSec = d.session.fade;
       const span = playSpan(now);
@@ -375,6 +407,9 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   };
 
   const start = () => {
+    // volume repris (rechargement, passage du son d'un appareil à l'autre)
+    const v = data?.playback?.volume;
+    if (Number.isFinite(v) && v >= 0 && v <= 100) { master.current = v; setVolume(v); }
     setStarted(true);
     setYielded(false);
     wantPlay.current = true;
@@ -401,18 +436,24 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     volumeReport.current = setTimeout(report, 400); // la télécommande affiche le volume
   };
 
-  // Ordres de la télécommande. Celui déjà présent à l'ouverture est ignoré.
-  const lastCommand = useRef(undefined);
+  // Ordres de la télécommande, tous appliqués dans l'ordre (liste des derniers
+  // ordres). Ceux déjà présents à l'ouverture sont ignorés.
+  const lastCommand = useRef(undefined); // horodatage du dernier ordre traité
   useEffect(() => {
     if (!data?.admin) return;
     const c = data.command;
-    if (lastCommand.current === undefined) { lastCommand.current = c?.id ?? null; return; }
-    if (!c || c.id === lastCommand.current) return;
-    lastCommand.current = c.id;
+    const ts = (x) => parseInt(String(x?.id || "0"), 10) || 0;
+    const list = Array.isArray(c?.list) ? c.list : c ? [c] : [];
+    if (lastCommand.current === undefined) { lastCommand.current = ts(c); return; }
+    const fresh = list.filter((x) => ts(x) > lastCommand.current).sort((a, b) => ts(a) - ts(b));
+    if (!fresh.length) return;
+    lastCommand.current = ts(fresh[fresh.length - 1]);
     if (!started || !ready) return;
-    if (c.type === "pause") { wantPlay.current = false; cur().pauseVideo(); }
-    else if (c.type === "play") { wantPlay.current = true; cur().playVideo(); }
-    else if (c.type === "volume") changeVolume(c.value);
+    for (const x of fresh) {
+      if (x.type === "pause") { wantPlay.current = false; cur().pauseVideo(); }
+      else if (x.type === "play") { wantPlay.current = true; cur().playVideo(); }
+      else if (x.type === "volume") changeVolume(x.value);
+    }
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Blind test : titre suivant N s après la réponse dévoilée (réglage « Titre suivant »).

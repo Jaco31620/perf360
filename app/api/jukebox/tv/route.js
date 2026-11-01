@@ -49,6 +49,9 @@ export async function POST(req) {
     if (token) {
       if (!(await adminAccess({ headers: new Headers({ "x-jukebox-admin": String(token) }) }, s)).ok)
         return Response.json({ error: "Accès régie refusé." }, { status: 403 });
+      // anciennes télés jumelées qui ne se sont plus manifestées depuis 12 h : retirées (la liste ne s'allonge plus)
+      await getSupabaseAdmin().from("jukebox_devices").delete().eq("session_id", s.id).eq("label", "Télé (mode son)")
+        .lt("last_seen", new Date(Date.now() - 12 * 3600e3).toISOString());
       tvToken = await createDevice(s.id, "Télé (mode son)");
     }
     const { error } = await getSupabaseAdmin().from("jukebox_config")

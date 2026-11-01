@@ -175,6 +175,7 @@ export default function Regie({ code }) {
                   className="bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 text-white text-xl font-bold px-8 py-4 rounded-full">
                   {ready ? <span className="inline-flex items-center gap-2"><Play size={22} fill="currentColor" strokeWidth={0} />{now ? "Reprendre la musique" : "Lancer la musique"}</span> : "Chargement du lecteur…"}
                 </button>
+                <p className="text-xs text-white/50 max-w-sm">💡 Pendant la soirée, gardez cet onglet au premier plan et l'ordinateur sur secteur : en arrière-plan, le navigateur ralentit la page (titres qui démarrent en retard).</p>
               </div>
             )}
             {started && !now && (

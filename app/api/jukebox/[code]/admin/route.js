@@ -179,7 +179,10 @@ export async function POST(req, { params }) {
         if (!["pause", "play", "volume"].includes(body.type))
           return Response.json({ error: "Commande inconnue." }, { status: 400 });
         const value = body.type === "volume" ? Math.min(100, Math.max(0, Math.round(Number(body.value) || 0))) : null;
-        res = await update({ command: { id: `${receivedAt}-${Math.random().toString(36).slice(2, 8)}`, type: body.type, value } });
+        // les 6 derniers ordres sont gardés : pause puis volume dans la même seconde ne s'écrasent plus
+        const cmd = { id: `${receivedAt}-${Math.random().toString(36).slice(2, 8)}`, type: body.type, value };
+        const list = [...(Array.isArray(s.command?.list) ? s.command.list : []), cmd].slice(-6);
+        res = await update({ command: { ...cmd, list } });
         break;
       }
       case "playnow": {
