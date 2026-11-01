@@ -115,6 +115,15 @@ export default function Regie({ code }) {
   ];
   const shown = tabs.some((t) => t.id === tab) ? tab : "queue"; // onglet retiré (blind test coupé)
   const remote = !started && !!otherOwner; // le son est joué par un autre appareil (télé)
+  // « Renvoyer le son sur la télé » : la télé (affichage seul, avec accès son) le reprend
+  const [handoffAt, setHandoffAt] = useState(null);
+  useEffect(() => { if (remote) setHandoffAt(null); }, [remote]);
+  useEffect(() => {
+    if (!handoffAt) return;
+    const t = setTimeout(() => setHandoffAt((h) => (h === handoffAt ? -1 : h)), 15000);
+    return () => clearTimeout(t);
+  }, [handoffAt]);
+  const sendToTv = () => { const t = Date.now(); setHandoffAt(t); act("handoff", { to: "tv" }, true); };
   const pb = data.playback;
   const remotePlaying = !!(remote && now && pb?.id === now.id && pb.playing);
   const remoteVol = remoteVolume ?? pb?.volume ?? 100;
@@ -204,7 +213,16 @@ export default function Regie({ code }) {
                 <PlayPauseButton playing={playing} onClick={togglePlay} disabled={!now} />
                 <SkipButton onClick={() => advance(true)} disabled={!now} />
                 <VolumeSlider value={volume} onChange={changeVolume} className="w-36 ml-1" />
+                {now && (handoffAt && handoffAt > 0 ? (
+                  <span className="ml-auto text-xs text-white/50">📺 En attente de la télé…</span>
+                ) : (
+                  <button onClick={sendToTv} className="ml-auto text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5"
+                    title="Une télé ouverte sur l'écran de la soirée (jumelée en « Affichage + son ») reprend la musique">📺 Renvoyer le son sur la télé</button>
+                ))}
               </div>
+            )}
+            {started && handoffAt === -1 && (
+              <p className="text-xs text-amber-300">Aucune télé n'a repris le son. La télé doit afficher l'écran de la soirée et avoir été jumelée en « 🔊 Affichage + son » au moins une fois (sinon : 📺 Connecter une télé → Affichage + son).</p>
             )}
             {remote && (
               <div className="flex items-center gap-3" title={`Pilote ${ownerName}`}>

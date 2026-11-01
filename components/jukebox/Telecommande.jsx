@@ -139,6 +139,11 @@ export default function Telecommande({ code }) {
               📱 Télécommande · code <span className="font-mono">{formatCode(code)}</span>
               {playerSeen && pb.player && <> · <span className="text-white/70">🔊 son sur {pb.player.kind === "tv" ? "la télé" : "l'ordinateur"}</span></>}
             </p>
+            {playerSeen && pb.player?.kind === "pc" && (
+              pb.handoff && Date.now() - pb.handoff.at < 20000
+                ? <p className="text-[11px] text-white/50 mt-0.5">📺 Envoi du son à la télé…</p>
+                : <button onClick={() => act("handoff", { to: "tv" }, true)} className="mt-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1">📺 Mettre le son sur la télé</button>
+            )}
           </div>
           <GuestsSwitch open={session.status === "open"} act={act} />
         </div>

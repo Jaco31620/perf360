@@ -127,8 +127,16 @@ export async function POST(req, { params }) {
         if (me && holder && holder.id !== me.id && alive && !body.claim)
           return Response.json({ ok: false, owner: holder });
         const player = me ? { ...me, since: body.claim || !holder || holder.id !== me.id ? receivedAt : holder.since } : holder;
-        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}) } });
+        // demande « renvoyer le son sur la télé » gardée 30 s (jusqu'à ce qu'une télé le prenne)
+        const ho = s.playback?.handoff;
+        const handoff = ho && !body.claim && receivedAt - (Number(ho.at) || 0) < 30000 ? { handoff: ho } : {};
+        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}), ...handoff } });
         if (!res.error) return Response.json({ ok: true, since: player?.since ?? null });
+        break;
+      }
+      case "handoff": { // l'ordinateur rend le son : une télé en affichage seul (avec accès son) le reprend
+        if (!s.playback) return Response.json({ error: "Rien n'est en cours de lecture." }, { status: 400 });
+        res = await update({ playback: { ...s.playback, handoff: { to: "tv", at: receivedAt } } });
         break;
       }
       case "command": {

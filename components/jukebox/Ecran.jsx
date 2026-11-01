@@ -91,6 +91,12 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
     if (claim) history.replaceState(null, "", `/jukebox/${code}/ecran?son=1`); // rechargement : reprise normale
   }, [sound, engine.ready]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (engine.yielded) displayOnly(); }, [engine.yielded]); // eslint-disable-line react-hooks/exhaustive-deps
+  // affichage seul : la régie ou la télécommande renvoie le son sur la télé
+  const handoff = data?.playback?.handoff;
+  useEffect(() => {
+    if (sound || !canSound || !handoff || handoff.to !== "tv" || !data?.serverTime) return;
+    if (data.serverTime - handoff.at < 30000) takeSound();
+  }, [handoff?.at, canSound, sound]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sound || !engine.started) return;
     let since = null;
