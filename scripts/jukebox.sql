@@ -183,3 +183,10 @@ create index if not exists jukebox_devices_session_idx
   on public.jukebox_devices(session_id);
 alter table public.jukebox_devices enable row level security;
 grant all on public.jukebox_devices to service_role;
+
+-- v17 (01/11/2026) : titre et chaîne d'origine de la vidéo YouTube retenue
+-- (affichés en petit dans le super-admin sous le libellé Deezer).
+alter table public.jukebox_songs
+  add column if not exists video_title text;
+alter table public.jukebox_songs
+  add column if not exists video_channel text;

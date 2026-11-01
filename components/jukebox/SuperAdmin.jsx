@@ -697,6 +697,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                       className="block max-w-full text-left text-sm font-semibold text-gray-900 truncate hover:text-fuchsia-700">
                       {s.label || <span className="text-gray-400 font-mono text-xs">{s.key}</span>}
                     </button>
+                    <VideoTitle song={s} className="truncate" />
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
                       {s.missing
@@ -1075,6 +1076,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
             <div>
               <button onClick={() => onRetitle(song)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
                 className="text-left text-lg font-bold text-gray-900 hover:text-fuchsia-700 leading-snug">{song.label || song.key}</button>
+              <VideoTitle song={song} />
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(song.mode)}</span>
                 {song.missing
@@ -1212,5 +1214,15 @@ function SearchInput({ value, onChange, placeholder, className = "" }) {
           className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs font-bold leading-6 text-center">✕</button>
       )}
     </div>
+  );
+}
+
+/* Titre d'origine de la vidéo YouTube (et sa chaîne), en petit sous le libellé. */
+function VideoTitle({ song, className = "" }) {
+  if (!song.videoTitle) return null;
+  return (
+    <p className={`text-[11px] text-gray-400 ${className}`} title={`Vidéo YouTube : ${song.videoTitle}${song.videoChannel ? ` · ${song.videoChannel}` : ""}`}>
+      ▶ {song.videoTitle}{song.videoChannel && <span className="text-gray-300"> · {song.videoChannel}</span>}
+    </p>
   );
 }
