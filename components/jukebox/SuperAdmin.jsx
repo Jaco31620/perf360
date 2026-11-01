@@ -160,8 +160,7 @@ export default function SuperAdmin() {
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
           {nSessions > 5 && (
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Rechercher une soirée (nom ou code)"
-              className="mt-4 w-full border-2 border-gray-200 bg-white rounded-full px-4 py-2 text-sm focus:border-fuchsia-500 outline-none" />
+            <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher une soirée (nom ou code)" className="mt-4 w-full" />
           )}
           <div className="space-y-3 mt-4">
             {data && nSessions === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
@@ -671,8 +670,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
               <option value="unknown">❓ Année inconnue</option>
             </select>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un artiste, un titre…"
-              className="flex-1 min-w-[180px] border-2 border-gray-200 rounded-full px-4 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
+            <SearchInput value={q} onChange={setQ} placeholder="Rechercher un artiste, un titre…" className="flex-1 min-w-[180px]" />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
@@ -1201,3 +1199,18 @@ function SongTitleChooser({ song, call, onClose, onDone }) {
 }
 
 const modeLabel = (m) => SEARCH_MODES.find((x) => x.id === m)?.label || m;
+
+/* Champ de recherche avec croix pour l'effacer (Échap efface aussi). */
+function SearchInput({ value, onChange, placeholder, className = "" }) {
+  return (
+    <div className={`relative ${className}`}>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        onKeyDown={(e) => { if (e.key === "Escape" && value) { e.stopPropagation(); onChange(""); } }}
+        className="w-full border-2 border-gray-200 bg-white rounded-full pl-4 pr-9 py-1.5 text-sm focus:border-fuchsia-500 outline-none" />
+      {value && (
+        <button type="button" onClick={() => onChange("")} aria-label="Effacer la recherche" title="Effacer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs font-bold leading-6 text-center">✕</button>
+      )}
+    </div>
+  );
+}
