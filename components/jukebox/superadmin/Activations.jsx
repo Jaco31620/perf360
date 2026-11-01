@@ -1,4 +1,5 @@
 "use client";
+import { activationText as buildActivationText } from "@/lib/jukeboxMessages";
 import { useState } from "react";
 import { formatCode } from "../storage";
 import { FEATURES } from "@/lib/jukebox";
@@ -19,19 +20,11 @@ const actMaxLabel = (n) => (n == null ? "Illimité" : `${n} soirée${n > 1 ? "s"
 const fmtDay = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const dayInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
 
-function activationText({ origin, a }) {
-  const link = `${origin}/jukebox?activation=${a.code}`;
-  const host = origin.replace(/^https?:\/\//, "");
-  return [
-    `Bonjour ${a.label},`,
-    "",
-    `Voici votre code d'activation Jukebox : ${a.code}`,
-    `Il vous permet de créer ${a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties)}${a.expiresAt ? `, jusqu'au ${fmtDay(a.expiresAt)}` : ""}.`,
-    "",
-    `Pour lancer une soirée : ${link}`,
-    `Depuis un téléphone, vous arrivez sur la télécommande ; pour la musique, ouvrez ${host}/tv sur la télé (ou la régie sur un ordinateur).`,
-  ].join("\n");
-}
+const activationText = ({ origin, a }) => buildActivationText({
+  origin, code: a.code, label: a.label,
+  partiesText: a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties),
+  expiresText: a.expiresAt ? fmtDay(a.expiresAt) : null,
+});
 
 export function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
   const [shared, setShared] = useState(null); // code dont le message est affiché

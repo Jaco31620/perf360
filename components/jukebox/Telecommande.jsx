@@ -20,6 +20,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { formatDuration, playSpan, HANDOFF_MS } from "@/lib/jukebox";
 import History from "./History";
 import TvLink, { tvBeat } from "./TvLink";
+import GuestShare from "./GuestShare";
 import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
@@ -226,6 +227,7 @@ export default function Telecommande({ code }) {
                 <button onClick={() => setHistoryOpen(true)} className="col-span-2 font-bold bg-white/10 active:bg-white/20 rounded-2xl py-3 text-sm">🕘 Historique de la soirée</button>
               )}
             </div>
+            <GuestShare code={code} name={session.name} />
             <AccessPanel code={code} name={session.name} />
             <section className="bg-white/5 rounded-2xl p-4 space-y-3 text-sm">
               <Settings session={session} act={act} />

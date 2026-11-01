@@ -5,22 +5,15 @@
  *  - useJoinPass : QR « Ajouter un appareil » (#j=<passe> dans l'adresse) ;
  *  - AccessPanel : code régie à communiquer, invitation, ajout d'un appareil
  *    par QR à usage unique, appareils autorisés (retrait), nouveau code ;
- *  - inviteText : message prêt à envoyer à l'organisateur.
+ *  (message pour l'organisateur : lib/jukeboxMessages.js)
  */
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
+import { inviteText } from "@/lib/jukeboxMessages";
 
 export const fmtRegieCode = (c) => (c ? `${c.slice(0, 3)} ${c.slice(3)}` : "…");
 
-export function inviteText({ origin, code, name, regieCode }) {
-  const base = `${origin}/jukebox/${code}`;
-  return `🎶 Jukebox · soirée « ${name} »\n\n`
-    + `📱 Télécommande (téléphone) : ${base}/telecommande\n`
-    + `💻 Régie (ordinateur branché à la sono) : ${base}/regie\n`
-    + `🔑 Code régie : ${fmtRegieCode(regieCode)}\n\n`
-    + `Pour les invités : ${base} (code ${formatCode(code)}). Ne leur donnez pas le code régie.`;
-}
 
 async function join(code, body) {
   const res = await fetch(`/api/jukebox/${code}/join`, {

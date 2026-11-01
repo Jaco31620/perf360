@@ -20,6 +20,7 @@ import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButto
 import { Play } from "lucide-react";
 import History from "./History";
 import TvLink, { tvBeat } from "./TvLink";
+import GuestShare from "./GuestShare";
 import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
@@ -280,6 +281,7 @@ export default function Regie({ code }) {
               <button onClick={() => setTvOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">
                 📺 Connecter une télé (perf360.fr/tv)
               </button>
+              <GuestShare code={code} name={session.name} />
               <AccessPanel code={code} name={session.name} />
               <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-white/10 text-xs text-white/50">
                 <button onClick={() => confirm("Vider la file et arrêter le titre en cours ?") && act("reset")} className="hover:text-white">Vider la file</button>

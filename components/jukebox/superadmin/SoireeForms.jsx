@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { inviteText } from "../Access";
+import { inviteText } from "@/lib/jukeboxMessages";
+import ShareActions from "../ShareActions";
 import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel } from "@/lib/jukebox";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS } from "@/lib/jukeboxBlind";
 
@@ -144,22 +145,14 @@ export function SoireeFields({ value, features, onChange }) {
 
 /* Message à transmettre : copie, partage (téléphone) ou e-mail. */
 export function ShareBox({ title, subject, message, onClose }) {
-  const [copied, setCopied] = useState(false);
   return (
     <div className="bg-fuchsia-50 border border-fuchsia-200 rounded-2xl p-4 space-y-2">
-      <p className="font-bold text-gray-900">{title}</p>
-      <pre className="whitespace-pre-wrap break-words bg-white rounded-xl px-3 py-2 text-xs text-gray-700 font-sans">{message}</pre>
-      <div className="flex flex-wrap gap-2 items-center">
-        <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(message); setCopied(true); } catch (e) { /* ignoré */ } }}
-          className="bg-gray-900 text-white text-sm font-bold px-4 py-2 rounded-full">{copied ? "✓ Copié" : "Copier"}</button>
-        {typeof navigator !== "undefined" && navigator.share && (
-          <button type="button" onClick={async () => { try { await navigator.share({ title: subject, text: message }); } catch (e) { /* annulé */ } }}
-            className="bg-fuchsia-600 text-white text-sm font-bold px-4 py-2 rounded-full">Partager…</button>
-        )}
-        <a href={`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`}
-          className="bg-white border border-gray-200 text-sm font-bold px-4 py-2 rounded-full">✉️ E-mail</a>
-        <button type="button" onClick={onClose} className="text-sm text-gray-400 underline">Fermer</button>
+      <div className="flex items-start gap-3">
+        <p className="flex-1 font-bold text-gray-900">{title}</p>
+        <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700" aria-label="Fermer">✕</button>
       </div>
+      <pre className="whitespace-pre-wrap break-words bg-white rounded-xl px-3 py-2 text-xs text-gray-700 font-sans">{message}</pre>
+      <ShareActions subject={subject} message={message} />
     </div>
   );
 }

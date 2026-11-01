@@ -259,6 +259,10 @@ export default function JukeboxHome() {
             </button>
           </div>
         )}
+
+        <p className="mt-8 text-center">
+          <Link href="/jukebox/aide" className="text-white/80 hover:text-white text-sm font-semibold underline">❓ Mode d'emploi : télé, ordinateur, invités, blind test</Link>
+        </p>
       </div>
     </div>
   );
