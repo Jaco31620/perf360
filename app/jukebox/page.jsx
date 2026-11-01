@@ -123,6 +123,25 @@ export default function JukeboxHome() {
     : null;
   const codeOk = !needCode || (actReady(creationCode) && actInfo?.ok);
 
+  const myList = mine.length > 0 ? (
+    <div className="bg-white/95 rounded-3xl p-5 shadow-xl">
+        <h2 className="font-bold text-gray-900 mb-2">{view === "create" ? "Reprendre une soirée déjà créée" : "Mes soirées"}</h2>
+        <ul className="divide-y divide-gray-100">
+          {mine.map((c) => (
+            <li key={c.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+              <span className="font-mono font-bold text-indigo-600 shrink-0">{formatCode(c.code)}</span>
+              <span className="flex-1 min-w-0 truncate text-gray-700">{c.name}</span>
+              <span className="flex items-center gap-3 shrink-0">
+                <Link href={`/jukebox/${c.code}/telecommande`} className="text-sm font-semibold text-fuchsia-600 hover:underline">📱 Télécommande</Link>
+                <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline">💻 Régie</Link>
+                <button onClick={() => remove(c.code)} className="text-gray-300 hover:text-red-500" aria-label="Retirer">✕</button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-fuchsia-600 via-purple-700 to-indigo-900 px-4 py-8">
       <div className="max-w-xl mx-auto">
@@ -143,10 +162,15 @@ export default function JukeboxHome() {
 
         {view === "create" ? (
           closed ? (
-            <div className="bg-white rounded-3xl p-7 shadow-xl space-y-3">
-              <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service. Contactez-le pour obtenir un code d'activation ou votre lien régie.</p>
+            <div className="space-y-5">
+              <div className="bg-white rounded-3xl p-7 shadow-xl space-y-3">
+                <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service. Contactez-le pour obtenir un code d'activation ou votre lien régie.</p>
+              </div>
+              {myList}
             </div>
           ) : (
+            <div className="space-y-5">
+            {myList}
             <form onSubmit={create} className="bg-white rounded-3xl p-6 sm:p-7 shadow-xl space-y-5">
               {needCode && (
                 <section className="space-y-1.5">
@@ -201,27 +225,11 @@ export default function JukeboxHome() {
                 <p>📺 Vous pourrez alors afficher la soirée sur une télé (son compris) et partager le QR code aux invités.</p>
               </div>
             </form>
+            </div>
           )
         ) : (
           <div className="space-y-5">
-            {mine.length > 0 && (
-              <div className="bg-white/95 rounded-3xl p-5 shadow-xl">
-                <h2 className="font-bold text-gray-900 mb-2">Mes soirées</h2>
-                <ul className="divide-y divide-gray-100">
-                  {mine.map((c) => (
-                    <li key={c.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-                      <span className="font-mono font-bold text-indigo-600 shrink-0">{formatCode(c.code)}</span>
-                      <span className="flex-1 min-w-0 truncate text-gray-700">{c.name}</span>
-                      <span className="flex items-center gap-3 shrink-0">
-                        <Link href={`/jukebox/${c.code}/telecommande`} className="text-sm font-semibold text-fuchsia-600 hover:underline">📱 Télécommande</Link>
-                        <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline">💻 Régie</Link>
-                        <button onClick={() => remove(c.code)} className="text-gray-300 hover:text-red-500" aria-label="Retirer">✕</button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {myList}
 
             <form onSubmit={join} className="bg-white rounded-3xl p-6 shadow-xl space-y-3">
               <h2 className="text-xl font-bold text-gray-900">🎤 Rejoindre une soirée</h2>
