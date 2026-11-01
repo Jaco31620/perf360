@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { myParties, rememberParty, setAdminToken, forgetParty, formatCode, getSuperToken } from "@/components/jukebox/storage";
+import AccessRequest from "@/components/jukebox/AccessRequest";
 import { DEFAULT_MAX_PER_PARTICIPANT, MAX_NAME_LEN, MAX_CHOICES, maxLabel } from "@/lib/jukebox";
 
 export default function JukeboxHome() {
@@ -165,8 +166,9 @@ export default function JukeboxHome() {
           closed ? (
             <div className="space-y-5">
               <div className="bg-white rounded-3xl p-7 shadow-xl space-y-3">
-                <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service. Contactez-le pour qu'il vous crée votre soirée et vous envoie votre lien régie.</p>
+                <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service : faites votre demande ci-dessous, il vous crée votre soirée et vous envoie votre lien régie.</p>
               </div>
+              <AccessRequest open intro="Dites-m'en un peu plus sur votre soirée : je vous réponds par e-mail avec votre accès." />
               {myList}
             </div>
           ) : (
@@ -226,6 +228,7 @@ export default function JukeboxHome() {
                 <p>📺 Vous pourrez alors afficher la soirée sur une télé (son compris) et partager le QR code aux invités.</p>
               </div>
             </form>
+            {needCode && !actInfo?.ok && <AccessRequest />}
             </div>
           )
         ) : (
@@ -253,7 +256,7 @@ export default function JukeboxHome() {
               <span className="text-3xl">🎛️</span>
               <span className="flex-1">
                 <span className="block text-lg font-bold">Organiser une soirée</span>
-                <span className="block text-sm text-white/75">Créez votre jukebox{needCode ? " avec votre code d'activation" : ""}.</span>
+                <span className="block text-sm text-white/75">{needCode ? "Avec votre code d'activation, ou demandez votre accès." : closed ? "Sur demande : faites votre demande d'accès." : "Créez votre jukebox."}</span>
               </span>
               <span className="text-2xl">→</span>
             </button>

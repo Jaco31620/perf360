@@ -140,6 +140,9 @@ export default function JukeboxHelp() {
 
         <Section id="faq" icon="❓" title="Questions fréquentes">
           <div>
+            <Faq q="Comment obtenir le Jukebox pour ma soirée ?">
+              <p>Le Jukebox est proposé sur demande : sur <B>perf360.fr/jukebox</B>, <B>Organiser une soirée</B> puis <B>Pas encore de code d'activation ?</B> Vous recevez votre code par e-mail.</p>
+            </Faq>
             <Faq q="La télé affiche la soirée mais il n'y a pas de son">
               <p>Appuyez sur <B>OK</B> avec la télécommande de la télé : beaucoup de navigateurs de télé bloquent le son tant qu'on n'a pas appuyé sur une touche. Vérifiez aussi le volume de la télé et celui de la télécommande du Jukebox.</p>
             </Faq>

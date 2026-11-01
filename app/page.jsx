@@ -35,6 +35,14 @@ const apps = [
     gradient: "from-rose-500 to-amber-400",
     badge: "Sur demande",
   },
+  {
+    href: "/jukebox",
+    emoji: "🎶",
+    title: "Jukebox",
+    desc: "Les invités proposent leurs titres depuis leur téléphone, la musique s'enchaîne sur la télé ou l'ordinateur. Blind test inclus.",
+    gradient: "from-fuchsia-600 to-indigo-600",
+    badge: "Sur demande",
+  },
   // Ajoutez vos prochaines apps ici
 ];
 
