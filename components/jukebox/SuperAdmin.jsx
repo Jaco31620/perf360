@@ -144,7 +144,7 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      <div className="flex bg-white border border-purple-100 rounded-full p-1 mb-4 w-full sm:w-fit">
+      <div className="flex overflow-x-auto bg-white border border-purple-100 rounded-full p-1 mb-4 w-full sm:w-fit">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => chooseTab(t.id)}
             className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab === t.id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
@@ -311,6 +311,11 @@ function applyLocally(d, body) {
   if (body.action === "delete") return { ...d, sessions: d.sessions.filter((s) => s.code !== body.code) };
   if (body.action === "features")
     return { ...d, sessions: d.sessions.map((s) => (s.code === body.code ? { ...s, features: { ...s.features, ...body.features } } : s)) };
+  if (body.action === "actUpdate" && d.activations) {
+    const { action, id, resetUsed, ...patch } = body;
+    return { ...d, activations: d.activations.map((a) => (a.id === id ? { ...a, ...patch, ...(resetUsed ? { used: 0 } : {}) } : a)) };
+  }
+  if (body.action === "actDelete" && d.activations) return { ...d, activations: d.activations.filter((a) => a.id !== body.id) };
   if (body.action !== "settings") return d;
   const { action, defaultFeatures, defaultOptions, ...rest } = body;
   const c = d.config;
@@ -570,8 +575,10 @@ function Activations({ list, sessions, defaults, origin, creationMode, action, o
               </label>
               <label className="flex items-center gap-2">
                 <span className="text-gray-500">Expire le</span>
-                <input type="date" value={dayInput(a.expiresAt)}
-                  onChange={(e) => action({ action: "actUpdate", id: a.id, expiresAt: e.target.value ? `${e.target.value}T23:59:59` : null })}
+                {/* non contrôlé, enregistré en quittant le champ : la saisie de l'année au clavier ne part pas à chaque chiffre */}
+                <input type="date" key={`${a.id}:${a.expiresAt || ""}`} defaultValue={dayInput(a.expiresAt)}
+                  onBlur={(e) => { const v = e.target.value; if (v !== dayInput(a.expiresAt) && (!v || /^\d{4}-\d{2}-\d{2}$/.test(v))) action({ action: "actUpdate", id: a.id, expiresAt: v ? `${v}T23:59:59` : null }); }}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                   className="border-2 border-gray-200 rounded-xl px-2 py-0.5" />
                 {a.expiresAt && <button onClick={() => action({ action: "actUpdate", id: a.id, expiresAt: null })} className="text-xs text-gray-400 underline">jamais</button>}
               </label>
@@ -798,7 +805,10 @@ function SongMemory({ call, total, proposals = 0, focus, enrich, onChanged }) {
     setSongs((list) => applySong(list, body));
     const p = queue.current.then(() => call("POST", body));
     queue.current = p.catch(() => {});
-    try { await p; } catch (e) { alert(e.message); lastAct.current = Date.now(); load(); }
+    try {
+      await p;
+      if (["forgetSong", "mergeSongs"].includes(body.action)) onChanged?.(); // nombre de titres en mémoire
+    } catch (e) { alert(e.message); lastAct.current = Date.now(); load(); }
   };
   // changements de vidéo (adopter, refuser, revenir) : liste et compteur relus
   const changeRun = async (body, confirmText) => {
@@ -890,7 +900,7 @@ function SongMemory({ call, total, proposals = 0, focus, enrich, onChanged }) {
             );
           })()}
           <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex bg-gray-100 rounded-full p-0.5 text-sm">
+            <div className="flex flex-wrap bg-gray-100 rounded-2xl p-0.5 text-sm">
               {STATUS_FILTERS.map(([id, label]) => (
                 <button key={id} onClick={() => setStatus(id)}
                   className={`px-3 py-1 rounded-full font-bold ${status === id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
@@ -1288,6 +1298,7 @@ function PrefillQueue({ call, version, onChanged }) {
 function SongVideoChooser({ song, call, onClose, onDone }) {
   return (
     <VideoChooser title={song.label || song.key} subtitle={`Mode ${modeLabel(song.mode)}`} initial={song.videoId}
+      heading="Changer la vidéo" help="La vidéo choisie remplace celle de ce titre pour toutes les soirées. Cliquez une miniature pour l'écouter."
       onClose={onClose} onDone={onDone}
       load={() => call("POST", { action: "songVideos", key: song.key })}
       choose={(videoId) => call("POST", { action: "replaceSong", key: song.key, videoId })} />
@@ -1298,6 +1309,8 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
  * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
  * passent par run() (effet immédiat sur la liste de la mémoire). */
 const REVIEW_START = 40;
+const Key = ({ k }) => <kbd className="ml-1.5 text-[10px] font-mono bg-black/10 rounded px-1 py-0.5">{k}</kbd>;
+
 function SongReview({ review, setReview, songs, run, changeRun, call, editYear, busy, onFix, onRetitle, onClose }) {
   const [compare, setCompare] = useState(null); // vidéo proposée en aperçu (à la place de l'actuelle)
   const { keys, i } = review;
@@ -1305,6 +1318,10 @@ function SongReview({ review, setReview, songs, run, changeRun, call, editYear, 
   const [artistOpen, setArtistOpen] = useState(false); // autres titres de l'interprète, sans quitter la revue
   useEffect(() => { setEditing(null); setCompare(null); }, [i]);
   const song = i < keys.length ? (songs || []).find((s) => s.key === keys[i]) : null;
+  // proposition adoptée ou refusée : l'aperçu se referme
+  useEffect(() => {
+    if (compare && !(song?.proposals || []).some((c) => c.newVideo === compare)) setCompare(null);
+  }, [song?.proposals, compare]);
   const go = (d) => setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) }));
   const act = {
     validate: () => { if (song && !song.missing) run({ action: "validateSong", key: song.key, validated: true }); go(1); },
@@ -1336,7 +1353,6 @@ function SongReview({ review, setReview, songs, run, changeRun, call, editYear, 
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
-  const Key = ({ k }) => <kbd className="ml-1.5 text-[10px] font-mono bg-black/10 rounded px-1 py-0.5">{k}</kbd>;
   const tool = "text-sm font-bold bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl text-left whitespace-nowrap";
   const tag = "text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap";
   return (
@@ -1374,7 +1390,7 @@ function SongReview({ review, setReview, songs, run, changeRun, call, editYear, 
                   <p className="text-xs font-bold text-orange-700">🔄 Vidéo proposée — <button onClick={() => setCompare(null)} className="underline">revenir à l'actuelle</button></p>
                   <VideoPreview videoId={compare} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
                 </div>
-              ) : <TrimPlayer key={song.videoId} song={song} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
+              ) : <TrimPlayer key={song.videoId} song={song} busy={busy} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
                 onSave={(t) => run({ action: "trimVideo", ...t })}
                 suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />}
               <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
@@ -1671,11 +1687,12 @@ function Backup({ call, onImported }) {
       a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       a.download = `jukebox-memoire-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000); // après le début du téléchargement
       setMsg(`${rows.length} lignes exportées.`);
     } catch (e) { setMsg(e.message); } finally { setBusy(false); }
   };
   const importCsv = async (f) => {
+    if (file.current) file.current.value = ""; // le même fichier pourra être rechoisi
     if (!f) return;
     const rows = parseCsv(await f.text());
     if (!rows.length || !("key" in rows[0]) || !("video_id" in rows[0])) { setMsg("Fichier non reconnu (export de la mémoire attendu)."); return; }

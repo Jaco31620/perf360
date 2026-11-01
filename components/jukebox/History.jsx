@@ -54,7 +54,7 @@ export default function History({ code, name, onClose, onChanged }) {
     a.href = URL.createObjectURL(blob);
     a.download = `jukebox-${(name || code).replace(/[^\w-]+/g, "-").toLowerCase()}.csv`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000); // après le début du téléchargement
   };
   const clear = async () => {
     if (!confirm("Effacer tout l'historique de la soirée ?")) return;

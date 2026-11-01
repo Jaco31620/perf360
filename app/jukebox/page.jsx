@@ -56,6 +56,7 @@ export default function JukeboxHome() {
   }, []);
   const go = (v) => {
     setView(v);
+    setEditCode(false);
     const url = v === "create" ? `/jukebox?creer${creationCode && new URLSearchParams(window.location.search).get("activation") ? `&activation=${encodeURIComponent(creationCode)}` : ""}` : "/jukebox";
     window.history.pushState(null, "", url);
     window.scrollTo(0, 0);
@@ -72,7 +73,7 @@ export default function JukeboxHome() {
       try {
         const d = await (await fetch(`/api/jukebox?check=${encodeURIComponent(creationCode)}`, { cache: "no-store" })).json();
         if (!gone) setActInfo(d);
-      } catch (e) { /* réseau : vérifié à la création */ }
+      } catch (e) { if (!gone) setActInfo({ ok: false, error: "Vérification impossible (réseau) : vérifiez la connexion, puis retapez le code." }); }
     }, 300);
     return () => { gone = true; clearTimeout(t); };
   }, [creationCode, needCode]);
@@ -134,7 +135,7 @@ export default function JukeboxHome() {
               <span className="flex items-center gap-3 shrink-0">
                 <Link href={`/jukebox/${c.code}/telecommande`} className="text-sm font-semibold text-fuchsia-600 hover:underline">📱 Télécommande</Link>
                 <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline">💻 Régie</Link>
-                <button onClick={() => remove(c.code)} className="text-gray-300 hover:text-red-500" aria-label="Retirer">✕</button>
+                <button onClick={() => remove(c.code)} className="text-gray-300 hover:text-red-500" aria-label={`Retirer la soirée ${c.name || formatCode(c.code)}`}>✕</button>
               </span>
             </li>
           ))}
@@ -164,7 +165,7 @@ export default function JukeboxHome() {
           closed ? (
             <div className="space-y-5">
               <div className="bg-white rounded-3xl p-7 shadow-xl space-y-3">
-                <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service. Contactez-le pour obtenir un code d'activation ou votre lien régie.</p>
+                <p className="text-gray-700">La création de soirées est réservée à l'organisateur du service. Contactez-le pour qu'il vous crée votre soirée et vous envoie votre lien régie.</p>
               </div>
               {myList}
             </div>

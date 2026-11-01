@@ -19,7 +19,9 @@ const fmt = (x) => {
 };
 const r1 = (x) => Math.round(x * 10) / 10;
 
-export default function TrimPlayer({ song, previewStart = 0, onSave, suggest }) {
+const Key = ({ k }) => <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{k}</kbd>;
+
+export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, busy = false }) {
   const box = useRef(null);
   const player = useRef(null);
   const stopAt = useRef(null); // écoute de la fin : pause à la fin gardée
@@ -90,7 +92,8 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest }) 
   const setEndHere = () => save(start, pos());
 
   const keys = useRef({});
-  keys.current = { d: setStartHere, f: setEndHere };
+  keys.current = busy ? {} : { d: setStartHere, f: setEndHere }; // fenêtre ouverte par-dessus : touches et lecture en pause
+  useEffect(() => { if (busy) try { player.current?.pauseVideo?.(); } catch (e) { /* lecteur pas prêt */ } }, [busy]);
   useEffect(() => {
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -105,7 +108,6 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest }) 
   const hintUseful = hint && (hint.start > 0 || hint.end != null) && (Math.abs(hint.start - start) > 0.5 || (hint.end ?? null) !== (end ?? null));
   const btn = "text-xs font-bold bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg whitespace-nowrap disabled:opacity-40";
   const nudge = "text-[11px] font-bold text-gray-500 hover:text-gray-900 bg-gray-50 px-1.5 py-0.5 rounded";
-  const Key = ({ k }) => <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{k}</kbd>;
 
   return (
     <div className="space-y-2">
@@ -122,15 +124,15 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest }) 
       <div className="flex flex-wrap items-center gap-1.5">
         <button onClick={setStartHere} disabled={!ready} className={btn} title="La soirée démarrera la vidéo ici">⏮ Début ici<Key k="D" /></button>
         <span className="flex items-center gap-1 text-xs">
-          <button onClick={() => save(start - 1, end)} className={nudge}>−1</button>
+          <button onClick={() => save(start - 1, end)} className={nudge} aria-label="Début −1 s">−1</button>
           <b className="tabular-nums">{fmt(start)}</b>
-          <button onClick={() => save(start + 1, end)} className={nudge}>+1</button>
+          <button onClick={() => save(start + 1, end)} className={nudge} aria-label="Début +1 s">+1</button>
         </span>
         <span className="text-gray-300">→</span>
         <span className="flex items-center gap-1 text-xs">
-          <button onClick={() => save(start, keptEnd - 1)} className={nudge}>−1</button>
+          <button onClick={() => save(start, keptEnd - 1)} className={nudge} aria-label="Fin −1 s">−1</button>
           <b className="tabular-nums">{end == null ? `fin (${formatDuration(duration)})` : fmt(end)}</b>
-          {end != null && <button onClick={() => save(start, end + 1)} className={nudge}>+1</button>}
+          {end != null && <button onClick={() => save(start, end + 1)} className={nudge} aria-label="Fin +1 s">+1</button>}
         </span>
         <button onClick={setEndHere} disabled={!ready} className={btn} title="La soirée passera au titre suivant ici">Fin ici ⏭<Key k="F" /></button>
         <span className="text-[11px] text-gray-400 ml-auto tabular-nums">{fmt(r1(now))}</span>

@@ -323,7 +323,7 @@ export function Toggle({ label, on, onClick, hint }) {
     <div>
       <div className="flex items-center justify-between gap-3">
         <span className="text-white/70">{label}</span>
-        <button onClick={onClick} role="switch" aria-checked={on}
+        <button onClick={onClick} role="switch" aria-checked={on} aria-label={typeof label === "string" ? label : undefined}
           className={`font-bold px-3 py-1.5 rounded-full shrink-0 ${on ? "bg-fuchsia-600 hover:bg-fuchsia-700" : "bg-white/10 hover:bg-white/20"}`}>
           {on ? "Oui" : "Non"}
         </button>
@@ -452,7 +452,7 @@ export function PreviewThumb({ videoId, src, active, onClick, className = "w-24"
 }
 
 /* Fenêtre générique : load() → { current, candidates } ; choose(videoId). */
-export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone, mute }) {
+export function VideoChooser({ title, subtitle, initial, load, choose: save, onClose, onDone, mute, heading = "Mauvaise vidéo ?", help = null }) {
   const [list, setList] = useState(null);
   const [current, setCurrent] = useState(initial);
   const [error, setError] = useState("");
@@ -489,13 +489,13 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gray-900 text-white rounded-3xl p-5 space-y-4 shadow-2xl">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-400">Mauvaise vidéo ?</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-400">{heading}</p>
             <p className="font-bold leading-snug">{title}</p>
             <p className="text-xs text-white/50">{subtitle}</p>
           </div>
           <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
         </div>
-        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre tout de suite, et servira aux prochaines soirées (après accord de l'administrateur si le titre a déjà été vérifié). Cliquez une miniature pour l'écouter.</p>
+        <p className="text-xs text-white/50">{help || "Choisissez la bonne version : elle remplace la vidéo de ce titre tout de suite, et servira aux prochaines soirées (après accord de l'administrateur si le titre a déjà été vérifié). Cliquez une miniature pour l'écouter."}</p>
         {mute && <p className="text-xs text-amber-300">🔇 Aperçu sans son, pour ne pas couper la musique de la soirée.</p>}
         {preview && <VideoPreview videoId={preview} onClose={() => setPreview(null)} mute={mute} />}
 

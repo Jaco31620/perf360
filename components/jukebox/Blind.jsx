@@ -80,6 +80,7 @@ const timingText = (s) => `Réponse ${BLIND_REVEAL_CHOICES.find((c) => c.v === s
 /* Avant la partie : mode de jeu, pioche, délais, lancement. */
 function BlindSetup({ settings, blind, act }) {
   const pick = pickSummary(settings, blind?.facets);
+  const played = playedCount(settings, blind?.facets);
   return (
     <div className="space-y-3 text-sm">
       <div className="bg-white/5 rounded-2xl p-4 space-y-3">
@@ -103,9 +104,9 @@ function BlindSetup({ settings, blind, act }) {
         <Timing settings={settings} act={act} />
       </Fold>
 
-      {playedCount(settings, blind?.facets) > 0 && (
+      {played > 0 && (
         <button onClick={() => newGame(act)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-2xl py-3">
-          🔄 Nouvelle partie ({playedCount(settings, blind?.facets)} titre{playedCount(settings, blind?.facets) > 1 ? "s" : ""} déjà passé{playedCount(settings, blind?.facets) > 1 ? "s" : ""} redeviennent piochables)
+          🔄 Nouvelle partie ({played} titre{played > 1 ? "s" : ""} déjà passé{played > 1 ? "s" : ""} {played > 1 ? "redeviennent piochables" : "redevient piochable"})
         </button>
       )}
       <button onClick={() => act("blind", { on: true })} disabled={pick.available === 0}
@@ -200,7 +201,7 @@ function BlindLive({ settings, blind, now, act, controls }) {
         </div>
       )}
 
-      <Fold title="🎲 Pioche et ⏱️ délais" summary={`${pick.available ?? "…"} titres restants · ${pick.text}`}>
+      <Fold title="🎲 Pioche et ⏱️ délais" summary={`${pick.available ?? "…"} titre${pick.available > 1 ? "s" : ""} restant${pick.available > 1 ? "s" : ""} · ${pick.text}`}>
         <BlindFilters settings={settings} facets={blind?.facets} onChange={(patch) => act("blind", patch, true)} />
         <Timing settings={settings} act={act} />
       </Fold>
