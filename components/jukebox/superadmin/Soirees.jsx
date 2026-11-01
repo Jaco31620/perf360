@@ -85,6 +85,12 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
         const used = devices.length > 0;
         const stale = isStale(s);
         const idle = inactiveDays(s);
+        const autoClosed = s.validDays && Date.parse(s.createdAt) + s.validDays * 864e5 <= Date.now();
+        const toggleClose = () => {
+          if (st !== "ended") return action({ action: "close", code: s.code, closed: true }, `Fermer « ${s.name} » maintenant ?\n\nInvités, régie, télécommande et écran n'y auront plus accès. Vous pourrez la rouvrir.`);
+          if (autoClosed) return confirm(`« ${s.name} » est fermée par son délai de fermeture automatique.\n\nLa rouvrir sans limite de durée ? (Sinon, choisissez un délai plus long dans le menu « Fermeture ».)`) && action({ action: "close", code: s.code, closed: false, noLimit: true });
+          return action({ action: "close", code: s.code, closed: false });
+        };
         const del = () => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?${idle >= 1 ? `\n\nInactive depuis ${idle} jour${idle > 1 ? "s" : ""}.` : ""}`);
         return (
           <div key={s.code} className={`bg-white rounded-2xl border ${isOpen ? "border-fuchsia-300 shadow-md" : "border-purple-100"}`}>
@@ -121,7 +127,7 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <ValiditySelect value={s.validDays} className="text-xs"
                         onChange={(days) => action({ action: "validity", code: s.code, days })} />
-                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `🔒 fermée le ${fmtDay(s.endsAt)}` : `ouverte jusqu'au ${fmtDay(s.endsAt)}`}</span>}
+                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `🔒 fermée le ${fmtDay(s.endsAt)}${s.closedManually && !autoClosed ? " (à la main)" : ""}` : `ouverte jusqu'au ${fmtDay(s.endsAt)}`}</span>}
                       {idle >= 1 && <span className={`text-xs ${stale ? "text-amber-700 font-semibold" : "text-gray-400"}`}>💤 inactive depuis {idle} jour{idle > 1 ? "s" : ""}</span>}
                     </div>
                   </div>
@@ -171,7 +177,8 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                   <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">💻 Régie</Link>
                   <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">📺 Écran</Link>
                   <button onClick={() => rename(s)} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">✏️ Renommer</button>
-                  <button onClick={del} className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full ml-auto">Supprimer</button>
+                  <button onClick={toggleClose} className={`font-bold px-3 py-1.5 rounded-full ml-auto ${st === "ended" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>{st === "ended" ? "🔓 Rouvrir" : "🔒 Fermer"}</button>
+                <button onClick={del} className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
                 </div>
 
                 {share?.code === s.code && share.kind === "orga" && (

@@ -17,6 +17,7 @@
  *     reqApprove { id, label?, maxParties?, expiresAt?, features?, partiesText, expiresText?, origin } → demande d'accès validée : code créé + e-mail
  *     reqReject { id, notify? } / reqDelete { id } → demande refusée (e-mail si notify) / supprimée
  *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
+ *     close { code, closed, noLimit? } → fermer tout de suite / rouvrir
  *     validity { code, days|null } → durée d'utilisation depuis la création (null : sans limite)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
@@ -208,12 +209,22 @@ export async function POST(req) {
       case "features":
       case "rename":
       case "validity":
+      case "close":
       case "delete": {
         const s = await loadSession(body.code, { any: true });
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
         const sb = getSupabaseAdmin();
         if (body.action === "features") {
           const options = { ...(s.options || {}), features: normalizeFeatures(body.features, normalizeFeatures(s.options?.features)) };
+          const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
+          if (error) throw error;
+          return Response.json({ ok: true });
+        }
+        if (body.action === "close") {
+          // fermer tout de suite, ou rouvrir (noLimit : retire aussi la fermeture automatique dépassée)
+          const options = { ...(s.options || {}) };
+          if (body.closed) options.closedAt = Date.now();
+          else { delete options.closedAt; if (body.noLimit) delete options.validDays; }
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
           return Response.json({ ok: true });
