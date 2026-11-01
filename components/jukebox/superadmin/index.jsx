@@ -11,25 +11,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
-import { getSuperToken, setSuperToken, setAdminToken, rememberParty, formatCode } from "../storage";
-import { fmtRegieCode } from "../Access";
-import { FEATURES } from "@/lib/jukebox";
-import { CREATION_MODES, fmtDate, SearchInput } from "./shared";
+import { getSuperToken, setSuperToken, setAdminToken, rememberParty } from "../storage";
+import { CREATION_MODES } from "./shared";
 import { CreateForm, SoireeFields, FeatureToggles, InviteBox } from "./SoireeForms";
 import { Activations } from "./Activations";
+import { Soirees } from "./Soirees";
 import { Prefill } from "./Prefill";
 import { SongMemory } from "./SongMemory";
 
 const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const SEARCH_QUOTA = 100; // ~10 000 unités / jour, 100 par recherche
 const QUOTA_NOTE = "Remise à zéro chaque jour à minuit heure du Pacifique (8 h ou 9 h à Paris selon la saison). Les recherches déjà faites et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.";
-
-function fmtIn(ms) {
-  const d = ms - Date.now();
-  if (d <= 0) return "à la prochaine purge";
-  const h = Math.round(d / 3600e3);
-  return h < 48 ? `dans ${h} h` : `dans ${Math.round(h / 24)} j`;
-}
 
 export default function SuperAdmin() {
   const [token, setToken] = useState(undefined);
@@ -45,10 +37,7 @@ export default function SuperAdmin() {
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
   useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:superTab", t); } catch (e) { /* ignoré */ } };
-  const matches = (s) => {
-    const q = filter.trim().toLowerCase();
-    return !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q);
-  };
+
 
   useEffect(() => { setToken(getSuperToken()); setOrigin(window.location.origin); }, []);
 
@@ -158,58 +147,8 @@ export default function SuperAdmin() {
             load();
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
-          {(nSessions > 5 || filter) && (
-            <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher une soirée (nom, code ou organisateur)" className="mt-4 w-full" />
-          )}
-          <div className="space-y-3 mt-4">
-            {data && nSessions === 0 && <p className="text-gray-400 text-center py-10">Aucune soirée.</p>}
-            {data?.sessions.filter(matches).map((s) => (
-              <div key={s.code} className="bg-white rounded-2xl border border-purple-100 p-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-                <div className="flex-1 min-w-[220px]">
-                  <p className="font-bold text-gray-900">{s.name} <span className="font-mono text-fuchsia-600 text-sm ml-1">{formatCode(s.code)}</span></p>
-                  <p className="text-xs text-gray-500">
-                    Créée le {fmtDate(Date.parse(s.createdAt))} · dernière activité {fmtDate(s.lastActivity)} · {s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente
-                  </p>
-                  {s.organizer && (
-                    <p className="text-xs text-gray-600">
-                      👤 {s.organizer}
-                      <button onClick={() => { setActFilter(s.organizer); chooseTab("codes"); window.scrollTo({ top: 0 }); }} className="ml-2 text-fuchsia-600 underline">voir son code</button>
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    🔑 Code régie <b className="font-mono text-sm tracking-wider">{s.regieCode ? fmtRegieCode(s.regieCode) : "—"}</b>
-                    <button onClick={async () => {
-                      if (!confirm(`Nouveau code régie pour « ${s.name} » ? L'ancien ne fonctionnera plus.`)) return;
-                      await action({ action: "regie", code: s.code, reset: true, logoutAll: confirm("Déconnecter aussi tous les appareils déjà autorisés ?") });
-                    }} className="ml-2 text-fuchsia-600 underline">{s.regieCode ? "changer" : "créer"}</button>
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {FEATURES.map((f) => {
-                      const on = s.features?.[f.id];
-                      return (
-                        <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
-                          onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
-                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
-                          {f.icon} {f.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm">
-                  <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">Régie</Link>
-                  <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">Écran</Link>
-                  <button onClick={async () => {
-                    const regieCode = s.regieCode || (await action({ action: "regie", code: s.code }))?.regieCode;
-                    if (regieCode) { setLink({ name: s.name, code: s.code, regieCode }); window.scrollTo({ top: 0, behavior: "smooth" }); }
-                  }} className="font-bold bg-fuchsia-600 text-white px-3 py-1.5 rounded-full">📨 Invitation</button>
-                  <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
-                    className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
-                </div>
-              </div>
-            ))}
-          </div>
+          {data && <Soirees sessions={data.sessions} origin={origin} action={action} filter={filter} setFilter={setFilter}
+            onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
       )}
 

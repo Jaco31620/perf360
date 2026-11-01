@@ -40,7 +40,7 @@ import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } f
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
-import { normalizeFeatures } from "@/lib/jukebox";
+import { normalizeFeatures, MAX_NAME_LEN } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 
@@ -193,6 +193,7 @@ export async function POST(req) {
       }
       case "regie":
       case "features":
+      case "rename":
       case "delete": {
         const s = await loadSession(body.code);
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
@@ -200,6 +201,13 @@ export async function POST(req) {
         if (body.action === "features") {
           const options = { ...(s.options || {}), features: normalizeFeatures(body.features, normalizeFeatures(s.options?.features)) };
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
+          if (error) throw error;
+          return Response.json({ ok: true });
+        }
+        if (body.action === "rename") {
+          const name = String(body.name || "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME_LEN);
+          if (!name) return Response.json({ error: "Nom vide." }, { status: 400 });
+          const { error } = await sb.from("jukebox_sessions").update({ name }).eq("id", s.id);
           if (error) throw error;
           return Response.json({ ok: true });
         }
