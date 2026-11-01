@@ -690,7 +690,8 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
             <SongReview review={review} setReview={setReview} songs={songs} run={run} editYear={editYear}
-              busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
+              busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }}
+              onArtist={(a) => { setReview(null); setQ(a); setStatus("all"); }} />
           )}
           {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)}
             onDone={(key) => {
@@ -1048,8 +1049,10 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
  * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
  * passent par run() (effet immédiat sur la liste de la mémoire). */
 const REVIEW_START = 40;
-function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRetitle, onClose }) {
+function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRetitle, onArtist, onClose }) {
   const { keys, i } = review;
+  const [editing, setEditing] = useState(false); // correction du texte (interprète, titre)
+  useEffect(() => setEditing(false), [i]);
   const song = i < keys.length ? (songs || []).find((s) => s.key === keys[i]) : null;
   const go = (d) => setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) }));
   const act = {
@@ -1057,6 +1060,8 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
     lyrics: () => song && run({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
     blind: () => song && run({ action: "blindSong", key: song.key, blind: !song.blind }),
     fix: () => song && onFix(song),
+    text: () => song && setEditing(true),
+    retitle: () => song && onRetitle(song),
     forget: () => {
       if (!song || !confirm(`Oublier « ${song.label || song.key} » (${modeLabel(song.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)) return;
       run({ action: "forgetSong", key: song.key });
@@ -1072,7 +1077,7 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
       if (busy || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       const a = actRef.current;
       const k = e.key.toLowerCase();
-      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, o: a.forget, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
+      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, o: a.forget, t: a.text, r: a.retitle, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
       if (fn) { e.preventDefault(); fn(); }
     };
     window.addEventListener("keydown", onKey);
@@ -1110,9 +1115,16 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
         ) : (
           <>
             <div>
-              <button onClick={() => onRetitle(song)} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour corriger"
-                className="text-left text-lg font-bold text-gray-900 hover:text-fuchsia-700 leading-snug">{song.artist} – {song.title}</button>
+              {editing ? (
+                <SongTextForm song={song} onCancel={() => setEditing(false)}
+                  onSave={(artist, title) => { setEditing(false); run({ action: "songText", key: song.key, artist, title }); }} />
+              ) : (
+                <SongName song={song} wrap className="text-lg font-bold leading-snug" onArtist={onArtist} onTitle={() => onRetitle(song)} onEdit={() => setEditing(true)} />
+              )}
               <VideoTitle song={song} />
+              {song.suspect?.length > 0 && (
+                <p className="mt-1.5 text-xs font-bold text-orange-700 bg-orange-50 rounded-lg px-2 py-1">🧐 À vérifier de près : {song.suspect.join(" · ")}</p>
+              )}
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(song.mode)}</span>
                 {song.missing
@@ -1149,6 +1161,8 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
               <button onClick={act.fix} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">
                 {song.missing ? "Remplacer la vidéo" : "Changer la vidéo"}<Key k="C" />
               </button>
+              <button onClick={act.text} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl" title="Corriger l'interprète ou le titre affichés (faute, majuscules, mention en trop), sans changer de titre ni de vidéo">✎ Texte<Key k="T" /></button>
+              <button onClick={act.retitle} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl" title="Mauvais titre Deezer (reprise, compilation…) : rattacher au bon titre">🔁 Autre titre<Key k="R" /></button>
               <button onClick={act.forget} className="text-sm font-bold text-red-600 bg-red-50 px-4 py-3 rounded-2xl">Oublier<Key k="O" /></button>
               <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-4 py-3 rounded-2xl">Passer<Key k="→" /></button>
               <button onClick={act.validate} disabled={song.missing}
@@ -1157,8 +1171,9 @@ function SongReview({ review, setReview, songs, run, editYear, busy, onFix, onRe
               </button>
             </div>
             <p className="text-xs text-gray-400">
-              Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. Cliquez le titre pour le corriger
-              (reprise, compilation). Échap pour fermer.
+              Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. <b>✎ Texte</b> corrige l'interprète
+              ou le titre affichés (faute, majuscules) ; <b>🔁 Autre titre</b> rattache au bon titre Deezer (reprise, compilation) ; clic sur
+              l'interprète : tous ses titres. Échap pour fermer.
             </p>
           </>
         )}
@@ -1265,11 +1280,11 @@ function VideoTitle({ song, className = "" }) {
 
 /* Interprète (clic : tous ses titres) – titre (clic : rattacher à un autre
  * titre Deezer) ; ✏️ corrige le texte affiché sans changer de titre. */
-function SongName({ song, onArtist, onTitle, onEdit }) {
+function SongName({ song, onArtist, onTitle, onEdit, wrap = false, className = "text-sm font-semibold" }) {
   if (!song.label) return <span className="text-gray-400 font-mono text-xs">{song.key}</span>;
   return (
-    <div className="flex items-baseline gap-1 min-w-0 text-sm font-semibold text-gray-900" title={song.fixed || song.label !== `${song.artist} – ${song.title}` ? `Libellé Deezer : ${song.label}` : undefined}>
-      <span className="truncate">
+    <div className={`flex items-baseline gap-1 min-w-0 text-gray-900 ${className}`} title={song.fixed || song.label !== `${song.artist} – ${song.title}` ? `Libellé Deezer : ${song.label}` : undefined}>
+      <span className={wrap ? "" : "truncate"}>
         {song.artist && <><button onClick={() => onArtist(song.artist)} title="Voir tous les titres de cet interprète" className="hover:text-fuchsia-700 hover:underline">{song.artist}</button>{" – "}</>}
         <button onClick={onTitle} title="Mauvais artiste ou titre (reprise, compilation…) ? Cliquer pour rattacher au bon titre Deezer" className="hover:text-fuchsia-700 text-left">{song.title}</button>
       </span>
