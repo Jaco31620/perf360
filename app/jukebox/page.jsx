@@ -175,6 +175,9 @@ export default function JukeboxHome() {
             <div className="space-y-5">
             {myList}
             <form onSubmit={create} className="bg-white rounded-3xl p-6 sm:p-7 shadow-xl space-y-5">
+              {isSuper && mode !== "open" && (
+                <p className="text-sm rounded-2xl bg-amber-50 text-amber-800 px-4 py-3">🔓 Vous êtes connecté en <b>super-admin</b> sur cet appareil : création sans code. Les autres visiteurs voient le code d'activation et le formulaire de demande d'accès (testez dans une fenêtre de navigation privée).</p>
+              )}
               {needCode && (
                 <section className="space-y-1.5">
                   <p className="text-sm font-bold text-gray-900">Code d'activation</p>
