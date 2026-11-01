@@ -38,6 +38,7 @@ export default function Telecommande({ code }) {
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
   const volumeTimer = useRef(null);
+  const mismatchSince = useRef(null); // depuis quand le lecteur joue un autre titre que celui en cours
 
   useEffect(() => {
     const m = window.location.hash.match(/t=([a-f0-9]+)/);
@@ -88,7 +89,13 @@ export default function Telecommande({ code }) {
   const { session, now, queue, playback: pb } = data;
   const live = pb && now && pb.id === now.id;
   const age = pb ? data.serverTime - pb.at + (Date.now() - data.fetchedAt) : Infinity;
-  const regieOk = live && age < 15000; // la régie envoie son état toutes les 5 s
+  // Le lecteur envoie son état toutes les 5 s. Au changement de titre, il
+  // annonce encore l'ancien quelques secondes (chargement, fondu) : on ne
+  // s'inquiète que s'il se tait, ou s'il reste sur un autre titre plus de 20 s.
+  if (live || !now) mismatchSince.current = null;
+  else if (mismatchSince.current == null) mismatchSince.current = Date.now();
+  const lagging = mismatchSince.current != null && Date.now() - mismatchSince.current > 20000;
+  const regieOk = !!pb && age < 15000 && !lagging;
   const playerSeen = pb && age < 60000; // un lecteur (régie ou télé) a donné signe de vie récemment
   const isPlaying = pending ? pending === "play" : !!(live && pb.playing);
   const pos = live ? Math.min(now.duration || Infinity, pb.pos + (pb.playing ? age / 1000 : 0)) : 0;
