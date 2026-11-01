@@ -79,6 +79,16 @@ export default function Regie({ code }) {
   // la télé joue le son : la régie pilote à distance (ordres comme la télécommande)
   const [remoteVolume, setRemoteVolume] = useState(null);
   const remoteTimer = useRef(null);
+  // « Renvoyer le son sur la télé » : la télé (affichage seul, avec accès son) le reprend
+  const [handoffAt, setHandoffAt] = useState(null);
+  const lostSound = !started && !!otherOwner;
+  useEffect(() => { if (lostSound) setHandoffAt(null); }, [lostSound]);
+  useEffect(() => {
+    if (!handoffAt || handoffAt < 0) return;
+    const t = setTimeout(() => setHandoffAt((h) => (h === handoffAt ? -1 : h)), 15000);
+    return () => clearTimeout(t);
+  }, [handoffAt]);
+  const sendToTv = () => { setHandoffAt(Date.now()); act("handoff", { to: "tv" }, true); };
 
   const playNow = (t) => {
     if (data.now && !confirm(`Lancer « ${t.title} » maintenant ?\nLe titre en cours sera interrompu.`)) return;
@@ -115,15 +125,6 @@ export default function Regie({ code }) {
   ];
   const shown = tabs.some((t) => t.id === tab) ? tab : "queue"; // onglet retiré (blind test coupé)
   const remote = !started && !!otherOwner; // le son est joué par un autre appareil (télé)
-  // « Renvoyer le son sur la télé » : la télé (affichage seul, avec accès son) le reprend
-  const [handoffAt, setHandoffAt] = useState(null);
-  useEffect(() => { if (remote) setHandoffAt(null); }, [remote]);
-  useEffect(() => {
-    if (!handoffAt) return;
-    const t = setTimeout(() => setHandoffAt((h) => (h === handoffAt ? -1 : h)), 15000);
-    return () => clearTimeout(t);
-  }, [handoffAt]);
-  const sendToTv = () => { const t = Date.now(); setHandoffAt(t); act("handoff", { to: "tv" }, true); };
   const pb = data.playback;
   const remotePlaying = !!(remote && now && pb?.id === now.id && pb.playing);
   const remoteVol = remoteVolume ?? pb?.volume ?? 100;
