@@ -114,7 +114,7 @@ export function Soirees({ sessions, activations = [], staleDays = 7, origin, act
                 </span>
               </button>
               {stale && <button onClick={del} title={`Inactive depuis ${idle} jour${idle > 1 ? "s" : ""}`} className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-full shrink-0">🗑️ <span className="hidden sm:inline">Supprimer</span></button>}
-              <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="hidden sm:inline-block text-sm font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full shrink-0">Régie</Link>
+              <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="text-xs sm:text-sm font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full shrink-0">Régie</Link>
               <button onClick={() => { setOpen(isOpen ? null : s.code); setShare(null); }} className="text-gray-400 text-sm shrink-0" aria-label={isOpen ? "Replier" : "Déplier"}>{isOpen ? "▲" : "▼"}</button>
             </div>
 
@@ -167,8 +167,8 @@ export function Soirees({ sessions, activations = [], staleDays = 7, origin, act
                       const on = s.features?.[f.id];
                       return (
                         <button key={f.id} title={`${f.hint}\nCliquer pour ${on ? "désactiver" : "activer"}.`}
-                          onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } })}
-                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
+                          onClick={() => action({ action: "features", code: s.code, features: { [f.id]: !on } }, st === "live" ? `La soirée est en cours : ${on ? "désactiver" : "activer"} « ${f.label} » maintenant ?` : null)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap ${on ? "bg-fuchsia-100 text-fuchsia-700" : "bg-gray-100 text-gray-400 line-through"}`}>
                           {f.icon} {f.label}
                         </button>
                       );

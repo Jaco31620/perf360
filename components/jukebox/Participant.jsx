@@ -162,7 +162,8 @@ export default function Participant({ code }) {
           <p className="text-4xl mb-3">🤔</p>
           <h1 className="text-xl font-bold text-gray-900 mb-2">{closed ? "Soirée fermée" : "Soirée introuvable"}</h1>
           <p className="text-gray-500 mb-6">{closed ? "Cette soirée est terminée : on ne peut plus proposer de titres. Merci d'avoir participé !" : `Le code ${formatCode(code)} ne correspond à aucune soirée.`}</p>
-          <Link href="/jukebox" className="inline-block bg-[var(--jb-accent)] text-white font-bold px-6 py-3 rounded-full">Saisir un autre code</Link>
+          {closed && <Link href={`/jukebox/${code}/playlist`} className="block mb-3 bg-[var(--jb-accent)] text-white font-bold px-6 py-3 rounded-full">🎵 Revoir les titres de la soirée</Link>}
+          <Link href="/jukebox" className={`inline-block font-bold px-6 py-3 rounded-full ${closed ? "text-gray-500 underline" : "bg-[var(--jb-accent)] text-white"}`}>Saisir un autre code</Link>
         </div>
       </Shell>
     );
@@ -367,6 +368,9 @@ export default function Participant({ code }) {
             </div>
           </form>
         </div>
+      )}
+      {!data.blind?.on && (
+        <p className="mt-5 text-center"><Link href={`/jukebox/${code}/playlist`} className="text-sm font-semibold text-white/80 hover:text-white underline">🎵 Les titres déjà passés</Link></p>
       )}
     </Shell>
   );

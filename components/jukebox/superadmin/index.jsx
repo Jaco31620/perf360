@@ -18,6 +18,7 @@ import { CreateForm, SoireeFields, FeatureToggles, InviteBox } from "./SoireeFor
 import { Activations } from "./Activations";
 import { Soirees } from "./Soirees";
 import { Requests } from "./Requests";
+import { Stats } from "./Stats";
 import { Prefill } from "./Prefill";
 import { SongMemory } from "./SongMemory";
 
@@ -38,7 +39,7 @@ export default function SuperAdmin() {
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
   const [demande, setDemande] = useState(null); // demande ouverte depuis l'e-mail
   const [justSent, setJustSent] = useState(null); // code créé par la validation d'une demande
-  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "demandes", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ }
+  useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "demandes", "codes", "stats", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ }
     // lien de l'e-mail de demande : /jukebox/admin?demande=<id>
     const d = new URLSearchParams(window.location.search).get("demande");
     if (d) { setTab("demandes"); setDemande(d); }
@@ -112,6 +113,7 @@ export default function SuperAdmin() {
     { id: "soirees", label: `🎉 Soirées${nSessions ? ` (${nSessions})` : ""}` },
     { id: "demandes", label: `📥 Demandes${nPending ? ` (${nPending})` : ""}`, alert: nPending > 0 },
     { id: "codes", label: `🎟️ Codes${data?.activations?.length ? ` (${data.activations.length})` : ""}` },
+    { id: "stats", label: "📊 Stats" },
     { id: "reglages", label: "⚙️ Réglages" },
   ];
   const quotaPct = data ? Math.min(100, (data.searches / SEARCH_QUOTA) * 100) : 0;
@@ -127,7 +129,7 @@ export default function SuperAdmin() {
       </div>
 
       {data && (
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-4">
           <Stat label="Recherches YouTube aujourd'hui" value={`${data.searches} / ~${SEARCH_QUOTA}`} title={QUOTA_NOTE}>
             <div className="h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
               <div className={`h-full ${quotaPct >= 80 ? "bg-red-500" : "bg-fuchsia-500"}`} style={{ width: `${quotaPct}%` }} />
@@ -138,10 +140,11 @@ export default function SuperAdmin() {
         </div>
       )}
 
-      <div className="flex overflow-x-auto bg-white border border-purple-100 rounded-full p-1 mb-4 w-full sm:w-fit">
+      {/* sur téléphone : onglets en grille (aucun caché hors de l'écran) */}
+      <div className="grid grid-cols-3 sm:flex gap-1 bg-white border border-purple-100 rounded-3xl sm:rounded-full p-1 mb-4 w-full sm:w-fit">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => chooseTab(t.id)}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap ${tab === t.id ? "bg-fuchsia-600 text-white" : t.alert ? "text-fuchsia-700 bg-fuchsia-50" : "text-gray-500 hover:text-gray-900"}`}>
+            className={`sm:flex-none px-2 sm:px-4 py-2 rounded-full font-bold text-xs sm:text-sm whitespace-nowrap truncate ${tab === t.id ? "bg-fuchsia-600 text-white" : t.alert ? "text-fuchsia-700 bg-fuchsia-50" : "text-gray-500 hover:text-gray-900"}`}>
             {t.label}
           </button>
         ))}
@@ -160,6 +163,8 @@ export default function SuperAdmin() {
             onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
       )}
+
+      {tab === "stats" && data && <Stats sessions={data.sessions} requests={data.requests} activations={data.activations} />}
 
       {tab === "demandes" && data && (
         <Requests list={data.requests} creationMode={cfg?.creationMode} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
