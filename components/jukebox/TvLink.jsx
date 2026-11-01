@@ -23,6 +23,10 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null); // { sound }
+  const [zoom, setZoom] = useState(1);
+  const [zoomRange, setZoomRange] = useState(null); // zoom optique de l'appareil photo : { min, max } ; null → zoom numérique
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
   const video = useRef(null);
   const stream = useRef(null);
   const soundRef = useRef(sound);
@@ -60,7 +64,13 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
     setError("");
     if (!navigator.mediaDevices?.getUserMedia) return setCamera("none");
     try {
-      stream.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      // pleine résolution : le QR code de la télé reste lisible de loin
+      stream.current = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+      });
+      const caps = stream.current.getVideoTracks()[0]?.getCapabilities?.() || {};
+      setZoomRange(caps.zoom && caps.zoom.max > caps.zoom.min ? { min: caps.zoom.min, max: Math.min(caps.zoom.max, 8) } : null);
+      setZoom(1);
       setCamera("on");
     } catch (e) {
       setCamera("denied");
@@ -85,14 +95,23 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
       if (v.readyState >= 2) {
         try {
           let text = null;
-          if (detector) text = (await detector.detect(v))[0]?.rawValue;
-          else {
-            jsQR ||= (await import("jsqr")).default;
-            canvas.width = v.videoWidth;
-            canvas.height = v.videoHeight;
+          // zoom numérique : on ne lit que le centre de l'image, agrandi
+          const z = optical.current ? 1 : zoomRef.current;
+          const sw = v.videoWidth / z, sh = v.videoHeight / z;
+          const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
+          if (detector && z === 1) text = (await detector.detect(v))[0]?.rawValue;
+          if (!text) {
+            const scale = Math.min(z, 1600 / sw);
+            canvas.width = Math.round(sw * scale);
+            canvas.height = Math.round(sh * scale);
             const ctx = canvas.getContext("2d", { willReadFrequently: true });
-            ctx.drawImage(v, 0, 0);
-            text = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)?.data;
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            if (detector) text = (await detector.detect(canvas))[0]?.rawValue;
+            else {
+              jsQR ||= (await import("jsqr")).default;
+              text = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height)?.data;
+            }
           }
           const pair = pairFrom(text);
           if (pair) return send(pair);
@@ -105,6 +124,17 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
   }, [camera]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => stream.current?.getTracks().forEach((t) => t.stop()), []);
+
+  // zoom optique quand l'appareil le permet (Android), sinon numérique
+  const optical = useRef(false);
+  optical.current = !!zoomRange;
+  useEffect(() => {
+    if (camera !== "on" || !zoomRange) return;
+    const track = stream.current?.getVideoTracks()[0];
+    const value = Math.min(zoomRange.max, Math.max(zoomRange.min, zoom));
+    track?.applyConstraints({ advanced: [{ zoom: value }] }).catch(() => {});
+  }, [zoom, zoomRange, camera]);
+  const zoomMax = zoomRange ? zoomRange.max : 4;
 
   const close = () => { stop(); onClose(); };
   const choice = (on, label, hint) => (
@@ -142,9 +172,18 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
             </div>
             {camera === "on" ? (
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-square">
-                <video ref={video} playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+                <video ref={video} playsInline muted className="absolute inset-0 w-full h-full object-cover"
+                  style={!zoomRange && zoom > 1 ? { transform: `scale(${zoom})` } : undefined} />
                 <div className="absolute inset-[15%] border-4 border-white/70 rounded-2xl pointer-events-none" />
                 <p className="absolute bottom-2 inset-x-0 text-center text-xs text-white/80">{busy ? "Connexion…" : "Visez le QR code de la télé"}</p>
+              </div>
+            ) : null}
+            {camera === "on" ? (
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4].filter((z) => z <= zoomMax).map((z) => (
+                  <button key={z} type="button" onClick={() => setZoom(z)}
+                    className={`flex-1 rounded-full py-2 text-sm font-bold ${Math.round(zoom) === z ? "bg-fuchsia-600" : "bg-white/10"}`}>×{z}</button>
+                ))}
               </div>
             ) : (
               <button onClick={startCamera} className="w-full font-bold bg-fuchsia-600 hover:bg-fuchsia-700 rounded-full py-3">📷 Scanner le QR code de la télé</button>
