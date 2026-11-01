@@ -55,9 +55,6 @@ export default function TvPair({ params }) {
                   Appuyez sur <b>OK</b> avec la télécommande de la télé pour lancer la musique. Pilotez ensuite la soirée
                   depuis ce téléphone.
                 </p>
-                <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
-                  ⚠️ La télé joue la musique : ne lancez pas aussi la musique sur la page régie d'un ordinateur.
-                </p>
                 <Link href={`/jukebox/${done.code}/telecommande`} className="block text-center bg-fuchsia-600 text-white font-bold py-3 rounded-full">
                   📱 Ouvrir la télécommande
                 </Link>

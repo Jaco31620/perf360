@@ -18,6 +18,11 @@
  * décodeur vidéo, charger le titre suivant dans un 2e lecteur met le 1er en
  * pause. Pas de préchargement : le son baisse sur la fin du titre (fondu),
  * puis le suivant est chargé dans le même lecteur et le son remonte.
+ * Un seul lecteur par soirée (kind : "pc" régie, "tv" télé en mode son) :
+ * chaque appareil a un identifiant (gardé sur l'appareil, il survit à un
+ * rechargement). start() « prend le son » (claim) ; le lecteur qui jouait
+ * avant le voit et se coupe (yielded). `owner` : appareil qui joue le son
+ * (récent), `otherOwner` : un autre que celui-ci.
  * `data` : état de la soirée vu par la régie (titre en cours et file complets) ;
  * `act` : actions régie (useAdminActions) ; `enabled` : conteneurs des
  * lecteurs (playerEls) affichés.
@@ -33,7 +38,21 @@ const loadArgs = (t, from) => {
   return { videoId: t.videoId, startSeconds: Math.max(start, from || 0), ...(trimmed && end ? { endSeconds: end } : {}) };
 };
 
-export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false }) {
+function deviceId(code) {
+  const key = `jukebox:player:${code}`;
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = Math.random().toString(36).slice(2, 12); localStorage.setItem(key, id); }
+    return id;
+  } catch (e) { return Math.random().toString(36).slice(2, 12); }
+}
+
+export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false, kind = "pc" }) {
+  const myId = useRef(null);
+  if (myId.current === null && typeof window !== "undefined") myId.current = deviceId(code);
+  const claimNext = useRef(false); // prochain envoi d'état : « je prends le son »
+  const mySince = useRef(null); // heure (serveur) de notre prise du son
+  const [yielded, setYielded] = useState(false); // un autre appareil a pris le son
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -78,12 +97,21 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     const p = players.current[active.current];
     if (!p?.getCurrentTime) return;
     const id = loaded.current || "";
+    const claim = claimNext.current;
+    claimNext.current = false;
     fetch(`/api/jukebox/${code}/admin`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders(code) },
-      body: JSON.stringify({ action: "playback", id, pos: id ? p.getCurrentTime() : 0, playing: !!id && p.getPlayerState() === 1, volume: master.current }),
-    }).catch(() => {});
-  }, [code]);
+      body: JSON.stringify({
+        action: "playback", id, pos: id ? p.getCurrentTime() : 0, playing: !!id && p.getPlayerState() === 1, volume: master.current,
+        player: { id: myId.current, kind }, ...(claim ? { claim: true } : {}),
+      }),
+    }).then((r) => r.json()).then((d) => {
+      if (d.ok === false && d.owner) yieldRef.current(); // un autre appareil joue le son
+      else if (d.ok && d.since) mySince.current = d.since;
+    }).catch(() => { if (claim) claimNext.current = true; });
+  }, [code, kind]);
+  const yieldRef = useRef(() => {});
 
   useEffect(() => {
     if (!started) return;
@@ -310,7 +338,10 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
 
   const start = () => {
     setStarted(true);
+    setYielded(false);
     wantPlay.current = true;
+    claimNext.current = true;
+    setTimeout(report, 300); // annonce tout de suite : l'autre lecteur se coupe
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       loaded.current = data.now.id;
@@ -355,6 +386,28 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     if (b.revealedFor >= b.after) { blindNext.current = now.id; advance(false, now.id); }
   }, [data, started, advance]);
 
-  return { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current,
+  // Un autre appareil a pris le son : on se coupe.
+  yieldRef.current = () => {
+    if (!started) return;
+    dropPrimed();
+    players.current.forEach((p) => { try { p?.stopVideo(); } catch (e) { /* lecteur pas prêt */ } });
+    loaded.current = null;
+    loadedVideo.current = null;
+    wantPlay.current = false;
+    mySince.current = null;
+    setStarted(false);
+    setPlaying(false);
+    setYielded(true);
+  };
+  const pb = data?.playback;
+  const fetched = data?.fetchedAt || Date.now();
+  const holder = pb?.player && data?.serverTime && data.serverTime - pb.at + (Date.now() - fetched) < 20000 ? pb.player : null;
+  useEffect(() => {
+    // l'autre a pris le son après nous (réponse récente du serveur)
+    if (started && holder && holder.id !== myId.current && mySince.current && holder.since > mySince.current) yieldRef.current();
+  }, [holder?.id, holder?.since, started]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { owner: holder, otherOwner: holder && holder.id !== myId.current ? holder : null, yielded,
+    playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current,
     playerState: () => { try { return cur()?.getPlayerState?.(); } catch (e) { return undefined; } } };
 }

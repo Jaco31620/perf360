@@ -135,7 +135,10 @@ export default function Telecommande({ code }) {
         <div className="max-w-md mx-auto flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <h1 className="font-extrabold truncate leading-tight">{session.name}</h1>
-            <p className="text-[11px] text-white/40">📱 Télécommande · code <span className="font-mono">{formatCode(code)}</span></p>
+            <p className="text-[11px] text-white/40">
+              📱 Télécommande · code <span className="font-mono">{formatCode(code)}</span>
+              {playerSeen && pb.player && <> · <span className="text-white/70">🔊 son sur {pb.player.kind === "tv" ? "la télé" : "l'ordinateur"}</span></>}
+            </p>
           </div>
           <GuestsSwitch open={session.status === "open"} act={act} />
         </div>

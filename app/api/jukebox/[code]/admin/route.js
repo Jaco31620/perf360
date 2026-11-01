@@ -116,7 +116,19 @@ export async function POST(req, { params }) {
         if (typeof body.id !== "string" || !Number.isFinite(pos) || pos < 0 || pos > 86400)
           return Response.json({ error: "Position invalide." }, { status: 400 });
         const volume = Math.min(100, Math.max(0, Math.round(Number(body.volume))));
-        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}) } });
+        // Un seul lecteur à la fois (télé ou ordinateur) : `player` = appareil qui
+        // joue le son. Un autre lecteur ne peut le remplacer qu'en le demandant
+        // (claim : « Prendre le son ici ») ; sinon son état est ignoré et il
+        // apprend qui joue (il se coupe). Lecteur muet depuis 20 s : place libre.
+        const me = body.player && typeof body.player.id === "string"
+          ? { id: body.player.id.slice(0, 40), kind: body.player.kind === "tv" ? "tv" : "pc" } : null;
+        const holder = s.playback?.player || null;
+        const alive = !!s.playback && receivedAt - (Number(s.playback.at) || 0) < 20000;
+        if (me && holder && holder.id !== me.id && alive && !body.claim)
+          return Response.json({ ok: false, owner: holder });
+        const player = me ? { ...me, since: body.claim || !holder || holder.id !== me.id ? receivedAt : holder.since } : holder;
+        res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}) } });
+        if (!res.error) return Response.json({ ok: true, since: player?.since ?? null });
         break;
       }
       case "command": {

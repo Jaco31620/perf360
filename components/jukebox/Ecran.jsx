@@ -24,10 +24,14 @@ import { loadYouTubeApi, createPlayer } from "./youtube";
 
 const MAX_SHOWN = 6;
 
-export default function Ecran({ code, sound: wantSound }) {
+export default function Ecran({ code, sound: wantSound, claim = false }) {
   const [data, setData] = useState(null);
   const [sound, setSound] = useState(null); // mode son (jeton régie présent) ; null : pas encore lu
   useEffect(() => { setSound(!!wantSound && !!getAdminToken(code)); }, [wantSound, code]);
+  const [canSound, setCanSound] = useState(false); // accès régie : « Prendre le son ici » possible
+  useEffect(() => { setCanSound(!!getAdminToken(code)); }, [code]);
+  const displayOnly = () => window.location.replace(`/jukebox/${code}/ecran`); // un autre appareil joue le son
+  const takeSound = () => { window.location.href = `/jukebox/${code}/ecran?son=1&claim=1`; };
   const [missing, setMissing] = useState(false);
   const [origin, setOrigin] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
@@ -72,15 +76,21 @@ export default function Ecran({ code, sound: wantSound }) {
   // mode son : le moteur voit le titre en cours et la file complets
   const engineData = sound && data?.engine
     ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null;
-  const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data, autoResume: true, single: true }); // télé : un seul décodeur vidéo
+  const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data, autoResume: true, single: true, kind: "tv" }); // télé : un seul décodeur vidéo
 
   // Mode son : lancement automatique ; si le navigateur de la télé bloque le
   // son sans geste (vidéo qui ne démarre pas), on affiche le bouton « Lancer ».
   const [blocked, setBlocked] = useState(false);
   const tapped = useRef(false); // un appui a eu lieu : le son est autorisé pour la page
+  // Si un autre appareil (ordinateur) joue déjà le son, la télé passe en
+  // affichage seul, sauf si on vient de lui demander de prendre le son (claim).
   useEffect(() => {
-    if (sound && engine.ready && !engine.started) engine.start();
+    if (!sound || !engine.ready || engine.started) return;
+    if (engine.otherOwner && !claim) return displayOnly();
+    engine.start();
+    if (claim) history.replaceState(null, "", `/jukebox/${code}/ecran?son=1`); // rechargement : reprise normale
   }, [sound, engine.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (engine.yielded) displayOnly(); }, [engine.yielded]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sound || !engine.started) return;
     let since = null;
@@ -332,6 +342,14 @@ export default function Ecran({ code, sound: wantSound }) {
           </button>
           <p className="text-[1.3vw] text-white/60">Appuyez sur OK avec la télécommande de la télé. Ensuite, tout se pilote depuis la télécommande du téléphone.</p>
         </div>
+      )}
+
+      {!sound && canSound && (
+        <button onClick={takeSound}
+          className={`absolute bottom-4 left-4 bg-black/50 hover:bg-black/70 focus:bg-fuchsia-600 focus:opacity-100 focus:ring-4 focus:ring-white outline-none backdrop-blur text-white font-bold px-5 py-2.5 rounded-full border border-white/20 transition-opacity duration-500 ${
+            !fullscreen || mouseActive ? "opacity-100" : "opacity-0"}`}>
+          🔊 {data.playback?.player?.kind === "pc" ? "Le son est sur l'ordinateur · " : ""}Prendre le son ici
+        </button>
       )}
 
       <button onClick={toggleFullscreen}

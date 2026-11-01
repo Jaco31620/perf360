@@ -2,6 +2,9 @@
 /*
  * Jukebox — régie (PC branché à la sono) : lecteur (moteur partagé avec
  * l'écran en mode son, usePlayerEngine), file, réglages, blind test, outils.
+ * Un seul lecteur par soirée : si la télé joue le son, la régie reste
+ * complète mais sans lecteur ; ses boutons pilotent alors la télé (comme la
+ * télécommande), et « Prendre le son ici » rebascule le son sur l'ordinateur.
  * Rafraîchit la file toutes les 1,5 s. Jeton régie en localStorage, ou #t=…
  * dans l'URL pour ouvrir la régie sur un autre appareil.
  */
@@ -71,8 +74,11 @@ export default function Regie({ code }) {
   refreshRef.current = refresh;
   const passError = useJoinPass(code, refresh); // QR « Ajouter un appareil »
 
-  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance } =
-    usePlayerEngine({ code, data, act, enabled: !!data?.admin });
+  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, otherOwner, yielded } =
+    usePlayerEngine({ code, data, act, enabled: !!data?.admin, kind: "pc" });
+  // la télé joue le son : la régie pilote à distance (ordres comme la télécommande)
+  const [remoteVolume, setRemoteVolume] = useState(null);
+  const remoteTimer = useRef(null);
 
   const playNow = (t) => {
     if (data.now && !confirm(`Lancer « ${t.title} » maintenant ?\nLe titre en cours sera interrompu.`)) return;
@@ -108,6 +114,17 @@ export default function Regie({ code }) {
     { id: "tools", label: "🔧 Outils" },
   ];
   const shown = tabs.some((t) => t.id === tab) ? tab : "queue"; // onglet retiré (blind test coupé)
+  const remote = !started && !!otherOwner; // le son est joué par un autre appareil (télé)
+  const pb = data.playback;
+  const remotePlaying = !!(remote && now && pb?.id === now.id && pb.playing);
+  const remoteVol = remoteVolume ?? pb?.volume ?? 100;
+  const remoteToggle = () => act("command", { type: remotePlaying ? "pause" : "play" }, true);
+  const remoteChangeVolume = (v) => {
+    setRemoteVolume(v);
+    clearTimeout(remoteTimer.current);
+    remoteTimer.current = setTimeout(() => { act("command", { type: "volume", value: v }, true); setTimeout(() => setRemoteVolume(null), 4000); }, 300);
+  };
+  const ownerName = otherOwner?.kind === "tv" ? "la télé" : "un autre ordinateur";
   const joinUrl = `${origin}/jukebox/${code}`;
 
   return (
@@ -126,7 +143,21 @@ export default function Regie({ code }) {
               <div key={i} ref={playerEls[i]}
                 className={`absolute inset-0 transition-opacity duration-1000 ${i === activeIdx ? "opacity-100 z-10" : "opacity-0 pointer-events-none"}`} />
             ))}
-            {!started && (
+            {remote && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/80 text-center px-6">
+                {now?.thumb && !masked && <img src={now.thumb} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 -z-10" />}
+                <p className="text-2xl font-bold">🔊 Le son est joué par {ownerName}</p>
+                <p className="text-white/70 text-sm max-w-md">
+                  Cette régie pilote la soirée à distance : lecture/pause, volume et titre suivant agissent sur {ownerName}.
+                  {yielded && " (Le son a été pris par un autre appareil.)"}
+                </p>
+                <button onClick={() => confirm(`Prendre le son sur cet ordinateur ?\n${ownerName === "la télé" ? "La télé" : "L'autre appareil"} s'arrêtera de jouer la musique.`) && start()} disabled={!ready}
+                  className="bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white font-bold px-6 py-3 rounded-full">
+                  🔊 Prendre le son ici
+                </button>
+              </div>
+            )}
+            {!started && !remote && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/85 text-center px-6">
                 <p className="text-white/70">
                   {now || queue.length ? `${queue.length + (now ? 1 : 0)} titre${queue.length + (now ? 1 : 0) > 1 ? "s" : ""} dans la file` : "La file est vide pour l'instant : la musique démarrera au premier titre proposé."}
@@ -173,6 +204,13 @@ export default function Regie({ code }) {
                 <PlayPauseButton playing={playing} onClick={togglePlay} disabled={!now} />
                 <SkipButton onClick={() => advance(true)} disabled={!now} />
                 <VolumeSlider value={volume} onChange={changeVolume} className="w-36 ml-1" />
+              </div>
+            )}
+            {remote && (
+              <div className="flex items-center gap-3" title={`Pilote ${ownerName}`}>
+                <PlayPauseButton playing={remotePlaying} onClick={remoteToggle} disabled={!now} />
+                <SkipButton onClick={() => now && act("next", { from: now.id, skip: true })} disabled={!now} />
+                <VolumeSlider value={remoteVol} onChange={remoteChangeVolume} className="w-36 ml-1" />
               </div>
             )}
           </div>

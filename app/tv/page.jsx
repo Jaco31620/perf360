@@ -47,14 +47,14 @@ export default function TvPage() {
         const d = await (await fetch(`/api/jukebox/tv?id=${pair}`, { cache: "no-store" })).json();
         if (d.code) {
           if (d.token) setAdminToken(d.code, d.token); // mode son : la télé devient le lecteur de la régie
-          open(d.code, !!d.token);
+          open(d.code, !!d.token, true); // choix fait sur le téléphone : la télé prend le son
         }
       } catch (e) { /* réseau : on retentera */ }
     }, 2000);
     return () => clearInterval(t);
   }, [pair]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = async (c, sound = false) => {
+  const open = async (c, sound = false, claim = false) => {
     if (c.length !== 6 || busy) return;
     setBusy(true);
     setError("");
@@ -62,7 +62,7 @@ export default function TvPage() {
       const res = await fetch(`/api/jukebox/${c}`, { cache: "no-store" });
       if (res.status === 404) throw new Error(`Aucune soirée avec le code ${formatCode(c)}.`);
       try { localStorage.setItem(LAST_KEY, c); localStorage.setItem(SOUND_KEY, sound ? "1" : ""); } catch (e) { /* stockage indisponible */ }
-      router.push(`/jukebox/${c}/ecran${sound ? "?son=1" : ""}`);
+      router.push(`/jukebox/${c}/ecran${sound ? `?son=1${claim ? "&claim=1" : ""}` : ""}`);
     } catch (e) {
       setError(e.message || "Connexion impossible, réessayez.");
       setBusy(false);
