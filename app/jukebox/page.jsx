@@ -44,7 +44,7 @@ export default function JukeboxHome() {
     let saved = "";
     try { saved = localStorage.getItem(ACT_KEY) || ""; } catch (e) { /* stockage indisponible */ }
     if (fromLink || saved) setCreationCode((fromLink || saved).toUpperCase());
-    // soirées supprimées depuis (à la main ou après inactivité) : retirées de la liste
+    // soirées supprimées depuis (par le super-admin) : retirées de la liste
     for (const p of myParties()) {
       fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then((r) => {
         if (r.status !== 404) return;

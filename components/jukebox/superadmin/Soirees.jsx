@@ -23,7 +23,8 @@ const STATUSES = [
   { id: "live", label: "🟢 En cours", hint: "La musique joue (lecteur actif il y a moins de 3 min)." },
   { id: "ready", label: "🟡 Prêtes", hint: "Aucun titre joué pour l'instant." },
   { id: "past", label: "⚪ Passées", hint: "Des titres ont été joués, plus de lecteur actif." },
-  { id: "ended", label: "⛔ Terminées", hint: "Durée d'utilisation dépassée : plus accessible, supprimée plus tard (prolongez-la en changeant sa durée)." },
+  { id: "stale", label: "💤 Inactives", hint: "Sans activité depuis le délai choisi dans les Réglages, ou terminées : à supprimer si elles ne servent plus." },
+  { id: "ended", label: "⛔ Terminées", hint: "Durée d'utilisation dépassée : plus accessible. Prolongez-la en changeant sa durée, ou supprimez-la." },
 ];
 const DOT = { live: "bg-green-500 animate-pulse", ready: "bg-amber-400", past: "bg-gray-300", ended: "bg-red-400" };
 
@@ -34,22 +35,20 @@ function ago(ms) {
   if (d < 48 * 3600e3) return `il y a ${Math.round(d / 3600e3)} h`;
   return `il y a ${Math.round(d / 86400e3)} j`;
 }
-function fmtIn(ms) {
-  const d = ms - Date.now();
-  if (d <= 0) return "à la prochaine purge";
-  const h = Math.round(d / 3600e3);
-  return h < 48 ? `dans ${h} h` : `dans ${Math.round(h / 24)} j`;
-}
+const DAY = 864e5;
+const inactiveDays = (s) => Math.floor((Date.now() - s.lastActivity) / DAY);
 
-export function Soirees({ sessions, origin, action, filter, setFilter, onShowCode }) {
+export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFilter, onShowCode }) {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(null); // code de la soirée dépliée
   const [share, setShare] = useState(null); // { code, kind: "orga" | "guests", regieCode? }
   const q = filter.trim().toLowerCase();
   const matches = (s) => !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q);
   const counts = { all: sessions.length };
+  const isStale = (s) => soireeStatus(s) !== "live" && (soireeStatus(s) === "ended" || inactiveDays(s) >= staleDays);
   for (const s of sessions) counts[soireeStatus(s)] = (counts[soireeStatus(s)] || 0) + 1;
-  const shown = sessions.filter((s) => matches(s) && (status === "all" || soireeStatus(s) === status));
+  counts.stale = sessions.filter(isStale).length;
+  const shown = sessions.filter((s) => matches(s) && (status === "all" || (status === "stale" ? isStale(s) : soireeStatus(s) === status)));
 
   const shareOrga = async (s) => {
     const regieCode = s.regieCode || (await action({ action: "regie", code: s.code }))?.regieCode;
@@ -84,6 +83,9 @@ export function Soirees({ sessions, origin, action, filter, setFilter, onShowCod
         const isOpen = open === s.code;
         const devices = s.devices || [];
         const used = devices.length > 0;
+        const stale = isStale(s);
+        const idle = inactiveDays(s);
+        const del = () => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?${idle >= 1 ? `\n\nInactive depuis ${idle} jour${idle > 1 ? "s" : ""}.` : ""}`);
         return (
           <div key={s.code} className={`bg-white rounded-2xl border ${isOpen ? "border-fuchsia-300 shadow-md" : "border-purple-100"}`}>
             {/* ligne compacte */}
@@ -96,12 +98,13 @@ export function Soirees({ sessions, origin, action, filter, setFilter, onShowCod
                   </span>
                   <span className="block text-xs text-gray-500 truncate">
                     {s.organizer ? `👤 ${s.organizer} · ` : ""}
-                    {st === "ended" ? "⛔ terminée · " : ""}{st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : `activité ${ago(s.lastActivity)}`}
+                    {st === "ended" ? "⛔ terminée · " : ""}{st === "live" ? `🔊 en cours sur ${s.player.kind === "tv" ? "la télé" : "l'ordinateur"}` : (stale ? <span className="text-amber-700">💤 inactive depuis {idle} j</span> : `activité ${ago(s.lastActivity)}`)}
                     {" · "}{s.played} titre{s.played > 1 ? "s" : ""}
                     {" · "}{used ? <span className="text-green-700">lien ouvert</span> : <span className="text-amber-700">⚠️ lien jamais ouvert</span>}
                   </span>
                 </span>
               </button>
+              {stale && <button onClick={del} title={`Inactive depuis ${idle} jour${idle > 1 ? "s" : ""}`} className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-full shrink-0">🗑️ <span className="hidden sm:inline">Supprimer</span></button>}
               <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="hidden sm:inline-block text-sm font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full shrink-0">Régie</Link>
               <button onClick={() => { setOpen(isOpen ? null : s.code); setShare(null); }} className="text-gray-400 text-sm shrink-0" aria-label={isOpen ? "Replier" : "Déplier"}>{isOpen ? "▲" : "▼"}</button>
             </div>
@@ -118,7 +121,7 @@ export function Soirees({ sessions, origin, action, filter, setFilter, onShowCod
                       <ValiditySelect value={s.validDays} className="text-xs"
                         onChange={(days) => action({ action: "validity", code: s.code, days })} />
                       {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `⛔ terminée le ${fmtDay(s.endsAt)}` : `jusqu'au ${fmtDay(s.endsAt)}`}</span>}
-                      <span className="text-xs text-gray-400">suppression {fmtIn(s.expiresAt)}</span>
+                      {idle >= 1 && <span className={`text-xs ${stale ? "text-amber-700 font-semibold" : "text-gray-400"}`}>💤 inactive depuis {idle} jour{idle > 1 ? "s" : ""}</span>}
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -167,8 +170,7 @@ export function Soirees({ sessions, origin, action, filter, setFilter, onShowCod
                   <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">💻 Régie</Link>
                   <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">📺 Écran</Link>
                   <button onClick={() => rename(s)} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">✏️ Renommer</button>
-                  <button onClick={() => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?`)}
-                    className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full ml-auto">Supprimer</button>
+                  <button onClick={del} className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full ml-auto">Supprimer</button>
                 </div>
 
                 {share?.code === s.code && share.kind === "orga" && (

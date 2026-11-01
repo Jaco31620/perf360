@@ -159,7 +159,7 @@ export default function JukeboxHelp() {
               <p>Essayez avec l'artiste et le titre, sans fautes. Vous pouvez aussi l'ajouter vous-même depuis la régie ou la télécommande (sans limite).</p>
             </Faq>
             <Faq q="Que deviennent les données de la soirée ?">
-              <p>La soirée et ses titres sont supprimés automatiquement quelques jours après la dernière activité. Aucun compte n'est demandé aux invités : seulement un prénom.</p>
+              <p>La soirée et ses titres sont supprimés quand elle ne sert plus (sur simple demande, ou après une longue période sans activité). Aucun compte n'est demandé aux invités : seulement un prénom.</p>
             </Faq>
           </div>
         </Section>

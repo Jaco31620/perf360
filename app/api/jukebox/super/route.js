@@ -52,7 +52,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // pré-remplissage : jusqu'à 100 recherches Deezer
 
-const DAY = 24 * 3600 * 1000;
 
 export async function GET(req) {
   if (!isJukeboxSuper(req)) return Response.json({ error: "Accès refusé." }, { status: 401 });
@@ -85,7 +84,7 @@ export async function GET(req) {
       activations,
       requests,
       proposals,
-      sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: (s.endsAt || s.lastActivity) + config.retentionDays * DAY })),
+      sessions: sessions.map(({ id, ...s }) => s),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     console.error("jukebox super GET:", e);

@@ -17,7 +17,7 @@ export const MODE_TAG = {
 export function ValiditySelect({ value, onChange, className = "" }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-      title="Durée pendant laquelle la soirée est utilisable, à partir de sa création. Ensuite elle est terminée, puis supprimée."
+      title="Durée pendant laquelle la soirée est utilisable, à partir de sa création. Ensuite elle est terminée (plus accessible) ; vous pouvez la prolonger ou la supprimer."
       className={`border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold ${className}`}>
       <option value="">Utilisable sans limite de durée</option>
       {VALID_CHOICES.map((n) => <option key={n} value={n}>Utilisable {validLabel(n)}</option>)}

@@ -155,7 +155,7 @@ export default function SuperAdmin() {
             load();
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
-          {data && <Soirees sessions={data.sessions} origin={origin} action={action} filter={filter} setFilter={setFilter}
+          {data && <Soirees sessions={data.sessions} staleDays={cfg?.retentionDays || 7} origin={origin} action={action} filter={filter} setFilter={setFilter}
             onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
       )}
@@ -180,7 +180,7 @@ export default function SuperAdmin() {
             <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
               <h2 className="font-bold text-base text-gray-900">Accès</h2>
               <label className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Suppression après inactivité<span className="block text-xs font-normal text-gray-400">Soirées sans durée d'utilisation : après N jours sans activité. Avec une durée : N jours après sa fin.</span></span>
+                <span className="font-semibold">Proposer la suppression après<span className="block text-xs font-normal text-gray-400">jours sans activité (aucune suppression automatique : onglet Soirées, filtre 💤).</span></span>
                 <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}
                   className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
                   {RETENTION_CHOICES.map((n) => <option key={n} value={n}>{retentionLabel(n)}</option>)}
