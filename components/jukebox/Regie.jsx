@@ -74,7 +74,7 @@ export default function Regie({ code }) {
   refreshRef.current = refresh;
   const passError = useJoinPass(code, refresh); // QR « Ajouter un appareil »
 
-  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, otherOwner, yielded } =
+  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, otherOwner, yielded, currentId } =
     usePlayerEngine({ code, data, act, enabled: !!data?.admin, kind: "pc" });
   // la télé joue le son : la régie pilote à distance (ordres comme la télécommande)
   const [remoteVolume, setRemoteVolume] = useState(null);
@@ -116,7 +116,8 @@ export default function Regie({ code }) {
 
   const { session, now, queue } = data;
   const open = session.status === "open";
-  const masked = !!(data.blind?.on && now && !data.blind.revealed && peek !== now.id);
+  // blind test : masqué tant que non dévoilé, et dès que le lecteur passe au titre suivant (avant la mise à jour du serveur)
+  const masked = !!(data.blind?.on && now && ((!data.blind.revealed && peek !== now.id) || (started && currentId && currentId !== now.id)));
   const tabs = [
     { id: "queue", label: `🎵 File${queue.length ? ` (${queue.length})` : ""}` },
     { id: "settings", label: "⚙️ Réglages" },

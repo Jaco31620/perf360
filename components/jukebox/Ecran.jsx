@@ -212,6 +212,9 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   const { session, now, queue, total, blind } = data;
   const theme = session.theme;
   const hidden = !!now?.hidden;
+  // mode son, blind test : le lecteur enchaîne le titre suivant avant que le
+  // serveur ne le déclare masqué → cache dès que le lecteur change de titre
+  const covered = hidden || (sound && !!blind?.on && !!engine.currentId && !!now && engine.currentId !== now.id);
   const since = (Date.now() - data.fetchedAt) / 1000;
   const joinUrl = `${origin}/jukebox/${code}`;
   const showQueue = session.screenQueue;
@@ -256,7 +259,7 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
                 className={`absolute inset-0 transition-opacity duration-1000 ${i === engine.activeIdx ? "opacity-100 z-10" : "opacity-0"}`} />
             )) : <div ref={playerEl} className="absolute inset-0" />}
             <div className="absolute inset-0 z-20" />
-            {sound && hidden && (
+            {sound && covered && (
               <div className="absolute inset-0 z-30 bg-gray-950 flex flex-col items-center justify-center text-center">{hiddenText}</div>
             )}
           </div>

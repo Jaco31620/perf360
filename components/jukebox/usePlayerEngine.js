@@ -71,6 +71,8 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   const switching = useRef(null);
   const master = useRef(100); // volume choisi
   const loaded = useRef(null); // id du titre joué par le lecteur actif
+  const [currentId, setCurrentId] = useState(null); // le même, pour l'affichage (cache du blind test)
+  const setLoaded = (id) => { loaded.current = id; setCurrentId(id); };
   const loadedVideo = useRef(null); // sa vidéo (peut être corrigée en cours de soirée)
   const advancing = useRef(false);
   // la lecture doit-elle tourner ? (faux après une pause demandée par la
@@ -134,7 +136,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     const newP = players.current[pr.idx];
     primed.current = null;
     switching.current = { from: loaded.current, to: pr.id, until: Date.now() + 15000 };
-    loaded.current = pr.id;
+    setLoaded(pr.id);
     loadedVideo.current = pr.videoId;
     wantPlay.current = true;
     setActive(pr.idx);
@@ -180,7 +182,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       // le suivant tout de suite dans le même lecteur, sans attendre le serveur
       const from = loaded.current;
       switching.current = { from, to: next.id, until: Date.now() + 15000 };
-      loaded.current = next.id;
+      setLoaded(next.id);
       loadedVideo.current = next.videoId;
       wantPlay.current = true;
       fadeIn(Math.min(3, dataRef.current?.session?.fade || 0));
@@ -261,13 +263,13 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       if (primed.current?.id === now.id && primed.current.videoId === now.videoId && primed.current.ready) return switchToPrimed(0);
       dropPrimed();
       other()?.stopVideo();
-      loaded.current = now.id;
+      setLoaded(now.id);
       loadedVideo.current = now.videoId;
       cur().setVolume(master.current);
       wantPlay.current = true;
       cur().loadVideoById(loadArgs(now));
     } else if (!now) {
-      if (loaded.current) { cur().stopVideo(); loaded.current = null; }
+      if (loaded.current) { cur().stopVideo(); setLoaded(null); }
       wantPlay.current = false;
       dropPrimed();
       if (data.queue.length) advance(false);
@@ -344,7 +346,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     setTimeout(report, 300); // annonce tout de suite : l'autre lecteur se coupe
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
-      loaded.current = data.now.id;
+      setLoaded(data.now.id);
       loadedVideo.current = data.now.videoId;
       cur().loadVideoById(loadArgs(data.now, resumeAt(data)));
     }
@@ -391,7 +393,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     if (!started) return;
     dropPrimed();
     players.current.forEach((p) => { try { p?.stopVideo(); } catch (e) { /* lecteur pas prêt */ } });
-    loaded.current = null;
+    setLoaded(null);
     loadedVideo.current = null;
     wantPlay.current = false;
     mySince.current = null;
@@ -408,6 +410,6 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   }, [holder?.id, holder?.since, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { owner: holder, otherOwner: holder && holder.id !== myId.current ? holder : null, yielded,
-    playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current,
+    playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current, currentId,
     playerState: () => { try { return cur()?.getPlayerState?.(); } catch (e) { return undefined; } } };
 }
