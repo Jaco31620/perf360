@@ -32,7 +32,6 @@ export default function Regie({ code }) {
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
-  const [peek, setPeek] = useState(null); // blind test : titre affiché quand même en régie
   const [tab, setTab] = useState("queue"); // onglet de la colonne de droite (retenu par appareil)
   useEffect(() => { try { const t = localStorage.getItem("jukebox:regieTab"); if (t) setTab(t); } catch (e) { /* ignoré */ } }, []);
   const chooseTab = (t) => { setTab(t); try { localStorage.setItem("jukebox:regieTab", t); } catch (e) { /* ignoré */ } };
@@ -74,7 +73,7 @@ export default function Regie({ code }) {
   refreshRef.current = refresh;
   const passError = useJoinPass(code, refresh); // QR « Ajouter un appareil »
 
-  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, otherOwner, yielded, currentId } =
+  const { playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, otherOwner, yielded } =
     usePlayerEngine({ code, data, act, enabled: !!data?.admin, kind: "pc" });
   // la télé joue le son : la régie pilote à distance (ordres comme la télécommande)
   const [remoteVolume, setRemoteVolume] = useState(null);
@@ -116,8 +115,6 @@ export default function Regie({ code }) {
 
   const { session, now, queue } = data;
   const open = session.status === "open";
-  // blind test : masqué tant que non dévoilé, et dès que le lecteur passe au titre suivant (avant la mise à jour du serveur)
-  const masked = !!(data.blind?.on && now && ((!data.blind.revealed && !session.blindSettings?.peek && peek !== now.id) || (started && currentId && currentId !== now.id)));
   const tabs = [
     { id: "queue", label: `🎵 File${queue.length ? ` (${queue.length})` : ""}` },
     { id: "settings", label: "⚙️ Réglages" },
@@ -156,7 +153,7 @@ export default function Regie({ code }) {
             ))}
             {remote && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/80 text-center px-6">
-                {now?.thumb && !masked && <img src={now.thumb} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 -z-10" />}
+                {now?.thumb && <img src={now.thumb} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 -z-10" />}
                 <p className="text-2xl font-bold">🔊 Le son est joué par {ownerName}</p>
                 <p className="text-white/70 text-sm max-w-md">
                   Cette régie pilote la soirée à distance : lecture/pause, volume et titre suivant agissent sur {ownerName}.
@@ -179,13 +176,6 @@ export default function Regie({ code }) {
                 </button>
               </div>
             )}
-            {started && masked && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-950 text-center px-6">
-                <p className="text-5xl">🕵️</p>
-                <p className="text-white/70">Blind test : vidéo masquée jusqu'à la réponse.</p>
-                <button onClick={() => setPeek(now.id)} className="text-sm text-white/50 underline">Afficher quand même (régie)</button>
-              </div>
-            )}
             {started && !now && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black text-white/60 text-center px-6 pointer-events-none">
                 En attente du prochain titre… Scannez le QR code pour en proposer un !
@@ -198,8 +188,8 @@ export default function Regie({ code }) {
               {now ? (
                 <>
                   <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment{now.author ? ` · proposé par ${now.author}` : ""}</p>
-                  <p className="text-xl font-bold truncate">{masked ? "🤫 Titre masqué" : now.title}</p>
-                  <p className="text-sm text-white/50">{masked ? "Blind test en cours" : now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
+                  <p className="text-xl font-bold truncate">{now.title}</p>
+                  <p className="text-sm text-white/50">{now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »

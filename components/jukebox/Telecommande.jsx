@@ -37,7 +37,6 @@ export default function Telecommande({ code }) {
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
-  const [peek, setPeek] = useState(null); // blind test : titre affiché quand même
   const volumeTimer = useRef(null);
   const mismatchSince = useRef(null); // depuis quand le lecteur joue un autre titre que celui en cours
 
@@ -88,8 +87,6 @@ export default function Telecommande({ code }) {
   }
 
   const { session, now, queue, playback: pb } = data;
-  // blind test : titre masqué avant la réponse, sauf option « visible pour l'organisateur »
-  const masked = !!(data.blind?.on && now && !data.blind.revealed && !session.blindSettings?.peek && peek !== now.id);
   const live = pb && now && pb.id === now.id;
   const age = pb ? data.serverTime - pb.at + (Date.now() - data.fetchedAt) : Infinity;
   // Le lecteur envoie son état toutes les 5 s. Au changement de titre, il
@@ -158,16 +155,10 @@ export default function Telecommande({ code }) {
             {now ? (
               <div className="space-y-3">
                 <div className="flex gap-3 items-start">
-                {now.thumb && !masked && <img src={now.thumb} alt="" className="w-[42%] shrink-0 aspect-video object-cover rounded-2xl shadow-xl" />}
-                {masked && <div className="w-[42%] shrink-0 aspect-video rounded-2xl bg-white/5 flex items-center justify-center text-4xl">🕵️</div>}
+                {now.thumb && <img src={now.thumb} alt="" className="w-[42%] shrink-0 aspect-video object-cover rounded-2xl shadow-xl" />}
                 <div className="flex-1 min-w-0">
-                  {masked ? (
-                    <>
-                      <p className="text-base font-bold leading-snug">🤫 Titre masqué</p>
-                      <button onClick={() => setPeek(now.id)} className="text-xs text-white/50 underline">Afficher quand même</button>
-                    </>
-                  ) : <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>}
-                  {now.channel && !masked && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
+                  <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>
+                  {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
                   {now.author && <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>}
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
