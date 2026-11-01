@@ -320,3 +320,9 @@ create table if not exists public.jukebox_requests (
 );
 alter table public.jukebox_requests enable row level security;
 grant all on public.jukebox_requests to service_role;
+
+-- v24 (01/11/2026) : conservation propre à un code d'activation (jours
+-- après la dernière activité, null = réglage global), héritée par les
+-- soirées créées avec ce code (options.retentionDays).
+alter table public.jukebox_activations
+  add column if not exists retention_days int;

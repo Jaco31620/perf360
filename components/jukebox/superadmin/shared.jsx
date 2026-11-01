@@ -1,5 +1,5 @@
 "use client";
-import { SEARCH_MODES } from "@/lib/jukebox";
+import { SEARCH_MODES, RETENTION_CHOICES, retentionLabel } from "@/lib/jukebox";
 
 export const CREATION_MODES = [
   { id: "open", label: "Tout le monde", hint: "Toute personne qui connaît l'adresse /jukebox peut créer une soirée." },
@@ -12,6 +12,18 @@ export const MODE_TAG = {
   normal: "bg-sky-100 text-sky-700",
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
+
+/* Conservation (jours après la dernière activité) ; value null = réglage global. */
+export function RetentionSelect({ value, onChange, global, className = "" }) {
+  return (
+    <select value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+      title="Suppression automatique après ce délai sans activité"
+      className={`border-2 border-gray-200 rounded-xl px-2 py-1.5 font-semibold ${className}`}>
+      <option value="">Conservation par défaut{global ? ` (${retentionLabel(global)})` : ""}</option>
+      {RETENTION_CHOICES.map((n) => <option key={n} value={n}>Conservée {retentionLabel(n)}</option>)}
+    </select>
+  );
+}
 
 export const modeLabel = (m) => SEARCH_MODES.find((x) => x.id === m)?.label || m;
 

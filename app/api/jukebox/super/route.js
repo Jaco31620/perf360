@@ -11,12 +11,13 @@
  *     trimSuggest { videoId, duration } → suggestion SponsorBlock { start, end, segments }
  *     changeAccept / changeReject { id } → proposition de vidéo faite en soirée (adoptée : validée)
  *     changeRevert { id } → revenir à la vidéo d'avant un changement
- *     actCreate { label, maxParties?, expiresAt?, features? } → nouveau code d'activation
+ *     actCreate { label, maxParties?, expiresAt?, features?, retentionDays? } → nouveau code d'activation
  *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
  *     actDelete { id } → supprimer un code (les soirées créées restent)
  *     reqApprove { id, label?, maxParties?, expiresAt?, features?, partiesText, expiresText?, origin } → demande d'accès validée : code créé + e-mail
  *     reqReject { id, notify? } / reqDelete { id } → demande refusée (e-mail si notify) / supprimée
  *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
+ *     retention { code, days|null } → conservation propre à la soirée (null : réglage global)
  *     delete { code }  → supprimer une soirée
  *     forgetSong { key } → oublier une correspondance de la mémoire
  *     songVideos { key } → autres vidéos possibles pour un titre mémorisé
@@ -43,7 +44,7 @@ import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } f
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
-import { normalizeFeatures, MAX_NAME_LEN } from "@/lib/jukebox";
+import { normalizeFeatures, MAX_NAME_LEN, cleanRetention } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 
@@ -84,7 +85,7 @@ export async function GET(req) {
       activations,
       requests,
       proposals,
-      sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
+      sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + (s.retentionDays || config.retentionDays) * DAY })),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     console.error("jukebox super GET:", e);
@@ -207,12 +208,20 @@ export async function POST(req) {
       case "regie":
       case "features":
       case "rename":
+      case "retention":
       case "delete": {
         const s = await loadSession(body.code);
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
         const sb = getSupabaseAdmin();
         if (body.action === "features") {
           const options = { ...(s.options || {}), features: normalizeFeatures(body.features, normalizeFeatures(s.options?.features)) };
+          const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
+          if (error) throw error;
+          return Response.json({ ok: true });
+        }
+        if (body.action === "retention") {
+          const options = { ...(s.options || {}) };
+          if (cleanRetention(body.days)) options.retentionDays = cleanRetention(body.days); else delete options.retentionDays;
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
           return Response.json({ ok: true });

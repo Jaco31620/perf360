@@ -16,7 +16,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { newAdminToken, hashToken, regieOptions } from "@/lib/jukeboxServer";
 import { newRegieCode, deviceLabel } from "@/lib/jukeboxAccess";
-import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults, cleanRetention } from "@/lib/jukebox";
 import { loadConfig, isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { checkActivation, consumeActivation, refundActivation, ActivationError } from "@/lib/jukeboxActivation";
 
@@ -82,12 +82,14 @@ async function create(req, onActivation) {
         onActivation(activation);
       }
     }
+    const retentionDays = isSuper ? cleanRetention(body?.retentionDays) : activation?.retentionDays;
     const options = {
       ...regieOptions(d),
       theme: { palette: d.palette },
       blind: { ...d.blind, on: false },
       features: isSuper ? normalizeFeatures(body?.features, config.defaultFeatures) : activation?.features || config.defaultFeatures,
       ...(activation ? { organizer: activation.label, activationId: activation.id } : {}),
+      ...(retentionDays ? { retentionDays } : {}), // conservation propre (sinon réglage global)
     };
     const sb = getSupabaseAdmin();
     for (let attempt = 0; attempt < 8; attempt++) {

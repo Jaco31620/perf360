@@ -11,7 +11,7 @@ import { formatCode } from "../storage";
 import { fmtRegieCode } from "../Access";
 import { FEATURES } from "@/lib/jukebox";
 import { inviteText, guestText } from "@/lib/jukeboxMessages";
-import { fmtDate, SearchInput } from "./shared";
+import { fmtDate, SearchInput, RetentionSelect } from "./shared";
 import { ShareBox } from "./SoireeForms";
 
 const LIVE_MS = 3 * 60e3; // lecteur actif il y a moins de 3 min : soirée en cours
@@ -39,7 +39,7 @@ function fmtIn(ms) {
   return h < 48 ? `dans ${h} h` : `dans ${Math.round(h / 24)} j`;
 }
 
-export function Soirees({ sessions, origin, action, filter, setFilter, onShowCode }) {
+export function Soirees({ sessions, globalRetention, origin, action, filter, setFilter, onShowCode }) {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(null); // code de la soirée dépliée
   const [share, setShare] = useState(null); // { code, kind: "orga" | "guests", regieCode? }
@@ -112,7 +112,11 @@ export function Soirees({ sessions, origin, action, filter, setFilter, onShowCod
                     <p className="text-gray-600">Créée le {fmtDate(Date.parse(s.createdAt))}{s.organizer && <> par <b>{s.organizer}</b> <button onClick={() => onShowCode(s.organizer)} className="text-fuchsia-600 underline">voir son code</button></>}</p>
                     <p className="text-gray-600">{s.played} titre{s.played > 1 ? "s" : ""} joué{s.played > 1 ? "s" : ""}, {s.queued} en attente · dernière activité {ago(s.lastActivity)}</p>
                     {s.player && <p className="text-gray-600">🔊 Son {st === "live" ? "en ce moment" : `joué pour la dernière fois ${ago(s.player.at)}`} sur {s.player.kind === "tv" ? "la télé" : "l'ordinateur"}</p>}
-                    <p className="text-xs text-gray-400">Suppression automatique {fmtIn(s.expiresAt)}</p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <RetentionSelect value={s.retentionDays} global={globalRetention} className="text-xs"
+                        onChange={(days) => action({ action: "retention", code: s.code, days })} />
+                      <span className="text-xs text-gray-400">suppression {fmtIn(s.expiresAt)}</span>
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <p className="font-bold text-gray-900">Appareils de l'organisateur</p>

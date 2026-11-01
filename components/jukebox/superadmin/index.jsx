@@ -13,6 +13,7 @@ import PasswordInput from "@/components/PasswordInput";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 import { getSuperToken, setSuperToken, setAdminToken, rememberParty } from "../storage";
 import { CREATION_MODES } from "./shared";
+import { RETENTION_CHOICES, retentionLabel } from "@/lib/jukebox";
 import { CreateForm, SoireeFields, FeatureToggles, InviteBox } from "./SoireeForms";
 import { Activations } from "./Activations";
 import { Soirees } from "./Soirees";
@@ -20,7 +21,6 @@ import { Requests } from "./Requests";
 import { Prefill } from "./Prefill";
 import { SongMemory } from "./SongMemory";
 
-const RETENTION_CHOICES = [1, 2, 3, 7, 14, 30];
 const SEARCH_QUOTA = 100; // ~10 000 unités / jour, 100 par recherche
 const QUOTA_NOTE = "Remise à zéro chaque jour à minuit heure du Pacifique (8 h ou 9 h à Paris selon la saison). Les recherches déjà faites et les liens collés ne comptent pas. Avec Deezer, seul l'ajout d'un titre jamais choisi compte.";
 
@@ -148,25 +148,25 @@ export default function SuperAdmin() {
 
       {tab === "soirees" && (
         <>
-          <CreateForm token={token} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name, regieCode) => {
+          <CreateForm token={token} globalRetention={cfg?.retentionDays} defaults={cfg?.defaultFeatures} defaultOptions={cfg?.defaultOptions} onCreated={(code, adminToken, name, regieCode) => {
             setAdminToken(code, adminToken);
             rememberParty(code, name);
             setLink({ name, code, regieCode });
             load();
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
-          {data && <Soirees sessions={data.sessions} origin={origin} action={action} filter={filter} setFilter={setFilter}
+          {data && <Soirees sessions={data.sessions} globalRetention={cfg?.retentionDays} origin={origin} action={action} filter={filter} setFilter={setFilter}
             onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
       )}
 
       {tab === "demandes" && data && (
-        <Requests list={data.requests} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
+        <Requests list={data.requests} globalRetention={cfg?.retentionDays} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
           onShowCode={(c) => { setActFilter(c); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />
       )}
 
       {tab === "codes" && data && (
-        <Activations list={data.activations} filter={actFilter} setFilter={setActFilter}
+        <Activations list={data.activations} globalRetention={cfg?.retentionDays} filter={actFilter} setFilter={setActFilter}
           onOpenParty={(code) => { setFilter(code); chooseTab("soirees"); window.scrollTo({ top: 0 }); }} sessions={data.sessions} defaults={cfg?.defaultFeatures} origin={origin}
           creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
       )}
@@ -180,10 +180,10 @@ export default function SuperAdmin() {
             <div className="bg-white rounded-2xl border border-purple-100 p-5 space-y-4 text-sm">
               <h2 className="font-bold text-base text-gray-900">Accès</h2>
               <label className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Suppression après inactivité</span>
+                <span className="font-semibold">Suppression après inactivité<span className="block text-xs font-normal text-gray-400">Par défaut ; un code d'activation ou une soirée peut avoir la sienne.</span></span>
                 <select value={cfg.retentionDays} onChange={(e) => action({ action: "settings", retentionDays: Number(e.target.value) })}
                   className="border-2 border-gray-200 rounded-xl px-3 py-1.5 font-semibold">
-                  {RETENTION_CHOICES.map((n) => <option key={n} value={n}>{n} jour{n > 1 ? "s" : ""}</option>)}
+                  {RETENTION_CHOICES.map((n) => <option key={n} value={n}>{retentionLabel(n)}</option>)}
                 </select>
               </label>
               <div>
