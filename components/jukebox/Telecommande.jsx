@@ -11,6 +11,7 @@
  * la régie. Accès : jeton régie (QR « Télécommande » de la régie, #t=…) ou
  * super-admin.
  */
+import { ClosingBanner, ClosedMessage, missingFrom } from "./ClosingNotice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setAdminToken, authHeaders, formatCode } from "./storage";
 import { useAdminActions } from "./optimistic";
@@ -55,7 +56,7 @@ export default function Telecommande({ code }) {
     const started = Date.now();
     try {
       const res = await fetch(`/api/jukebox/${code}`, { cache: "no-store", headers: authHeaders(code) });
-      if (res.status === 404) return setMissing((await res.json().catch(() => ({}))).closed ? "closed" : true);
+      if (res.status === 404) return setMissing(await missingFrom(res));
       if (res.ok) {
         const d = await res.json();
         if (!fresh(started)) return; // une action a eu lieu entre-temps : réponse périmée
@@ -81,7 +82,7 @@ export default function Telecommande({ code }) {
     if (pending && pb && data.now && pb.id === data.now.id && pb.playing === (pending === "play")) setPending(null);
   }, [data, pending]);
 
-  if (missing) return <Center>{missing === "closed" ? `🔒 La soirée ${formatCode(code)} est fermée : sa durée d'utilisation est terminée. Contactez-nous pour la prolonger.` : `La soirée ${formatCode(code)} n'existe pas (ou plus).`}</Center>;
+  if (missing) return <Center><ClosedMessage code={code} missing={missing} /></Center>;
   if (!data) return <Center>Chargement…</Center>;
   if (!data.admin) {
     return <Center><JoinForm code={code} name={data.session.name} onJoined={refresh} error={passError} /></Center>;
@@ -132,6 +133,7 @@ export default function Telecommande({ code }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <ClosingBanner endsAt={session.endsAt} />
       <header className="sticky top-0 z-30 bg-gray-950/95 backdrop-blur border-b border-white/10 px-4 py-2.5">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <div className="flex-1 min-w-0">

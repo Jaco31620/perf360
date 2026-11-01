@@ -23,7 +23,7 @@ export default function GuestShare({ code, name, endsAt }) {
           <ShareActions dark subject={`Jukebox « ${name} »`} message={guestText({ origin, code, name })} />
         </div>
       )}
-      {endsAt && <p className="text-center text-xs text-white/60">⏳ Soirée ouverte jusqu'au {new Date(endsAt).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</p>}
+      {endsAt && <p className="text-center text-xs text-white/60">⏳ Soirée ouverte jusqu'au {new Date(endsAt).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} · <Link href={`/jukebox?prolonger=${code}`} className="underline">demander une prolongation</Link></p>}
       <Link href="/jukebox/aide" target="_blank" className="block text-center text-xs text-white/50 hover:text-white underline">❓ Mode d'emploi</Link>
     </div>
   );

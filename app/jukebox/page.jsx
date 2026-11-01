@@ -15,7 +15,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { myParties, rememberParty, setAdminToken, forgetParty, formatCode, getSuperToken } from "@/components/jukebox/storage";
 import AccessRequest from "@/components/jukebox/AccessRequest";
-import { DEFAULT_MAX_PER_PARTICIPANT, MAX_NAME_LEN, MAX_CHOICES, maxLabel } from "@/lib/jukebox";
+import { DEFAULT_MAX_PER_PARTICIPANT, MAX_NAME_LEN, MAX_CHOICES, maxLabel, autoCloseAt } from "@/lib/jukebox";
+import { fmtRegieCode } from "@/components/jukebox/Access";
+import ShareActions from "@/components/jukebox/ShareActions";
+import { inviteText } from "@/lib/jukeboxMessages";
+
+const fmtWhen = (ms) => new Date(ms).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 
 export default function JukeboxHome() {
   const router = useRouter();
@@ -31,6 +36,9 @@ export default function JukeboxHome() {
   const [actInfo, setActInfo] = useState(null); // { ok, label, remaining } | { ok: false, error }
   const [view, setView] = useState("home"); // home | create
   const [editCode, setEditCode] = useState(false);
+  const [created, setCreated] = useState(null); // soirée créée : { code, name, regieCode, endsAt, mailedTo, target }
+  const [closedCodes, setClosedCodes] = useState([]); // « Mes soirées » fermées
+  const [prolong, setProlong] = useState(null); // ?prolonger=<code> : demande de prolongation
 
   useEffect(() => {
     setMine(myParties());
@@ -38,7 +46,8 @@ export default function JukeboxHome() {
     // code d'activation : lien reçu, sinon dernier code utilisé sur cet appareil
     const qs = new URLSearchParams(window.location.search);
     const fromLink = qs.get("activation");
-    if (fromLink || qs.has("creer")) setView("create");
+    if (fromLink || qs.has("creer") || qs.get("prolonger")) setView("create");
+    if (/^\d{6}$/.test(qs.get("prolonger") || "")) setProlong(qs.get("prolonger"));
     const onPop = () => setView(new URLSearchParams(window.location.search).has("creer") || new URLSearchParams(window.location.search).get("activation") ? "create" : "home");
     window.addEventListener("popstate", onPop);
     let saved = "";
@@ -48,7 +57,7 @@ export default function JukeboxHome() {
     for (const p of myParties()) {
       fetch(`/api/jukebox/${p.code}`, { cache: "no-store" }).then(async (r) => {
         if (r.status !== 404) return;
-        if ((await r.json().catch(() => ({}))).closed) return; // fermée, pas supprimée : on la garde
+        if ((await r.json().catch(() => ({}))).closed) return setClosedCodes((l) => [...l, p.code]); // fermée, pas supprimée : on la garde
         forgetParty(p.code);
         setMine(myParties());
       }).catch(() => {});
@@ -108,7 +117,10 @@ export default function JukeboxHome() {
       rememberParty(data.code, name.trim());
       // téléphone : la télécommande (la musique viendra d'une télé ou d'un ordinateur) ; ordinateur : la régie
       const phone = window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 900;
-      router.push(`/jukebox/${data.code}/${phone ? "telecommande" : "regie"}`);
+      // d'abord l'écran « Votre soirée est prête » : code régie à noter, accès à s'envoyer
+      setCreated({ code: data.code, name: name.trim(), regieCode: data.regieCode, endsAt: data.endsAt, mailedTo: data.mailedTo, target: phone ? "telecommande" : "regie" });
+      setBusy(false);
+      window.scrollTo({ top: 0 });
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -133,7 +145,7 @@ export default function JukeboxHome() {
           {mine.map((c) => (
             <li key={c.code} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
               <span className="font-mono font-bold text-indigo-600 shrink-0">{formatCode(c.code)}</span>
-              <span className="flex-1 min-w-0 truncate text-gray-700">{c.name}</span>
+              <span className="flex-1 min-w-0 truncate text-gray-700">{c.name}{closedCodes.includes(c.code) && <span className="ml-2 text-[11px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">🔒 fermée</span>}</span>
               <span className="flex items-center gap-3 shrink-0">
                 <Link href={`/jukebox/${c.code}/telecommande`} className="text-sm font-semibold text-fuchsia-600 hover:underline">📱 Télécommande</Link>
                 <Link href={`/jukebox/${c.code}/regie`} className="text-sm font-semibold text-fuchsia-600 hover:underline">💻 Régie</Link>
@@ -163,7 +175,12 @@ export default function JukeboxHome() {
           </p>
         </div>
 
-        {view === "create" ? (
+        {created ? (
+          <Ready created={created} onGo={() => router.push(`/jukebox/${created.code}/${created.target}`)} />
+        ) : prolong ? (
+          <AccessRequest open intro={`Votre soirée ${formatCode(prolong)} est fermée. Dites-nous jusqu'à quand vous souhaitez la prolonger :`}
+            initialMessage={`Prolongation de la soirée ${formatCode(prolong)} jusqu'au …`} />
+        ) : view === "create" ? (
           closed ? (
             <div className="space-y-5">
               <div className="bg-white rounded-3xl p-7 shadow-xl space-y-3">
@@ -188,6 +205,7 @@ export default function JukeboxHome() {
                       <div className="flex-1 min-w-0">
                         <p className="font-mono font-bold tracking-widest text-gray-900">{creationCode}</p>
                         <p className="text-sm text-green-700 truncate">👋 {actLine}</p>
+                        {actInfo.validDays && <p className="text-xs text-gray-600 mt-0.5">🔒 La soirée restera ouverte jusqu'au <b>{fmtWhen(autoCloseAt(Date.now(), actInfo.validDays))}</b> : créez-la peu avant la fête.</p>}
                       </div>
                       <button type="button" onClick={() => setEditCode(true)} className="text-sm text-gray-500 hover:text-gray-800 underline shrink-0">changer</button>
                     </div>
@@ -271,6 +289,39 @@ export default function JukeboxHome() {
           <Link href="/jukebox/aide" className="text-white/80 hover:text-white text-sm font-semibold underline">❓ Mode d'emploi : télé, ordinateur, invités, blind test</Link>
         </p>
       </div>
+    </div>
+  );
+}
+
+/* Après la création : code régie à noter, accès à s'envoyer, puis la régie. */
+function Ready({ created, onGo }) {
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const msg = origin ? inviteText({ origin, code: created.code, name: created.name, regieCode: created.regieCode }) : "";
+  return (
+    <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-xl space-y-5">
+      <div className="text-center">
+        <p className="text-4xl">🎉</p>
+        <h2 className="text-2xl font-black text-gray-900 mt-1">Votre soirée est prête !</h2>
+        <p className="text-gray-500">« {created.name} » · code invités <b className="font-mono">{formatCode(created.code)}</b></p>
+      </div>
+      <div className="rounded-2xl bg-amber-50 border-2 border-amber-200 p-4 text-center">
+        <p className="text-sm font-bold text-amber-900">🔑 Votre code régie : notez-le</p>
+        <p className="font-mono font-black text-4xl tracking-widest text-gray-900 my-1">{fmtRegieCode(created.regieCode)}</p>
+        <p className="text-xs text-amber-800">Il vous permet de reprendre la main depuis un autre téléphone ou ordinateur. Ne le donnez pas aux invités.</p>
+      </div>
+      {created.endsAt && <p className="text-sm text-gray-600 text-center">🔒 Ouverte jusqu'au <b>{fmtWhen(created.endsAt)}</b>.</p>}
+      {created.mailedTo
+        ? <p className="text-sm text-green-700 bg-green-50 rounded-2xl px-4 py-3">✓ Vos accès (liens et code régie) ont été envoyés à <b>{created.mailedTo}</b>.</p>
+        : msg && (
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-gray-900">📨 Envoyez-vous vos accès (liens + code régie) :</p>
+            <ShareActions subject={`Mes accès Jukebox · « ${created.name} »`} message={msg} />
+          </div>
+        )}
+      <button onClick={onGo} className="w-full text-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-full">
+        Continuer vers la {created.target === "regie" ? "régie" : "télécommande"} →
+      </button>
     </div>
   );
 }

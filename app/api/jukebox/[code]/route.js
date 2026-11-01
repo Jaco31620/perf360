@@ -25,7 +25,8 @@ import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims } from "@/lib/jukeboxTrim";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
-import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP } from "@/lib/jukebox";
+import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, closedReason } from "@/lib/jukebox";
+import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
@@ -44,9 +45,12 @@ async function activeTracks(sb, sessionId) {
 export async function GET(req, { params }) {
   const { code } = await params;
   try {
-    const s = await loadSession(code);
-    // closed : la soirée existe mais sa durée d'utilisation est passée (fermée)
-    if (!s) return Response.json({ session: null, closed: !!(await loadSession(code, { any: true })) }, { status: 404 });
+    const s = await loadSession(code, { any: isJukeboxSuper(req) }); // super-admin : aussi les soirées fermées (dépannage)
+    if (!s) {
+      // closed : la soirée existe mais elle est fermée (reason : "manual" à la main, "auto" par son délai)
+      const any = await loadSession(code, { any: true });
+      return Response.json({ session: null, closed: !!any, reason: any ? closedReason(any) : null }, { status: 404 });
+    }
     const url = new URL(req.url);
     const pid = url.searchParams.get("pid");
     const me = validPid(pid) ? pid : null;

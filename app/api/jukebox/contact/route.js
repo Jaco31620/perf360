@@ -6,7 +6,7 @@
  */
 import { sendMail, esc, isEmail, OWNER_EMAIL } from "@/lib/clicclac/mail";
 import { tooMany, clientIp } from "@/lib/jukeboxRate";
-import { createRequest } from "@/lib/jukeboxRequests";
+import { createRequest, acknowledgeRequest } from "@/lib/jukeboxRequests";
 import { fmtDateFr } from "@/lib/dates";
 
 export const runtime = "nodejs";
@@ -50,7 +50,8 @@ export async function POST(req) {
       html,
       text: `De : ${name} <${email}>\n${rows.slice(1).map(([k, v]) => `${k} : ${v}`).join("\n")}\n\n${message}${id ? `\n\nValider : ${ADMIN}?demande=${id}` : ""}`,
     });
-    return Response.json({ ok: true });
+    await acknowledgeRequest({ name, email }).catch((e) => console.warn("jukebox ack:", e.message));
+    return Response.json({ ok: true, email });
   } catch (e) {
     console.error("jukebox contact:", e);
     return Response.json({ error: "Envoi impossible pour le moment." }, { status: 502 });

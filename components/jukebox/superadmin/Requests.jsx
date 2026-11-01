@@ -14,7 +14,7 @@ import { validLabel } from "@/lib/jukebox";
 
 const STATUS = { approved: ["✓ Validée", "bg-green-100 text-green-700"], rejected: ["Refusée", "bg-gray-100 text-gray-500"] };
 
-export function Requests({ list, onHandled, activations, defaults, origin, action, highlight, onShowCode }) {
+export function Requests({ list, creationMode, onHandled, activations, defaults, origin, action, highlight, onShowCode }) {
   const [history, setHistory] = useState(false);
   const [failed, setFailed] = useState(null); // { activation, mailError } : code créé, e-mail non parti
   if (list == null) {
@@ -33,10 +33,13 @@ export function Requests({ list, onHandled, activations, defaults, origin, actio
       {hl && hl.status !== "pending" && (
         <p className="bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600">La demande de <b>{hl.name}</b> a déjà été traitée ({STATUS[hl.status]?.[0].toLowerCase()} le {fmtDate(Date.parse(hl.handledAt))}).</p>
       )}
+      {creationMode && creationMode !== "code" && pending.length > 0 && (
+        <p className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-800">⚠️ La création est en mode « {creationMode === "open" ? "Tout le monde" : "Super-admin seul"} » : {creationMode === "open" ? "le code envoyé ne sera pas demandé (ni décompté)." : "le code envoyé ne permettra pas de créer de soirée."} Passez en « Avec un code » (⚙️ Réglages).</p>
+      )}
       {failed && <MailFailed result={failed} origin={origin} onClose={() => setFailed(null)} />}
       {pending.length === 0 && <p className="text-gray-400 text-center py-8">Aucune demande en attente.</p>}
       {pending.map((r) => (
-        <Pending key={r.id} r={r} onHandled={onHandled} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
+        <Pending key={r.id} r={r} others={list.filter((x) => x.id !== r.id && x.email.toLowerCase() === r.email.toLowerCase())} onHandled={onHandled} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
       ))}
       {done.length > 0 && (
         <div>
@@ -55,7 +58,8 @@ export function Requests({ list, onHandled, activations, defaults, origin, actio
                     <span className="text-gray-500">{r.email}</span>
                     <span className="text-xs text-gray-400">le {fmtDate(Date.parse(r.handledAt || r.createdAt))}</span>
                     {act && <button onClick={() => onShowCode(act.code)} className="text-xs font-mono text-fuchsia-600 underline">{act.code}</button>}
-                    <button onClick={() => action({ action: "reqDelete", id: r.id }, `Supprimer la demande de ${r.name} de l'historique ?`)} className="ml-auto text-xs text-gray-400 underline">supprimer</button>
+                    {r.status === "rejected" && <button onClick={() => action({ action: "reqReopen", id: r.id })} className="ml-auto text-xs text-fuchsia-600 underline">remettre en attente</button>}
+                    <button onClick={() => action({ action: "reqDelete", id: r.id }, `Supprimer la demande de ${r.name} de l'historique ?`)} className={`${r.status === "rejected" ? "" : "ml-auto "}text-xs text-gray-400 underline`}>supprimer</button>
                   </div>
                 );
               })}
@@ -83,9 +87,13 @@ function MailFailed({ result, origin, onClose }) {
   );
 }
 
-function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }) {
+function Pending({ r, others = [], onHandled, defaults, origin, action, highlight, onFailed }) {
   const [retention, setRetention] = useState(3); // fermeture par défaut : 3 jours après création
   const [label, setLabel] = useState(r.name);
+  const [email, setEmail] = useState(r.email);
+  const [refusing, setRefusing] = useState(false);
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+  const reject = (notify) => action({ action: "reqReject", id: r.id, notify }).then((d) => d && onHandled(null));
   const [max, setMax] = useState(1);
   const [expiry, setExpiry] = useState("90");
   const [features, setFeatures] = useState(null);
@@ -97,12 +105,12 @@ function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }
   const expiresAt = expiry ? new Date(Date.now() + Number(expiry) * 864e5).toISOString() : null;
 
   const approve = async () => {
-    if (!label.trim()) return;
+    if (!label.trim() || !emailOk) return;
     setBusy(true);
     const d = await action({
-      action: "reqApprove", id: r.id, label: label.trim(), maxParties: max, expiresAt, features, validDays: retention, origin,
+      action: "reqApprove", id: r.id, email: email.trim(), label: label.trim(), maxParties: max, expiresAt, features, validDays: retention, origin,
       ...texts({ maxParties: max, expiresAt, validDays: retention }),
-    }, `Valider la demande de ${r.name} ?\n\nUn code d'activation (${actMaxLabel(max)}) sera créé et envoyé à ${r.email}.`);
+    }, `Valider la demande de ${r.name} ?\n\nUn code d'activation (${actMaxLabel(max)}) sera créé et envoyé à ${email.trim()}.`);
     setBusy(false);
     if (d?.mailError) { onFailed(d); onHandled(null); } // e-mail non parti : message à envoyer à la main
     else if (d?.activation) onHandled({ ...d.activation, sentTo: d.email });
@@ -112,7 +120,13 @@ function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }
     <div ref={ref} className={`bg-white rounded-2xl border p-4 space-y-3 text-sm ${highlight ? "border-fuchsia-400 ring-4 ring-fuchsia-100" : "border-purple-100"}`}>
       <div>
         <p className="font-bold text-base text-gray-900">{r.name} <span className="font-normal text-xs text-gray-400 ml-1">demande du {fmtDate(Date.parse(r.createdAt))}</span></p>
-        <p className="text-gray-600">✉️ <a href={`mailto:${r.email}`} className="underline">{r.email}</a></p>
+        <label className="flex items-center gap-2 text-gray-600">✉️
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} title="Corrigez l'adresse en cas de faute de frappe"
+            className={`flex-1 min-w-0 border-2 rounded-xl px-2 py-1 outline-none ${emailOk ? "border-gray-100 focus:border-fuchsia-400" : "border-red-300"}`} />
+        </label>
+        {others.length > 0 && (
+          <p className="text-xs text-amber-700 mt-1">⚠️ Déjà {others.length} autre{others.length > 1 ? "s" : ""} demande{others.length > 1 ? "s" : ""} de cette adresse : {others.map((o) => `${o.status === "pending" ? "en attente" : o.status === "approved" ? "validée" : "refusée"} le ${fmtDate(Date.parse(o.handledAt || o.createdAt))}`).join(", ")}.</p>
+        )}
         {(r.date || r.guests) && <p className="text-gray-600">{r.date && <>📅 {fmtDateFr(r.date)}</>}{r.date && r.guests && " · "}{r.guests && <>👥 {r.guests} invités</>}</p>}
         {r.message && <p className="mt-1 whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-xl px-3 py-2">{r.message}</p>}
       </div>
@@ -132,13 +146,16 @@ function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }
       </button>
       {showFeat && <FeatureToggles value={features || defaults} onChange={setFeatures} />}
       <div className="flex flex-wrap gap-2">
-        <button onClick={approve} disabled={busy || !label.trim()} className="font-bold bg-green-600 disabled:opacity-40 text-white px-4 py-2 rounded-full">
+        <button onClick={approve} disabled={busy || !label.trim() || !emailOk} className="font-bold bg-green-600 disabled:opacity-40 text-white px-4 py-2 rounded-full">
           {busy ? "Envoi…" : "✅ Valider et envoyer le code"}
         </button>
-        <button onClick={() => {
-          const notify = confirm(`Refuser la demande de ${r.name}.\n\nOK : prévenir par e-mail · Annuler : refuser sans e-mail`);
-          action({ action: "reqReject", id: r.id, notify }).then((d) => d && onHandled(null));
-        }} className="font-bold bg-gray-100 px-4 py-2 rounded-full">Refuser</button>
+        {refusing ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <button onClick={() => reject(true)} className="font-bold bg-red-50 text-red-700 px-3 py-2 rounded-full">Refuser + e-mail poli</button>
+            <button onClick={() => reject(false)} className="font-bold bg-red-50 text-red-700 px-3 py-2 rounded-full">Refuser sans e-mail</button>
+            <button onClick={() => setRefusing(false)} className="font-bold bg-gray-100 px-3 py-2 rounded-full">Annuler</button>
+          </span>
+        ) : <button onClick={() => setRefusing(true)} className="font-bold bg-gray-100 px-4 py-2 rounded-full">Refuser…</button>}
       </div>
     </div>
   );

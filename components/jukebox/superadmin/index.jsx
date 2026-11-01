@@ -156,13 +156,13 @@ export default function SuperAdmin() {
             load();
           }} />
           {link && <InviteBox {...link} origin={origin} onClose={() => setLink(null)} />}
-          {data && <Soirees sessions={data.sessions} staleDays={cfg?.retentionDays || 7} origin={origin} action={action} filter={filter} setFilter={setFilter}
+          {data && <Soirees sessions={data.sessions} activations={data.activations} staleDays={cfg?.retentionDays || 7} origin={origin} action={action} filter={filter} setFilter={setFilter}
             onShowCode={(who) => { setActFilter(who); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />}
         </>
       )}
 
       {tab === "demandes" && data && (
-        <Requests list={data.requests} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
+        <Requests list={data.requests} creationMode={cfg?.creationMode} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
           onShowCode={(c) => { setActFilter(c); chooseTab("codes"); window.scrollTo({ top: 0 }); }}
           onHandled={(activation) => {
             // demande traitée : on quitte le lien ?demande=… et, si validée, on montre le code créé

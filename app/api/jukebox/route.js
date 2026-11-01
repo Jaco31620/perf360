@@ -16,8 +16,9 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { newAdminToken, hashToken, regieOptions } from "@/lib/jukeboxServer";
 import { newRegieCode, deviceLabel } from "@/lib/jukeboxAccess";
-import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults, cleanValid } from "@/lib/jukebox";
+import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults, cleanValid, autoCloseAt } from "@/lib/jukebox";
 import { loadConfig, isJukeboxSuper } from "@/lib/jukeboxAdmin";
+import { sendAccessMail } from "@/lib/jukeboxRequests";
 import { checkActivation, consumeActivation, refundActivation, ActivationError } from "@/lib/jukeboxActivation";
 
 export const runtime = "nodejs";
@@ -101,7 +102,11 @@ async function create(req, onActivation) {
       if (!error) {
         // le créateur est le premier appareil autorisé (super-admin : son jeton sert au lien d'invitation)
         await sb.from("jukebox_devices").insert({ session_id: row.id, token_hash: hashToken(token), label: deviceLabel(req.headers.get("user-agent") || "") });
-        return Response.json({ code, adminToken: token, regieCode });
+        // accès de l'organisateur envoyés par e-mail (code d'activation issu d'une demande)
+        const mailedTo = activation?.email
+          ? await sendAccessMail({ to: activation.email, origin: new URL(req.url).origin, code, name, regieCode }).then(() => activation.email, () => null)
+          : null;
+        return Response.json({ code, adminToken: token, regieCode, endsAt: autoCloseAt(Date.now(), validDays), mailedTo });
       }
       if (error.code !== "23505") throw error; // 23505 = code déjà pris → on retente
     }

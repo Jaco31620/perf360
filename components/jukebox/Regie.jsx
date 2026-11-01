@@ -8,6 +8,7 @@
  * Rafraîchit la file toutes les 1,5 s. Jeton régie en localStorage, ou #t=…
  * dans l'URL pour ouvrir la régie sur un autre appareil.
  */
+import { ClosingBanner, ClosedMessage, missingFrom } from "./ClosingNotice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ export default function Regie({ code }) {
         cache: "no-store",
         headers: authHeaders(code),
       });
-      if (res.status === 404) return setMissing((await res.json().catch(() => ({}))).closed ? "closed" : true);
+      if (res.status === 404) return setMissing(await missingFrom(res));
       if (res.ok) {
         const d = await res.json();
         if (!fresh(started)) return; // une action a eu lieu entre-temps : réponse périmée
@@ -103,9 +104,7 @@ export default function Regie({ code }) {
   if (missing) {
     return (
       <Center>
-        <p className="text-4xl mb-3">🤔</p>
-        <p className="mb-6">{missing === "closed" ? `La soirée ${formatCode(code)} est fermée : sa durée d'utilisation est terminée. Contactez-nous pour la prolonger.` : `La soirée ${formatCode(code)} n'existe pas (ou plus).`}</p>
-        <Link href="/jukebox" className="bg-fuchsia-600 text-white font-bold px-6 py-3 rounded-full">Retour</Link>
+        <ClosedMessage code={code} missing={missing} />
       </Center>
     );
   }
@@ -138,6 +137,7 @@ export default function Regie({ code }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <ClosingBanner endsAt={session.endsAt} />
       <header className="flex flex-wrap items-center gap-3 px-4 sm:px-6 py-3 border-b border-white/10">
         <Link href="/jukebox" className="text-white/60 hover:text-white text-sm">← Jukebox</Link>
         <h1 className="font-extrabold text-lg truncate flex-1 min-w-0">{session.name}</h1>

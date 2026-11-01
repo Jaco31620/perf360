@@ -326,3 +326,9 @@ grant all on public.jukebox_requests to service_role;
 -- par ces soirées (options.validDays). Le nom de colonne est historique.
 alter table public.jukebox_activations
   add column if not exists retention_days int;
+
+-- v25 (02/11/2026) : e-mail du demandeur gardé sur son code d'activation
+-- (demande validée) : renvoi du code, accès envoyés à la création d'une
+-- soirée, recherche d'un client par e-mail.
+alter table public.jukebox_activations
+  add column if not exists email text;

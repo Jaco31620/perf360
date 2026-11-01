@@ -21,6 +21,11 @@ export const actMaxLabel = (n) => (n == null ? "Illimité" : `${n} soirée${n > 
 export const fmtDay = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const dayInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
 
+const actTexts = (a) => ({
+  partiesText: a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties),
+  expiresText: a.expiresAt ? fmtDay(a.expiresAt) : null,
+  validText: a.validDays ? validLabel(a.validDays) : null,
+});
 const activationText = ({ origin, a }) => buildActivationText({
   origin, code: a.code, label: a.label,
   partiesText: a.maxParties == null ? "autant de soirées que vous voulez" : actMaxLabel(a.maxParties),
@@ -30,6 +35,21 @@ const activationText = ({ origin, a }) => buildActivationText({
 
 export function Activations({ justSent, list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
   const [shared, setShared] = useState(null); // code dont le message est affiché
+  const [stat, setStat] = useState("all"); // filtre par état
+  const resend = async (a) => {
+    const email = a.email || prompt(`Adresse e-mail de ${a.label} :`);
+    if (!email) return;
+    const d = await action({ action: "actResend", id: a.id, email, origin, ...actTexts(a) }, a.email ? `Renvoyer le code de ${a.label} à ${a.email} ?` : null);
+    if (d?.ok) alert(`✓ Code renvoyé à ${d.email}.`);
+  };
+  const renameAct = (a) => {
+    const label = prompt("Nom de l'organisateur :", a.label);
+    if (label && label.trim() && label.trim() !== a.label) action({ action: "actUpdate", id: a.id, label: label.trim() });
+  };
+  const editEmail = (a) => {
+    const email = prompt("E-mail de l'organisateur (vide : aucun) :", a.email || "");
+    if (email !== null && email.trim() !== (a.email || "")) action({ action: "actUpdate", id: a.id, email: email.trim() });
+  };
   if (list == null) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
@@ -38,7 +58,10 @@ export function Activations({ justSent, list, sessions, defaults, origin, creati
     );
   }
   const q = filter.trim().toLowerCase();
-  const shown = list.filter((a) => !q || a.label.toLowerCase().includes(q) || a.code.toLowerCase().includes(q));
+  const counts = { all: list.length };
+  for (const a of list) counts[a.status] = (counts[a.status] || 0) + 1;
+  const shown = list.filter((a) => (stat === "all" || a.status === stat)
+    && (!q || a.label.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || (a.email || "").toLowerCase().includes(q)));
   return (
     <div className="space-y-4">
       {creationMode !== "code" && (
@@ -54,7 +77,16 @@ export function Activations({ justSent, list, sessions, defaults, origin, creati
         if (d?.activation) setShared(d.activation.id);
         return !!d;
       }} />
-      {(list.length > 5 || filter) && <SearchInput value={filter} onChange={setFilter} placeholder="Rechercher (organisateur ou code)" className="w-full" />}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap bg-white border border-purple-100 rounded-2xl p-0.5 text-sm">
+          {[["all", "Tous"], ...Object.entries(ACT_STATUS).map(([k, [l]]) => [k, l])].map(([k, l]) => (
+            <button key={k} onClick={() => setStat(k)} className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap ${stat === k ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
+              {l} <span className="font-normal opacity-70">{counts[k] || 0}</span>
+            </button>
+          ))}
+        </div>
+        {(list.length > 5 || filter) && <SearchInput value={filter} onChange={setFilter} placeholder="Organisateur, code ou e-mail" className="flex-1 min-w-[200px]" />}
+      </div>
       {list.length === 0 && <p className="text-gray-400 text-center py-8">Aucun code d'activation.</p>}
       {shown.map((a) => {
         const parties = sessions.filter((s) => s.activationId === a.id);
@@ -65,10 +97,11 @@ export function Activations({ justSent, list, sessions, defaults, origin, creati
             <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
               <div className="flex-1 min-w-[220px]">
                 <p className="font-bold text-gray-900">
-                  {a.label}
+                  <button onClick={() => renameAct(a)} title="Modifier le nom" className="hover:underline">{a.label}</button>
                   <span className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
                 </p>
                 <p className="font-mono font-black text-xl tracking-widest text-fuchsia-600 select-all">{a.code}</p>
+                <button onClick={() => editEmail(a)} className="text-xs text-gray-500 hover:underline">{a.email ? `✉️ ${a.email}` : "✉️ ajouter un e-mail"}</button>
                 <p className="text-xs text-gray-500">
                   {a.used} soirée{a.used > 1 ? "s" : ""} créée{a.used > 1 ? "s" : ""} sur {a.maxParties == null ? "illimité" : a.maxParties}
                   {" · "}créé le {fmtDate(Date.parse(a.createdAt))}
@@ -76,7 +109,8 @@ export function Activations({ justSent, list, sessions, defaults, origin, creati
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-sm">
-                <button onClick={() => setShared(shared === a.id ? null : a.id)} className="font-bold bg-fuchsia-600 text-white px-3 py-1.5 rounded-full">📨 Envoyer</button>
+                <button onClick={() => resend(a)} className="font-bold bg-fuchsia-600 text-white px-3 py-1.5 rounded-full">✉️ {a.email ? "Renvoyer par e-mail" : "Envoyer par e-mail"}</button>
+                <button onClick={() => setShared(shared === a.id ? null : a.id)} className="font-bold bg-fuchsia-100 text-fuchsia-800 px-3 py-1.5 rounded-full">📨 Autre envoi</button>
                 <button onClick={() => action({ action: "actUpdate", id: a.id, revoked: !a.revoked },
                   a.revoked ? null : `Désactiver le code de ${a.label} ? Il ne permettra plus de créer de soirée (les soirées déjà créées continuent).`)}
                   className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">{a.revoked ? "Réactiver" : "Désactiver"}</button>

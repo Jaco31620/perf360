@@ -57,7 +57,7 @@ export async function POST(req, { params }) {
   try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
 
   try {
-    const s = await loadSession(code);
+    const s = await loadSession(code, { any: isJukeboxSuper(req) }); // super-admin : aussi une soirée fermée
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
     const access = await adminAccess(req, s);
     if (!access.ok)
@@ -311,7 +311,7 @@ export async function POST(req, { params }) {
           if (res.error) break;
           if (body.scores) await sb.from("jukebox_answers").delete().eq("session_id", s.id);
           await dropBlindPicks(s);
-          await topUpBlind(await loadSession(code));
+          await topUpBlind(await loadSession(code, { any: true }));
           break;
         }
         const { data: cur } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing").maybeSingle();

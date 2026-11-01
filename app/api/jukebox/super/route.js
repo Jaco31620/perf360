@@ -15,8 +15,10 @@
  *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
  *     actDelete { id } → supprimer un code (les soirées créées restent)
  *     reqApprove { id, label?, maxParties?, expiresAt?, features?, partiesText, expiresText?, origin } → demande d'accès validée : code créé + e-mail
+ *     reqReopen { id } → demande refusée remise en attente ; actResend { id, email?, origin, partiesText… } → code renvoyé par e-mail
  *     reqReject { id, notify? } / reqDelete { id } → demande refusée (e-mail si notify) / supprimée
  *     regie { code, reset?, logoutAll? } → code régie de la soirée (reset : nouveau code ; logoutAll : appareils déconnectés)
+ *     prolong { code, days } → +N jours (rouvre si fermée)
  *     close { code, closed, noLimit? } → fermer tout de suite / rouvrir
  *     validity { code, days|null } → durée d'utilisation depuis la création (null : sans limite)
  *     delete { code }  → supprimer une soirée
@@ -39,13 +41,13 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
 import { withChanges, proposedKeys, acceptChange, rejectChange, revertChange, logChange } from "@/lib/jukeboxChanges";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
-import { listRequests, approveRequest, rejectRequest, deleteRequest, RequestError } from "@/lib/jukeboxRequests";
+import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
 import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
-import { normalizeFeatures, MAX_NAME_LEN, cleanValid } from "@/lib/jukebox";
+import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 
@@ -191,6 +193,19 @@ export async function POST(req) {
       case "reqReject":
         await rejectRequest(body);
         return Response.json({ ok: true });
+      case "reqReopen":
+        await reopenRequest(body.id);
+        return Response.json({ ok: true });
+      case "actResend": {
+        // renvoyer le code par e-mail (adresse gardée sur le code, ou saisie)
+        const a = (await listActivations()).find((x) => x.id === body.id);
+        if (!a) return Response.json({ error: "Code introuvable." }, { status: 404 });
+        const to = String(body.email || a.email || "").trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return Response.json({ error: "Adresse e-mail invalide." }, { status: 400 });
+        if (to !== a.email) await updateActivation(a.id, { email: to });
+        await resendActivation({ activation: a, to, origin: body.origin, partiesText: body.partiesText, expiresText: body.expiresText, validText: body.validText });
+        return Response.json({ ok: true, email: to });
+      }
       case "reqDelete":
         await deleteRequest(body.id);
         return Response.json({ ok: true });
@@ -210,6 +225,7 @@ export async function POST(req) {
       case "rename":
       case "validity":
       case "close":
+      case "prolong":
       case "delete": {
         const s = await loadSession(body.code, { any: true });
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
@@ -220,11 +236,22 @@ export async function POST(req) {
           if (error) throw error;
           return Response.json({ ok: true });
         }
+        if (body.action === "prolong") {
+          // +N jours : à partir de la fermeture prévue, ou d'aujourd'hui 8 h si déjà fermée ; rouvre la soirée
+          const days = Math.max(1, Math.min(365, parseInt(body.days, 10) || 1));
+          const end = sessionEndsAt(s);
+          const base = end && end > Date.now() ? end : morningAfter(Date.now()) - 864e5;
+          const options = { ...(s.options || {}), closesAt: base + days * 864e5 };
+          delete options.closedAt;
+          const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
+          if (error) throw error;
+          return Response.json({ ok: true, endsAt: options.closesAt });
+        }
         if (body.action === "close") {
           // fermer tout de suite, ou rouvrir (noLimit : retire aussi la fermeture automatique dépassée)
           const options = { ...(s.options || {}) };
           if (body.closed) options.closedAt = Date.now();
-          else { delete options.closedAt; if (body.noLimit) delete options.validDays; }
+          else { delete options.closedAt; if (body.noLimit) { delete options.validDays; delete options.closesAt; } }
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
           return Response.json({ ok: true });
@@ -232,6 +259,7 @@ export async function POST(req) {
         if (body.action === "validity") {
           const options = { ...(s.options || {}) };
           delete options.retentionDays;
+          delete options.closesAt; // nouveau délai : la prolongation éventuelle est remplacée
           if (cleanValid(body.days)) options.validDays = cleanValid(body.days); else delete options.validDays;
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;

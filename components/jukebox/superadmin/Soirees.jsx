@@ -17,7 +17,7 @@ import { ShareBox } from "./SoireeForms";
 const LIVE_MS = 3 * 60e3; // lecteur actif il y a moins de 3 min : soirée en cours
 
 export const soireeStatus = (s) => (s.endsAt && s.endsAt <= Date.now() ? "ended" : s.player && Date.now() - s.player.at < LIVE_MS ? "live" : s.played === 0 ? "ready" : "past");
-const fmtDay = (ms) => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const fmtWhen = (ms) => new Date(ms).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 const STATUSES = [
   { id: "all", label: "Toutes" },
   { id: "live", label: "🟢 En cours", hint: "La musique joue (lecteur actif il y a moins de 3 min)." },
@@ -38,12 +38,13 @@ function ago(ms) {
 const DAY = 864e5;
 const inactiveDays = (s) => Math.floor((Date.now() - s.lastActivity) / DAY);
 
-export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFilter, onShowCode }) {
+export function Soirees({ sessions, activations = [], staleDays = 7, origin, action, filter, setFilter, onShowCode }) {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(null); // code de la soirée dépliée
   const [share, setShare] = useState(null); // { code, kind: "orga" | "guests", regieCode? }
   const q = filter.trim().toLowerCase();
-  const matches = (s) => !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q);
+  const emailOf = Object.fromEntries((activations || []).map((a) => [a.id, (a.email || "").toLowerCase()]));
+  const matches = (s) => !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q) || (emailOf[s.activationId] || "").includes(q);
   const counts = { all: sessions.length };
   const isStale = (s) => soireeStatus(s) !== "live" && (soireeStatus(s) === "ended" || inactiveDays(s) >= staleDays);
   for (const s of sessions) counts[soireeStatus(s)] = (counts[soireeStatus(s)] || 0) + 1;
@@ -71,7 +72,7 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
           ))}
         </div>
         {(sessions.length > 5 || filter) && (
-          <SearchInput value={filter} onChange={setFilter} placeholder="Nom, code ou organisateur" className="flex-1 min-w-[200px]" />
+          <SearchInput value={filter} onChange={setFilter} placeholder="Nom, code, organisateur ou e-mail" className="flex-1 min-w-[200px]" />
         )}
       </div>
 
@@ -85,10 +86,10 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
         const used = devices.length > 0;
         const stale = isStale(s);
         const idle = inactiveDays(s);
-        const autoClosed = s.validDays && Date.parse(s.createdAt) + s.validDays * 864e5 <= Date.now();
+        const autoClosed = s.closedReason === "auto";
         const toggleClose = () => {
           if (st !== "ended") return action({ action: "close", code: s.code, closed: true }, `Fermer « ${s.name} » maintenant ?\n\nInvités, régie, télécommande et écran n'y auront plus accès. Vous pourrez la rouvrir.`);
-          if (autoClosed) return confirm(`« ${s.name} » est fermée par son délai de fermeture automatique.\n\nLa rouvrir sans limite de durée ? (Sinon, choisissez un délai plus long dans le menu « Fermeture ».)`) && action({ action: "close", code: s.code, closed: false, noLimit: true });
+          if (autoClosed) return action({ action: "prolong", code: s.code, days: 1 }, `« ${s.name} » est fermée par son délai.\n\nLa rouvrir jusqu'à demain 8 h ? (Ensuite : boutons +1 j / +7 j pour prolonger.)`);
           return action({ action: "close", code: s.code, closed: false });
         };
         const del = () => action({ action: "delete", code: s.code }, `Supprimer définitivement « ${s.name} » ?${idle >= 1 ? `\n\nInactive depuis ${idle} jour${idle > 1 ? "s" : ""}.` : ""}`);
@@ -102,6 +103,7 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                   <span className="block font-bold text-gray-900 truncate">
                     <span className={`inline-block align-middle mr-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${st === "ended" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{st === "ended" ? "🔒 Fermée" : "Ouverte"}</span>
                     {s.name} <span className="font-mono text-fuchsia-600 text-sm ml-1">{formatCode(s.code)}</span>
+                    {s.status !== "open" && st !== "ended" && <span className="ml-1.5 align-middle text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded" title="L'organisateur a bloqué les propositions des invités">🚫 ajouts bloqués</span>}
                   </span>
                   <span className="block text-xs text-gray-500 truncate">
                     {s.organizer ? `👤 ${s.organizer} · ` : ""}
@@ -127,7 +129,11 @@ export function Soirees({ sessions, staleDays = 7, origin, action, filter, setFi
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <ValiditySelect value={s.validDays} className="text-xs"
                         onChange={(days) => action({ action: "validity", code: s.code, days })} />
-                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `🔒 fermée le ${fmtDay(s.endsAt)}${s.closedManually && !autoClosed ? " (à la main)" : ""}` : `ouverte jusqu'au ${fmtDay(s.endsAt)}`}</span>}
+                      {s.endsAt && [1, 7].map((n) => (
+                        <button key={n} onClick={() => action({ action: "prolong", code: s.code, days: n })} title={`Prolonger de ${n} jour${n > 1 ? "s" : ""}${st === "ended" ? " (rouvre la soirée)" : ""}`}
+                          className="text-xs font-bold bg-fuchsia-50 text-fuchsia-700 px-2 py-1 rounded-full">+{n} j</button>
+                      ))}
+                      {s.endsAt && <span className={`text-xs ${st === "ended" ? "text-red-600 font-semibold" : "text-gray-600"}`}>{st === "ended" ? `🔒 fermée le ${fmtWhen(s.endsAt)}${s.closedReason === "manual" ? " (à la main)" : ""}` : `ouverte jusqu'au ${fmtWhen(s.endsAt)}`}</span>}
                       {idle >= 1 && <span className={`text-xs ${stale ? "text-amber-700 font-semibold" : "text-gray-400"}`}>💤 inactive depuis {idle} jour{idle > 1 ? "s" : ""}</span>}
                     </div>
                   </div>

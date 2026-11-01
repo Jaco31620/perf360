@@ -6,9 +6,9 @@
 import { useState } from "react";
 import DateInput, { todayInput } from "@/components/DateInput";
 
-export default function AccessRequest({ open: initialOpen = false, intro }) {
+export default function AccessRequest({ open: initialOpen = false, intro, initialMessage = "" }) {
   const [open, setOpen] = useState(initialOpen);
-  const [form, setForm] = useState({ name: "", email: "", date: "", guests: "", message: "", website: "" });
+  const [form, setForm] = useState({ name: "", email: "", date: "", guests: "", message: initialMessage, website: "" });
   const [sent, setSent] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -20,7 +20,7 @@ export default function AccessRequest({ open: initialOpen = false, intro }) {
     try {
       const r = await fetch("/api/jukebox/contact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
       const d = await r.json().catch(() => ({}));
-      setSent(r.ok ? { ok: true } : { ok: false, text: d.error || "Envoi impossible." });
+      setSent(r.ok ? { ok: true, email: d.email || form.email } : { ok: false, text: d.error || "Envoi impossible." });
     } catch (err) { setSent({ ok: false, text: "Pas de connexion, réessayez." }); }
     finally { setBusy(false); }
   };
@@ -42,7 +42,11 @@ export default function AccessRequest({ open: initialOpen = false, intro }) {
       <h2 className="text-xl font-bold text-gray-900 mb-1">✉️ Demander un accès</h2>
       <p className="text-sm text-gray-500 mb-4">{intro || "Le Jukebox est proposé sur demande. Dites-m'en un peu plus sur votre soirée : je vous réponds par e-mail avec votre code d'activation."}</p>
       {sent?.ok ? (
-        <p className="bg-green-50 text-green-700 rounded-2xl p-5 font-semibold">✓ Demande envoyée ! Vous recevrez votre code d'activation par e-mail.</p>
+        <div className="bg-green-50 text-green-700 rounded-2xl p-5 space-y-2">
+          <p className="font-semibold">✓ Demande envoyée ! La réponse arrivera à <b>{sent.email}</b>.</p>
+          <p className="text-sm">Un e-mail de confirmation vient de partir : s'il n'arrive pas (pensez aux spams), l'adresse est peut-être erronée.{" "}
+            <button type="button" onClick={() => setSent(null)} className="underline">Corriger et renvoyer</button></p>
+        </div>
       ) : (
         <form onSubmit={send} className="space-y-3">
           <div className="grid sm:grid-cols-2 gap-3">
