@@ -154,7 +154,7 @@ export default function Telecommande({ code }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>
                   {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
-                  <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>
+                  {now.author && <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>}
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »

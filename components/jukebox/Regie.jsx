@@ -186,7 +186,7 @@ export default function Regie({ code }) {
             <div className="flex-1 min-w-0">
               {now ? (
                 <>
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment · proposé par {now.author}</p>
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment{now.author ? ` · proposé par ${now.author}` : ""}</p>
                   <p className="text-xl font-bold truncate">{masked ? "🤫 Titre masqué" : now.title}</p>
                   <p className="text-sm text-white/50">{masked ? "Blind test en cours" : now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
                   {now.dedication && (

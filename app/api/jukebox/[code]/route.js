@@ -68,6 +68,9 @@ export async function GET(req, { params }) {
       list = []; // la file trahirait les prochains titres
       if (nowOut && !blindOut.revealed) nowOut = { id: nowOut.id, hidden: true, duration: nowOut.duration };
     }
+    if (blind?.on) { // blind test : « proposé par » n'a pas de sens (titres piochés)
+      for (const t of [nowOut, ...list]) if (t) { t.author = null; delete t.revealIn; }
+    }
     const out = {
       session,
       now: nowOut,
