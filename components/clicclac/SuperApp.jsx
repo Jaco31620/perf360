@@ -4,6 +4,7 @@
  * quotas, suivi du stockage, prolongation, nouveau code organisateur, suppression.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import DateInput from "@/components/DateInput";
 import { QRCodeCanvas } from "qrcode.react";
 import Link from "next/link";
 import PasswordInput from "@/components/PasswordInput";
@@ -131,7 +132,7 @@ function CreateForm({ token, onCancel, onCreated }) {
       <h2 className="text-xl font-black">Nouvel album</h2>
       <div className="grid sm:grid-cols-3 gap-3">
         <label className="text-sm">Nom de l'événement<input required maxLength={40} value={v.name} onChange={(e) => set({ name: e.target.value })} className={input} /></label>
-        <label className="text-sm">Date<input type="date" value={v.eventDate} onChange={(e) => set({ eventDate: e.target.value })} className={input} /></label>
+        <label className="text-sm">Date<DateInput value={v.eventDate} onChange={(e) => set({ eventDate: e.target.value })} className={input} /></label>
         <label className="text-sm">E-mail organisateur (alertes)<input type="email" value={v.adminEmail} onChange={(e) => set({ adminEmail: e.target.value })} className={input} /></label>
       </div>
       <QuotaFields v={v} set={set} />
@@ -255,7 +256,7 @@ function AlbumRow({ a, token, origin, reload, onPin }) {
         }} className="mt-4 pt-4 border-t border-gray-100 space-y-3">
           <div className="grid sm:grid-cols-3 gap-3">
             <label className="text-sm">Nom<input maxLength={40} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} className={input} /></label>
-            <label className="text-sm">Date<input type="date" value={v.eventDate} onChange={(e) => setV({ ...v, eventDate: e.target.value })} className={input} /></label>
+            <label className="text-sm">Date<DateInput value={v.eventDate} onChange={(e) => setV({ ...v, eventDate: e.target.value })} className={input} /></label>
             <label className="text-sm">E-mail organisateur<input type="email" value={v.adminEmail} onChange={(e) => setV({ ...v, adminEmail: e.target.value })} className={input} /></label>
           </div>
           <QuotaFields v={v} set={(p) => setV({ ...v, ...p })} />

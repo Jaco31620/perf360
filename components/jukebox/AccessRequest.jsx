@@ -4,6 +4,7 @@
  * propriétaire, qui répond avec un code d'activation. Même logique que Clic-Clac.
  */
 import { useState } from "react";
+import DateInput, { todayInput } from "@/components/DateInput";
 
 export default function AccessRequest({ open: initialOpen = false, intro }) {
   const [open, setOpen] = useState(initialOpen);
@@ -47,8 +48,8 @@ export default function AccessRequest({ open: initialOpen = false, intro }) {
           <div className="grid sm:grid-cols-2 gap-3">
             <input required value={form.name} onChange={set("name")} placeholder="Votre nom" className={input} autoComplete="name" />
             <input required type="email" value={form.email} onChange={set("email")} placeholder="Votre e-mail" className={input} autoComplete="email" />
-            <input value={form.date} onChange={set("date")} placeholder="Date de la soirée" className={input} />
-            <input value={form.guests} onChange={set("guests")} placeholder="Nombre d'invités (environ)" className={input} />
+            <label className="text-sm text-gray-500">Date de la soirée<DateInput value={form.date} onChange={set("date")} min={todayInput()} className={`${input} text-gray-900`} /></label>
+            <label className="text-sm text-gray-500">Nombre d'invités<input value={form.guests} onChange={set("guests")} inputMode="numeric" placeholder="environ" className={`${input} text-gray-900`} /></label>
           </div>
           <textarea rows={3} value={form.message} onChange={set("message")} placeholder="Type de soirée, blind test, télé ou ordinateur… (facultatif)" className={`${input} resize-none`} />
           <input tabIndex={-1} autoComplete="off" value={form.website} onChange={set("website")} className="hidden" aria-hidden="true" />

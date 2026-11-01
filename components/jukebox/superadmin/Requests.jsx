@@ -9,6 +9,7 @@ import { activationText } from "@/lib/jukeboxMessages";
 import { ACT_MAX_CHOICES, ACT_EXPIRY_CHOICES, actMaxLabel, fmtDay } from "./Activations";
 import { FeatureToggles, ShareBox } from "./SoireeForms";
 import { fmtDate } from "./shared";
+import { fmtDateFr } from "@/lib/dates";
 
 const STATUS = { approved: ["✓ Validée", "bg-green-100 text-green-700"], rejected: ["Refusée", "bg-gray-100 text-gray-500"] };
 
@@ -108,7 +109,7 @@ function Pending({ r, defaults, origin, action, highlight, onFailed }) {
       <div>
         <p className="font-bold text-base text-gray-900">{r.name} <span className="font-normal text-xs text-gray-400 ml-1">demande du {fmtDate(Date.parse(r.createdAt))}</span></p>
         <p className="text-gray-600">✉️ <a href={`mailto:${r.email}`} className="underline">{r.email}</a></p>
-        {(r.date || r.guests) && <p className="text-gray-600">{r.date && <>📅 {r.date}</>}{r.date && r.guests && " · "}{r.guests && <>👥 {r.guests} invités</>}</p>}
+        {(r.date || r.guests) && <p className="text-gray-600">{r.date && <>📅 {fmtDateFr(r.date)}</>}{r.date && r.guests && " · "}{r.guests && <>👥 {r.guests} invités</>}</p>}
         {r.message && <p className="mt-1 whitespace-pre-wrap text-gray-700 bg-gray-50 rounded-xl px-3 py-2">{r.message}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-2">

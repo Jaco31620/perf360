@@ -1,5 +1,6 @@
 "use client";
 import { activationText as buildActivationText } from "@/lib/jukeboxMessages";
+import DateInput from "@/components/DateInput";
 import { useState } from "react";
 import { formatCode } from "../storage";
 import { FEATURES } from "@/lib/jukebox";
@@ -94,7 +95,7 @@ export function Activations({ list, sessions, defaults, origin, creationMode, ac
               <label className="flex items-center gap-2">
                 <span className="text-gray-500">Expire le</span>
                 {/* non contrôlé, enregistré en quittant le champ : la saisie de l'année au clavier ne part pas à chaque chiffre */}
-                <input type="date" key={`${a.id}:${a.expiresAt || ""}`} defaultValue={dayInput(a.expiresAt)}
+                <DateInput key={`${a.id}:${a.expiresAt || ""}`} defaultValue={dayInput(a.expiresAt)}
                   onBlur={(e) => { const v = e.target.value; if (v !== dayInput(a.expiresAt) && (!v || /^\d{4}-\d{2}-\d{2}$/.test(v))) action({ action: "actUpdate", id: a.id, expiresAt: v ? `${v}T23:59:59` : null }); }}
                   onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                   className="border-2 border-gray-200 rounded-xl px-2 py-0.5" />
