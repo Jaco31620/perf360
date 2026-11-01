@@ -9,6 +9,8 @@
  *     features { code, features } → fonctions activées pour une soirée
  *     trimVideo { videoId, start, end, source? } → rognage de la vidéo (toutes soirées)
  *     trimSuggest { videoId, duration } → suggestion SponsorBlock { start, end, segments }
+ *     changeAccept / changeReject { id } → proposition de vidéo faite en soirée (adoptée : validée)
+ *     changeRevert { id } → revenir à la vidéo d'avant un changement
  *     actCreate { label, maxParties?, expiresAt?, features? } → nouveau code d'activation
  *     actUpdate { id, label?, maxParties?, expiresAt?, revoked?, features?, resetUsed? }
  *     actDelete { id } → supprimer un code (les soirées créées restent)
@@ -31,6 +33,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
+import { withChanges, proposedKeys, acceptChange, rejectChange, revertChange, logChange } from "@/lib/jukeboxChanges";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
@@ -56,13 +59,18 @@ export async function GET(req) {
     if (url.searchParams.get("playlists"))
       return Response.json({ playlists: await deezerPlaylistSearch(url.searchParams.get("playlists")) }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
-      const songs = await listSongs(Object.fromEntries(url.searchParams));
+      const params = Object.fromEntries(url.searchParams);
+      const songs = params.status === "changes" // changements de vidéo proposés en soirée
+        ? await listSongs({ ...params, status: "all", keys: await proposedKeys() })
+        : await listSongs(params);
       await withTrims(songs); // rognage de chaque vidéo (start / end)
+      await withChanges(songs); // propositions en attente, dernier changement
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }
     const [config, sessions, searches, songs, prefill, enrich] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null)]);
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
+    const proposals = (await proposedKeys()).length; // titres avec un changement de vidéo proposé
     return Response.json({
       config,
       searches,
@@ -70,6 +78,7 @@ export async function GET(req) {
       prefill,
       enrich, // titres pas encore enrichis (année, langue)
       activations,
+      proposals,
       sessions: sessions.map(({ id, ...s }) => ({ ...s, expiresAt: s.lastActivity + config.retentionDays * DAY })),
     }, { headers: { "cache-control": "no-store" } });
   } catch (e) {
@@ -100,7 +109,18 @@ export async function POST(req) {
         return Response.json({ ok: true, key: r.key });
       }
       case "replaceSong": {
+        const { data: before } = await getSupabaseAdmin().from("jukebox_songs").select("video_id").eq("key", String(body.key || "")).maybeSingle();
         const err = await replaceSongVideo(body.key, body.videoId);
+        if (err) return Response.json({ error: err }, { status: 422 });
+        if (before && before.video_id !== body.videoId)
+          await logChange({ key: body.key, oldVideo: before.video_id, video: { id: body.videoId }, status: "applied", bySuper: true });
+        return Response.json({ ok: true });
+      }
+      case "changeAccept":
+      case "changeReject":
+      case "changeRevert": {
+        const fn = { changeAccept: acceptChange, changeReject: rejectChange, changeRevert: revertChange }[body.action];
+        const err = await fn(body.id);
         if (err) return Response.json({ error: err }, { status: 422 });
         return Response.json({ ok: true });
       }

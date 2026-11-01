@@ -245,3 +245,31 @@ create table if not exists public.jukebox_trims (
 );
 alter table public.jukebox_trims enable row level security;
 grant all on public.jukebox_trims to service_role;
+
+-- v21 (01/11/2026) : historique des changements de vidéo d'un titre de la
+-- mémoire. « Mauvaise vidéo ? » en soirée : sur un titre validé par le
+-- super-admin, le changement est seulement PROPOSÉ (status proposed) ;
+-- sinon il est appliqué (applied), avec la trace de qui l'a fait et quand.
+-- Le super-admin adopte / refuse les propositions, ou revient en arrière.
+create table if not exists public.jukebox_video_changes (
+  id uuid primary key default gen_random_uuid(),
+  song_key text not null,
+  old_video text,
+  new_video text not null,
+  new_title text,
+  new_channel text,
+  new_duration int,
+  status text not null default 'applied',
+  by_super boolean not null default false,
+  session_code text,
+  session_name text,
+  organizer text,
+  created_at timestamptz not null default now(),
+  decided_at timestamptz
+);
+create index if not exists jukebox_video_changes_key_idx
+  on public.jukebox_video_changes(song_key);
+create index if not exists jukebox_video_changes_status_idx
+  on public.jukebox_video_changes(status);
+alter table public.jukebox_video_changes enable row level security;
+grant all on public.jukebox_video_changes to service_role;

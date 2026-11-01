@@ -415,7 +415,10 @@ export function VideoPicker({ code, track, onClose, onDone, mute }) {
   return (
     <VideoChooser title={track.title} subtitle={track.channel} initial={track.videoId} onClose={onClose} onDone={onDone} mute={mute}
       load={() => post({ action: "videos", id: track.id })}
-      choose={(videoId) => post({ action: "replaceVideo", id: track.id, videoId })} />
+      choose={async (videoId) => {
+        const d = await post({ action: "replaceVideo", id: track.id, videoId });
+        if (d.memory === "proposed") alert("Vidéo changée pour cette soirée.\nCe titre avait été vérifié par l'administrateur : votre choix lui est proposé pour les prochaines soirées.");
+      }} />
   );
 }
 
@@ -492,7 +495,7 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
           </div>
           <button onClick={onClose} className="text-white/50 hover:text-white" aria-label="Fermer"><X size={20} /></button>
         </div>
-        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre et sera retenue pour les prochaines soirées. Cliquez une miniature pour l'écouter.</p>
+        <p className="text-xs text-white/50">Choisissez la bonne version : elle remplace la vidéo de ce titre tout de suite, et servira aux prochaines soirées (après accord de l'administrateur si le titre a déjà été vérifié). Cliquez une miniature pour l'écouter.</p>
         {mute && <p className="text-xs text-amber-300">🔇 Aperçu sans son, pour ne pas couper la musique de la soirée.</p>}
         {preview && <VideoPreview videoId={preview} onClose={() => setPreview(null)} mute={mute} />}
 

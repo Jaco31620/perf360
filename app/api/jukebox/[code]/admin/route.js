@@ -39,6 +39,8 @@
  *   regieCode { logoutAll } → nouveau code régie (appareils déconnectés si logoutAll)
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { soireeVideoChange } from "@/lib/jukeboxChanges";
+import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { adminAccess, ensureRegieCode, listDevices, createJoinPass, revokeDevice, resetRegieCode } from "@/lib/jukeboxAccess";
 import { loadSession, publicSession, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
@@ -178,8 +180,12 @@ export async function POST(req, { params }) {
           video_id: video.id, duration: video.duration, video_title: video.title || null,
           ...(String(t.thumb || "").includes("ytimg") ? { thumb: video.thumb } : {}), // pochette Deezer conservée
         }).eq("id", t.id);
-        if (!res.error && key) await rememberSong(key, video, null, false); // corrigé pour les prochaines soirées, à valider dans le super-admin
-        break;
+        if (res.error) break;
+        // mémoire (prochaines soirées) : titre validé → proposition au super-admin ; sinon vidéo retenue, à vérifier (trace dans les deux cas)
+        const memory = key ? await soireeVideoChange({
+          key, video, session: s, bySuper: isJukeboxSuper(req), remember: () => rememberSong(key, video, null, false),
+        }) : null;
+        return Response.json({ ok: true, memory });
       }
       case "access":
         return Response.json({ ok: true, regieCode: await ensureRegieCode(s), devices: await listDevices(s, access.deviceId) });

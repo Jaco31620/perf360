@@ -223,7 +223,7 @@ export default function SuperAdmin() {
           creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
       )}
 
-      {tab === "memory" && <SongMemory call={call} total={data?.songs} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} onChanged={load} />}
+      {tab === "memory" && <SongMemory call={call} total={data?.songs} proposals={data?.proposals || 0} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} onChanged={load} />}
       {tab === "queue" && <Prefill call={call} state={data?.prefill} onChanged={load} />}
 
       {tab === "reglages" && cfg && (
@@ -729,7 +729,7 @@ function Page({ children }) {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["all", "Tous"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
+const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
 const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
@@ -738,7 +738,7 @@ const MODE_TAG = {
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 
-function SongMemory({ call, total, focus, enrich, onChanged }) {
+function SongMemory({ call, total, proposals = 0, focus, enrich, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -800,6 +800,13 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
     queue.current = p.catch(() => {});
     try { await p; } catch (e) { alert(e.message); lastAct.current = Date.now(); load(); }
   };
+  // changements de vidéo (adopter, refuser, revenir) : liste et compteur relus
+  const changeRun = async (body, confirmText) => {
+    if (confirmText && !confirm(confirmText)) return;
+    await run(body);
+    await load();
+    onChanged?.();
+  };
   // appels successifs (~45 s chacun, MusicBrainz : 1 requête / s) jusqu'au bout
   const stopEnrich = useRef(false);
   const enrichNow = async () => {
@@ -849,6 +856,15 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
               )}
             </div>
           )}
+          {proposals > 0 && status !== "changes" && (
+            <div className="flex flex-wrap items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 text-sm">
+              <span className="flex-1 min-w-[200px] text-orange-900">
+                🔄 <b>{proposals}</b> titre{proposals > 1 ? "s" : ""} vérifié{proposals > 1 ? "s" : ""} avec une autre vidéo proposée en soirée.
+              </span>
+              <button onClick={() => setStatus("changes")} className="font-bold bg-orange-500 text-white px-3 py-1 rounded-full">Voir</button>
+            </div>
+          )}
+          {status === "changes" && <p className="text-xs text-gray-500">« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis <b>adoptez</b> (la vidéo proposée devient celle de toutes les soirées, validée) ou <b>gardez l'actuelle</b>.</p>}
           {(() => {
             const todo = (songs || []).filter((s) => !s.validated && !s.missing);
             const shown = (songs || []).filter((s) => !s.missing);
@@ -905,7 +921,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
-            <SongReview review={review} setReview={setReview} songs={songs} run={run} call={call} editYear={editYear}
+            <SongReview review={review} setReview={setReview} songs={songs} run={run} changeRun={changeRun} call={call} editYear={editYear}
               busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
           )}
           {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)}
@@ -917,7 +933,7 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : status === "changes" ? "Aucun changement de vidéo proposé 👍" : "Aucun titre."}</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {songs.map((s, i) => (<Fragment key={s.key}>
@@ -974,6 +990,11 @@ function SongMemory({ call, total, focus, enrich, onChanged }) {
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">{s.plays > 0 && <span className="font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {s.plays}× · </span>}{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
+                    <ChangeInfo song={s} run={changeRun} onCompare={() => {
+                      const keys = songs.filter((x) => !x.missing).map((x) => x.key);
+                      setPreview(null);
+                      setReview({ keys, i: Math.max(0, keys.indexOf(s.key)) });
+                    }} />
                   </div>
                   <div className="flex flex-wrap gap-1.5 shrink-0">
                     {s.group != null && (
@@ -1277,11 +1298,12 @@ function SongVideoChooser({ song, call, onClose, onDone }) {
  * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
  * passent par run() (effet immédiat sur la liste de la mémoire). */
 const REVIEW_START = 40;
-function SongReview({ review, setReview, songs, run, call, editYear, busy, onFix, onRetitle, onClose }) {
+function SongReview({ review, setReview, songs, run, changeRun, call, editYear, busy, onFix, onRetitle, onClose }) {
+  const [compare, setCompare] = useState(null); // vidéo proposée en aperçu (à la place de l'actuelle)
   const { keys, i } = review;
   const [editing, setEditing] = useState(null); // correction du texte : champ à éditer (artist | title)
   const [artistOpen, setArtistOpen] = useState(false); // autres titres de l'interprète, sans quitter la revue
-  useEffect(() => setEditing(null), [i]);
+  useEffect(() => { setEditing(null); setCompare(null); }, [i]);
   const song = i < keys.length ? (songs || []).find((s) => s.key === keys[i]) : null;
   const go = (d) => setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) }));
   const act = {
@@ -1347,9 +1369,14 @@ function SongReview({ review, setReview, songs, run, call, editYear, busy, onFix
         ) : (
           <div className="flex-1 min-h-0 overflow-y-auto grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,1fr)] items-start">
             <div className="mx-auto w-full" style={{ maxWidth: "calc((97vh - 250px) * 16 / 9)" }}>
-              <TrimPlayer key={song.videoId} song={song} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
+              {compare ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-orange-700">🔄 Vidéo proposée — <button onClick={() => setCompare(null)} className="underline">revenir à l'actuelle</button></p>
+                  <VideoPreview videoId={compare} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
+                </div>
+              ) : <TrimPlayer key={song.videoId} song={song} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
                 onSave={(t) => run({ action: "trimVideo", ...t })}
-                suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />
+                suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />}
               <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
                 <div className="flex-1 min-w-0"><VideoTitle song={song} className="truncate" /></div>
                 <a href={`https://www.youtube.com/watch?v=${song.videoId}`} target="_blank" rel="noreferrer" className="shrink-0 hover:text-gray-700 underline">YouTube ↗</a>
@@ -1388,6 +1415,7 @@ function SongReview({ review, setReview, songs, run, call, editYear, busy, onFix
                     {song.plays > 0 && <b className="text-gray-500">▶ joué {song.plays}× · </b>}{formatDuration(song.duration)}
                   </span>
                 </div>
+                <ChangeInfo song={song} run={changeRun} compare={compare} onPreview={(v) => setCompare(compare === v ? null : v)} />
                 {artistOpen && song.artist && <div className="max-h-48 overflow-y-auto mt-2"><ArtistSongs artist={song.artist} current={song.key} /></div>}
               </div>
 
@@ -1427,6 +1455,43 @@ function SongReview({ review, setReview, songs, run, call, editYear, busy, onFix
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* Changements de vidéo d'un titre (lib/jukeboxChanges.js) : propositions
+ * faites en soirée (titre validé) à adopter / refuser, et dernier changement
+ * appliqué (qui, quand) avec retour à la vidéo d'avant. */
+const changeWho = (c) => (c.bySuper ? "super-admin" : [c.organizer && `👤 ${c.organizer}`, c.sessionName && `soirée « ${c.sessionName} »`].filter(Boolean).join(" · ") || "une soirée");
+const changeWhen = (c) => new Date(c.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function ChangeInfo({ song, run, onCompare, onPreview, compare }) {
+  const props = song.proposals || [];
+  const last = song.lastChange;
+  if (!props.length && !last) return null;
+  return (
+    <div className="mt-1.5 space-y-1">
+      {props.map((c) => (
+        <div key={c.id} className="flex flex-wrap items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5 text-xs">
+          <PreviewThumb videoId={c.newVideo} className="w-16" active={compare === c.newVideo} onClick={() => (onPreview ? onPreview(c.newVideo) : onCompare?.())} />
+          <span className="flex-1 min-w-[160px]">
+            🔄 <b>Autre vidéo proposée</b> par {changeWho(c)}, le {changeWhen(c)}
+            {c.newTitle && <span className="block text-gray-500 truncate">▶ {c.newTitle}{c.newDuration ? ` · ${formatDuration(c.newDuration)}` : ""}</span>}
+          </span>
+          {onCompare && <button onClick={onCompare} className="font-bold text-orange-800 underline">comparer</button>}
+          <button onClick={() => run({ action: "changeAccept", id: c.id }, "Adopter la vidéo proposée pour toutes les soirées ? (elle sera marquée validée)")}
+            className="font-bold bg-green-600 text-white px-2.5 py-1 rounded-lg">✓ Adopter</button>
+          <button onClick={() => run({ action: "changeReject", id: c.id })} className="font-bold bg-white border border-gray-200 px-2.5 py-1 rounded-lg">✕ Garder l'actuelle</button>
+        </div>
+      ))}
+      {last && (
+        <p className="text-[11px] text-gray-500">
+          🔁 Vidéo changée le {changeWhen(last)} par {changeWho(last)}
+          {last.oldVideo && (
+            <button onClick={() => run({ action: "changeRevert", id: last.id }, "Revenir à la vidéo d'avant ce changement ? (elle repassera « à vérifier »)")}
+              className="ml-2 font-bold text-fuchsia-600 underline">↩ revenir à l'ancienne</button>
+          )}
+        </p>
+      )}
     </div>
   );
 }
