@@ -185,14 +185,11 @@ export default function Telecommande({ code }) {
               </p>
             )}
 
-            <div className="flex items-center justify-center gap-6">
-              <span className="w-14" aria-hidden />
-              <PlayPauseButton size="lg" playing={isPlaying} onClick={togglePlay} disabled={!now} />
-              <SkipButton size="lg" onClick={skip} disabled={!now} />
-            </div>
             <div className="flex items-center gap-3">
-              <VolumeSlider value={shownVolume} onChange={changeVolume} className="flex-1" />
-              <span className="w-8 text-right text-sm text-white/50 tabular-nums">{shownVolume}</span>
+              <PlayPauseButton playing={isPlaying} onClick={togglePlay} disabled={!now} />
+              <SkipButton onClick={skip} disabled={!now} />
+              <VolumeSlider value={shownVolume} onChange={changeVolume} className="flex-1 min-w-0 ml-1" />
+              <span className="w-7 text-right text-xs text-white/50 tabular-nums">{shownVolume}</span>
             </div>
 
             <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
