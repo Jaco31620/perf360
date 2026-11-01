@@ -84,7 +84,7 @@ function MailFailed({ result, origin, onClose }) {
 }
 
 function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }) {
-  const [retention, setRetention] = useState(null);
+  const [retention, setRetention] = useState(3); // fermeture par défaut : 3 jours après création
   const [label, setLabel] = useState(r.name);
   const [max, setMax] = useState(1);
   const [expiry, setExpiry] = useState("90");
