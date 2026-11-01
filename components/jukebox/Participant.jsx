@@ -36,6 +36,8 @@ export default function Participant({ code }) {
   const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
 
   const lastAct = useRef(0); // réponse partie avant une action : périmée
+  const blindRef = useRef(null); // dernier état du blind test (fin de partie, cadence)
+  const [final, setFinal] = useState(null); // classement final d'une partie qui vient de se terminer
   const refresh = useCallback(async () => {
     const started = Date.now();
     try {
@@ -43,7 +45,12 @@ export default function Participant({ code }) {
       if (res.status === 404) { setClosed(!!(await res.json().catch(() => ({}))).closed); return setData(null); }
       if (res.ok) {
         const d = await res.json();
-        if (started > lastAct.current) setData(d);
+        if (started > lastAct.current) {
+          // fin de partie : on garde le classement final à afficher
+          if (blindRef.current?.on && !d.blind?.on && blindRef.current.mode === "phone" && blindRef.current.top?.length) setFinal(blindRef.current);
+          blindRef.current = d.blind || null;
+          setData(d);
+        }
       }
     } catch (e) { /* réseau : on retentera */ }
   }, [code]);
@@ -52,7 +59,9 @@ export default function Participant({ code }) {
     pid.current = participantId();
     setNameState(getName());
     refresh();
-    const id = setInterval(() => { if (!document.hidden) refresh(); }, 4000);
+    // toutes les 4 s ; toutes les 1,5 s pendant un blind test (compte à rebours, « trop tard »)
+    let tick = 0;
+    const id = setInterval(() => { tick++; if (!document.hidden && (blindRef.current?.on || tick % 3 === 0)) refresh(); }, 1500);
     return () => clearInterval(id);
   }, [code, refresh]);
 
@@ -177,6 +186,16 @@ export default function Participant({ code }) {
         <h1 className={`text-2xl font-extrabold text-gray-900 leading-tight ${theme?.message ? "mb-1" : "mb-5"}`}>{theme?.title || session.name}</h1>
         {theme?.message && <p className="text-gray-600 whitespace-pre-line mb-5">{theme.message}</p>}
 
+        {final && !data.blind?.on && (
+          <div className="mb-5 rounded-2xl bg-[var(--jb-soft)] p-4 text-center space-y-2">
+            <p className="text-xl font-black text-gray-900">🏁 Partie terminée !</p>
+            {final.me?.points > 0
+              ? <p className="text-gray-700">{name || "Vous"} : <b>{final.me.points} pts</b>{final.me.rank ? ` · ${final.me.rank}${final.me.rank === 1 ? "er" : "e"}` : ""} {final.me.rank === 1 ? "🏆" : ""}</p>
+              : <p className="text-gray-600 text-sm">Merci d'avoir joué !</p>}
+            <div className="text-left bg-white rounded-xl p-3"><Leaderboard top={final.top} light /></div>
+            <button onClick={() => setFinal(null)} className="text-sm text-gray-500 underline">Fermer</button>
+          </div>
+        )}
         {!name && !admin ? (
           <form onSubmit={saveName} className="space-y-3">
             <p className="text-gray-600">Votre prénom, pour que l'on sache qui a mis ce titre :</p>
@@ -365,7 +384,9 @@ function BlindGuest({ blind, now, name, answer, setAnswer, onSubmit, sending, ve
       {!now ? (
         <p className="text-center text-gray-500">Le prochain titre arrive…</p>
       ) : now.hidden ? (
-        phone ? (
+        <>
+        {blind.revealIn != null && <p className="text-center text-sm font-semibold text-gray-600">⏱️ Réponse dans <b className="tabular-nums text-gray-900">{blind.revealIn} s</b>{blind.playing === false ? " (en pause)" : ""}</p>}
+        {phone ? (
           done ? (
             <p className="text-center text-green-600 font-semibold">🎯 Artiste et titre trouvés ! Attendez la réponse…</p>
           ) : (round?.attempts || 0) >= MAX_ATTEMPTS ? (
@@ -386,7 +407,8 @@ function BlindGuest({ blind, now, name, answer, setAnswer, onSubmit, sending, ve
           )
         ) : (
           <p className="text-center text-gray-600">À vous de deviner ! La réponse arrive sur l'écran.</p>
-        )
+        )}
+        </>
       ) : (
         <p className="text-center text-gray-600">
           C'était <b>{now.title}</b>{now.channel ? <> — {now.channel}</> : null}

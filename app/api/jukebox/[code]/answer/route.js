@@ -24,6 +24,8 @@ export async function POST(req, { params }) {
   if (!/^[a-z0-9-]{8,64}$/i.test(pid)) return Response.json({ error: "Participant invalide." }, { status: 400 });
   if (!author) return Response.json({ error: "Merci d'indiquer votre prénom." }, { status: 400 });
   if (!answer) return Response.json({ error: "Réponse vide." }, { status: 400 });
+  // pas de réponse « fourre-tout » (suite de mots au hasard pour tomber sur un titre court)
+  if (answer.split(/\s+/).length > 10) return Response.json({ error: "Réponse trop longue : l'artiste et/ou le titre suffisent." }, { status: 400 });
 
   try {
     const s = await loadSession(code);

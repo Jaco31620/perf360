@@ -193,6 +193,24 @@ function BlindLive({ settings, blind, now, act, controls }) {
         </div>
       )}
 
+      {phone && blind?.prev?.answers?.length > 0 && (
+        <div className="bg-white/5 rounded-2xl p-4 space-y-2">
+          <p className="font-bold text-sm">Titre précédent <span className="text-white/40 font-normal">· {blind.prev.title}{blind.prev.channel ? ` — ${blind.prev.channel}` : ""}</span></p>
+          <p className="text-xs text-white/40">Réponses pas (entièrement) trouvées : encore acceptables jusqu'à la fin du titre en cours.</p>
+          <ul className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {blind.prev.answers.map((a) => (
+              <li key={a.participantId} className="bg-white/5 rounded-xl px-3 py-2 flex items-center gap-2">
+                <p className="flex-1 min-w-0 text-sm truncate"><b>{a.name}</b> <span className="text-white/50">« {a.last} »</span></p>
+                {[["artist", "Artiste"], ["title", "Titre"]].map(([part, label]) => (
+                  <Mark key={part} ok={a[part]} label={label}
+                    onAccept={() => act("blindAccept", { participantId: a.participantId, name: a.name, part, trackId: blind.prev.id })} />
+                ))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {phone && blind?.top?.length > 0 && (
         <div className="bg-white/5 rounded-2xl p-4">
           <Leaderboard top={blind.top} />
@@ -324,7 +342,7 @@ export function Leaderboard({ top, big, light }) {
       <ol className={big ? "space-y-[1vh]" : "space-y-1"}>
         {top.map((p, i) => (
           <li key={i} className={`flex items-center gap-2 ${big ? "text-[1.3vw]" : "text-sm"}`}>
-            <span className={big ? "w-[2.5vw] text-center" : "w-6 text-center"}>{MEDALS[i] || i + 1}</span>
+            <span className={big ? "w-[2.5vw] text-center" : "w-6 text-center"}>{MEDALS[(p.rank || i + 1) - 1] || p.rank || i + 1}</span>
             <span className={`flex-1 truncate font-semibold ${light ? "text-gray-900" : ""}`}>{p.name}</span>
             <span className={`tabular-nums font-bold ${light ? "text-gray-500" : "text-white/70"}`}>{p.points}</span>
           </li>

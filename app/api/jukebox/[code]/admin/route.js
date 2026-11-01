@@ -319,8 +319,16 @@ export async function POST(req, { params }) {
         }
         const { data: cur } = await tracks().select("id").eq("session_id", s.id).eq("status", "playing").maybeSingle();
         if (body.action === "blindAccept") {
-          if (!cur) return Response.json({ error: "Aucun titre en cours." }, { status: 409 });
-          await acceptAnswer(s, cur.id, String(body.participantId || ""), String(body.name || ""), body.part === "title" ? "title" : "artist");
+          // titre en cours, ou le titre précédent (trackId) : réponse jugée après l'enchaînement
+          let trackId = cur?.id || null;
+          if (body.trackId && body.trackId !== trackId) {
+            const { data: prev } = await tracks().select("id").eq("session_id", s.id).eq("status", "played")
+              .order("played_at", { ascending: false }).limit(1).maybeSingle();
+            if (prev?.id !== body.trackId) return Response.json({ error: "Trop tard pour ce titre." }, { status: 409 });
+            trackId = prev.id;
+          }
+          if (!trackId) return Response.json({ error: "Aucun titre en cours." }, { status: 409 });
+          await acceptAnswer(s, trackId, String(body.participantId || ""), String(body.name || ""), body.part === "title" ? "title" : "artist");
           break;
         }
         const next = body.action === "blindReveal"

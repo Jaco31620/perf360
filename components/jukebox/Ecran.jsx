@@ -39,6 +39,18 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   const takeSound = () => { window.location.href = `/jukebox/${code}/ecran?son=1&claim=1`; };
   const [missing, setMissing] = useState(false);
   const [origin, setOrigin] = useState("");
+  // fin d'une partie de blind test : podium affiché 45 s
+  const lastBlind = useRef(null);
+  const [podium, setPodium] = useState(null);
+  useEffect(() => {
+    const b = data?.blind;
+    const was = lastBlind.current;
+    if (was?.on && !b?.on && was.mode === "phone" && was.top?.length) {
+      setPodium(was.top);
+      setTimeout(() => setPodium(null), 45000);
+    }
+    lastBlind.current = b || null;
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const [fullscreen, setFullscreen] = useState(false);
   const [mouseActive, setMouseActive] = useState(false);
   const [ready, setReady] = useState(false);
@@ -244,6 +256,14 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
 
   return (
     <div className="relative h-screen overflow-hidden bg-gray-950 text-white select-none" style={themeVars(theme)}>
+      {podium && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-gray-950/90 backdrop-blur">
+          <div className="text-center w-[min(60vw,90vh)]">
+            <p className="text-[5vw] font-black leading-none">🏁 Partie terminée !</p>
+            <div className="mt-[4vh] text-left bg-white/10 rounded-[2vw] p-[3vw]"><Leaderboard top={podium} big /></div>
+          </div>
+        </div>
+      )}
       {cover && (
         <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover scale-110 blur-3xl opacity-40" />
       )}
