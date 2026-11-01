@@ -10,7 +10,7 @@ import Link from "next/link";
 import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
-import { MAX_ANSWER_LEN } from "@/lib/jukeboxBlind";
+import { MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
 import { Leaderboard } from "./Blind";
 import { useWakeLock } from "./useWakeLock";
 
@@ -130,7 +130,7 @@ export default function Participant({ code }) {
 
   // nouveau titre : on efface le verdict du précédent
   const nowId = data?.now?.id;
-  useEffect(() => { setVerdict(null); }, [nowId]);
+  useEffect(() => { setVerdict(null); setAnswer(""); }, [nowId]); // et la réponse en cours de frappe
 
   const withdraw = async (t) => {
     if (!confirm(`Retirer « ${t.title} » de la file ?`)) return;
@@ -358,6 +358,8 @@ function BlindGuest({ blind, now, name, answer, setAnswer, onSubmit, sending, ve
         phone ? (
           done ? (
             <p className="text-center text-green-600 font-semibold">🎯 Artiste et titre trouvés ! Attendez la réponse…</p>
+          ) : (round?.attempts || 0) >= MAX_ATTEMPTS ? (
+            <p className="text-center text-gray-500">Plus d'essai pour ce titre… Réponse bientôt sur l'écran !</p>
           ) : (
             <form onSubmit={onSubmit} className="space-y-2">
               <p className="text-gray-600 text-sm">

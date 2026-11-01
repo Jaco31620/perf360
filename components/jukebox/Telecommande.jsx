@@ -17,9 +17,9 @@ import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { QRCodeSVG } from "qrcode.react";
-import { formatDuration, playSpan } from "@/lib/jukebox";
+import { formatDuration, playSpan, HANDOFF_MS } from "@/lib/jukebox";
 import History from "./History";
-import TvLink from "./TvLink";
+import TvLink, { tvBeat } from "./TvLink";
 import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
@@ -37,6 +37,7 @@ export default function Telecommande({ code }) {
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
   const [, tick] = useState(0);
+  const [peek, setPeek] = useState(null); // blind test : titre affiché quand même
   const volumeTimer = useRef(null);
   const mismatchSince = useRef(null); // depuis quand le lecteur joue un autre titre que celui en cours
 
@@ -87,6 +88,7 @@ export default function Telecommande({ code }) {
   }
 
   const { session, now, queue, playback: pb } = data;
+  const masked = !!(data.blind?.on && now && !data.blind.revealed && peek !== now.id); // blind test : comme la régie
   const live = pb && now && pb.id === now.id;
   const age = pb ? data.serverTime - pb.at + (Date.now() - data.fetchedAt) : Infinity;
   // Le lecteur envoie son état toutes les 5 s. Au changement de titre, il
@@ -140,7 +142,7 @@ export default function Telecommande({ code }) {
               {playerSeen && pb.player && <> · <span className="text-white/70">🔊 son sur {pb.player.kind === "tv" ? "la télé" : "l'ordinateur"}</span></>}
             </p>
             {playerSeen && pb.player?.kind === "pc" && (
-              pb.handoff && Date.now() - pb.handoff.at < 20000
+              pb.handoff && data.serverTime - pb.handoff.at < HANDOFF_MS
                 ? <p className="text-[11px] text-white/50 mt-0.5">📺 Envoi du son à la télé…</p>
                 : <button onClick={() => act("handoff", { to: "tv" }, true)} className="mt-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1">📺 Mettre le son sur la télé</button>
             )}
@@ -155,10 +157,16 @@ export default function Telecommande({ code }) {
             {now ? (
               <div className="space-y-3">
                 <div className="flex gap-3 items-start">
-                {now.thumb && <img src={now.thumb} alt="" className="w-[42%] shrink-0 aspect-video object-cover rounded-2xl shadow-xl" />}
+                {now.thumb && !masked && <img src={now.thumb} alt="" className="w-[42%] shrink-0 aspect-video object-cover rounded-2xl shadow-xl" />}
+                {masked && <div className="w-[42%] shrink-0 aspect-video rounded-2xl bg-white/5 flex items-center justify-center text-4xl">🕵️</div>}
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>
-                  {now.channel && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
+                  {masked ? (
+                    <>
+                      <p className="text-base font-bold leading-snug">🤫 Titre masqué</p>
+                      <button onClick={() => setPeek(now.id)} className="text-xs text-white/50 underline">Afficher quand même</button>
+                    </>
+                  ) : <p className="text-base font-bold leading-snug line-clamp-2">{now.title}</p>}
+                  {now.channel && !masked && <p className="text-sm text-white/70 truncate">{now.channel}</p>}
                   {now.author && <p className="text-xs text-white/40 mt-0.5">proposé par {now.author}</p>}
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
@@ -248,7 +256,7 @@ export default function Telecommande({ code }) {
         </div>
       </nav>
 
-      {tvOpen && <TvLink code={code} beat={data?.playback?.at ?? null} onClose={() => setTvOpen(false)} />}
+      {tvOpen && <TvLink code={code} beat={tvBeat(data?.playback)} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
       {guestQr && (

@@ -16,8 +16,10 @@ const pairFrom = (text) => {
   return m ? m[1] : null;
 };
 
-// beat : horodatage du dernier signe de vie d'un lecteur (playback.at) — en
-// mode son, la fenêtre se ferme d'elle-même dès que la télé joue.
+// beat : marque du lecteur « télé » qui joue le son (tvBeat) — en mode son,
+// la fenêtre se ferme d'elle-même dès qu'une télé a (re)pris le son.
+export const tvBeat = (pb) => (pb?.player?.kind === "tv" ? `${pb.player.id}:${pb.player.since}` : null);
+
 export default function TvLink({ code, onClose, defaultSound = true, beat = null }) {
   const [sound, setSound] = useState(defaultSound);
   const [typed, setTyped] = useState("");
@@ -38,7 +40,7 @@ export default function TvLink({ code, onClose, defaultSound = true, beat = null
   beatRef.current = beat;
   const [slow, setSlow] = useState(false); // la télé tarde : on rappelle d'appuyer sur OK
 
-  // mode son : la télé a pris la main (nouveau signe de vie) → fermeture
+  // mode son : la télé a pris le son (nouveau lecteur « tv ») → fermeture
   useEffect(() => {
     if (done?.sound && beat && beat !== done.beat) onClose();
   }, [done, beat]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -129,7 +131,11 @@ export default function TvLink({ code, onClose, defaultSound = true, beat = null
             }
           }
           const pair = pairFrom(text);
-          if (pair) return send(pair);
+          if (pair) {
+            await send(pair);
+            if (!sent.current && !stopped) setTimeout(scan, 1000); // envoi raté : on continue de scanner
+            return;
+          }
         } catch (e) { /* image illisible : on continue */ }
       }
       setTimeout(scan, 250);

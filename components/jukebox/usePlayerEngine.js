@@ -3,7 +3,7 @@
  * Jukebox — moteur de lecture, partagé par la régie (PC branché à la sono)
  * et l'écran d'affichage en mode son (télé qui joue la musique). Joue la file
  * avec le lecteur YouTube intégré et enchaîne tout seul : le titre suivant
- * est préchargé dans un 2e lecteur, puis fondu enchaîné (durée réglable) ou
+ * est préchargé dans un 2e lecteur (sauf `single`, voir plus bas), puis fondu enchaîné (durée réglable) ou
  * passage direct à la fin du titre ; s'il ne peut pas être lu, on demande le
  * suivant au serveur. Suit les ordres de la télécommande, envoie la position
  * de lecture (écran, télécommande, délais du blind test).
@@ -19,10 +19,12 @@
  * pause. Pas de préchargement : le son baisse sur la fin du titre (fondu),
  * puis le suivant est chargé dans le même lecteur et le son remonte.
  * Un seul lecteur par soirée (kind : "pc" régie, "tv" télé en mode son) :
- * chaque appareil a un identifiant (gardé sur l'appareil, il survit à un
- * rechargement). start() « prend le son » (claim) ; le lecteur qui jouait
- * avant le voit et se coupe (yielded). `owner` : appareil qui joue le son
- * (récent), `otherOwner` : un autre que celui-ci.
+ * chaque onglet a un identifiant (sessionStorage : il survit à un
+ * rechargement, mais deux onglets du même navigateur sont deux lecteurs).
+ * start() « prend le son » (claim), annoncé seulement une fois la lecture
+ * vraiment partie (navigateur qui bloque le son : l'autre lecteur continue) ;
+ * le lecteur qui jouait avant le voit et se coupe (yielded). `otherOwner` :
+ * appareil récent qui joue le son, autre que celui-ci.
  * `data` : état de la soirée vu par la régie (titre en cours et file complets) ;
  * `act` : actions régie (useAdminActions) ; `enabled` : conteneurs des
  * lecteurs (playerEls) affichés.
@@ -40,12 +42,19 @@ const loadArgs = (t, from) => {
 
 function deviceId(code) {
   const key = `jukebox:player:${code}`;
+  const fresh = () => Math.random().toString(36).slice(2, 12);
   try {
-    let id = localStorage.getItem(key);
-    if (!id) { id = Math.random().toString(36).slice(2, 12); localStorage.setItem(key, id); }
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+      // ancien identifiant (localStorage, partagé par les onglets) : repris par un seul onglet
+      id = localStorage.getItem(key) || fresh();
+      localStorage.removeItem(key);
+      sessionStorage.setItem(key, id);
+    }
     return id;
-  } catch (e) { return Math.random().toString(36).slice(2, 12); }
+  } catch (e) { return fresh(); }
 }
+const NB = (single) => (single ? 1 : 2);
 
 export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false, kind = "pc" }) {
   const myId = useRef(null);
@@ -86,10 +95,16 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   const cur = () => players.current[active.current];
   const other = () => players.current[1 - active.current];
 
+  // titre suivant côté serveur ; réessayé (réseau) jusqu'à 3 fois
   const advance = useCallback(async (skip, from = loaded.current) => {
     if (advancing.current) return;
     advancing.current = true;
-    try { await act("next", { from, skip }, true); } finally { advancing.current = false; }
+    try {
+      for (let i = 0; i < 3; i++) {
+        if (await act("next", { from, skip }, true)) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } finally { advancing.current = false; }
   }, [act]);
 
   // Position de lecture transmise à l'écran d'affichage (qui suit en muet) :
@@ -99,6 +114,8 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     const p = players.current[active.current];
     if (!p?.getCurrentTime) return;
     const id = loaded.current || "";
+    // prise du son annoncée seulement quand la lecture est vraiment partie
+    if (claimNext.current && id && p.getPlayerState() !== 1) return;
     const claim = claimNext.current;
     claimNext.current = false;
     fetch(`/api/jukebox/${code}/admin`, {
@@ -111,6 +128,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     }).then((r) => r.json()).then((d) => {
       if (d.ok === false && d.owner) yieldRef.current(); // un autre appareil joue le son
       else if (d.ok && d.since) mySince.current = d.since;
+      else if (claim) claimNext.current = true; // erreur serveur : on redemandera
     }).catch(() => { if (claim) claimNext.current = true; });
   }, [code, kind]);
   const yieldRef = useRef(() => {});
@@ -122,6 +140,14 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   }, [started, report]);
 
   const setActive = (i) => { active.current = i; setActiveIdx(i); };
+  // fondus en cours (volume) : arrêtés dès qu'un autre titre est chargé
+  const fadeTimer = useRef(null);
+  const stopFade = () => {
+    if (!fadeTimer.current) return;
+    clearInterval(fadeTimer.current);
+    fadeTimer.current = null;
+    fading.current = false;
+  };
 
   const dropPrimed = () => {
     if (!primed.current) return;
@@ -147,17 +173,17 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       newP.setVolume(master.current);
       return;
     }
+    stopFade();
     fading.current = true;
     const t0 = Date.now();
-    const id = setInterval(() => {
+    fadeTimer.current = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / (fadeSec * 1000));
       newP.setVolume(Math.round(master.current * k));
       oldP.setVolume(Math.round(master.current * (1 - k)));
       if (k >= 1) {
-        clearInterval(id);
+        stopFade();
         oldP.stopVideo();
         oldP.setVolume(master.current);
-        fading.current = false;
       }
     }, 100);
   };
@@ -165,13 +191,14 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   // Un seul lecteur : le son remonte au début du titre suivant.
   const fadeIn = (sec) => {
     const p = cur();
+    stopFade();
     if (!sec) { p.setVolume(master.current); return; }
     p.setVolume(0);
     const t0 = Date.now();
-    const id = setInterval(() => {
+    fadeTimer.current = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / (sec * 1000));
       p.setVolume(Math.round(master.current * k));
-      if (k >= 1) clearInterval(id);
+      if (k >= 1) { clearInterval(fadeTimer.current); fadeTimer.current = null; }
     }, 100);
   };
 
@@ -238,10 +265,10 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     loadYouTubeApi().then(() => {
       if (cancelled || players.current[0] || !playerEls[0].current) return;
       let readyCount = 0;
-      players.current = [0, 1].map((i) => createPlayer(playerEls[i].current, {
+      players.current = [0, 1].slice(0, NB(single)).map((i) => createPlayer(playerEls[i].current, {
         playerVars: { autoplay: 0, rel: 0, playsinline: 1 },
         events: {
-          onReady: () => { if (++readyCount === 2) setReady(true); },
+          onReady: () => { if (++readyCount === NB(single)) setReady(true); },
           onStateChange: (e) => onEvent.current.state(i, e),
           onError: () => onEvent.current.error(i),
         },
@@ -256,12 +283,21 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     const now = data.now;
     const sw = switching.current;
     if (sw) {
-      if (now?.id === sw.from && Date.now() < sw.until) return; // réponse périmée
+      if (now?.id === sw.from) {
+        if (Date.now() < sw.until) return; // réponse périmée
+        if ((sw.tries || 0) < 2) { // le serveur n'a pas suivi : on redemande plutôt que de rejouer l'ancien titre
+          sw.tries = (sw.tries || 0) + 1;
+          sw.until = Date.now() + 15000;
+          advance(false, sw.from);
+          return;
+        }
+      }
       switching.current = null;
     }
     if (now && (loaded.current !== now.id || loadedVideo.current !== now.videoId)) {
       if (primed.current?.id === now.id && primed.current.videoId === now.videoId && primed.current.ready) return switchToPrimed(0);
       dropPrimed();
+      stopFade();
       other()?.stopVideo();
       setLoaded(now.id);
       loadedVideo.current = now.videoId;
@@ -343,7 +379,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     setYielded(false);
     wantPlay.current = true;
     claimNext.current = true;
-    setTimeout(report, 300); // annonce tout de suite : l'autre lecteur se coupe
+    setTimeout(report, 300); // annonce dès que possible (sans titre : tout de suite ; sinon quand la lecture part)
     // dans le geste du clic : le navigateur autorise le son
     if (data?.now) {
       setLoaded(data.now.id);
@@ -392,6 +428,8 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
   yieldRef.current = () => {
     if (!started) return;
     dropPrimed();
+    stopFade();
+    claimNext.current = false;
     players.current.forEach((p) => { try { p?.stopVideo(); } catch (e) { /* lecteur pas prêt */ } });
     setLoaded(null);
     loadedVideo.current = null;
@@ -409,7 +447,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
     if (started && holder && holder.id !== myId.current && mySince.current && holder.since > mySince.current) yieldRef.current();
   }, [holder?.id, holder?.since, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { owner: holder, otherOwner: holder && holder.id !== myId.current ? holder : null, yielded,
-    playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, loadedId: () => loaded.current, currentId,
+  return { otherOwner: holder && holder.id !== myId.current ? holder : null, yielded,
+    playerEls, activeIdx, ready, started, start, playing, togglePlay, volume, changeVolume, advance, currentId,
     playerState: () => { try { return cur()?.getPlayerState?.(); } catch (e) { return undefined; } } };
 }

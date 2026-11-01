@@ -11,14 +11,14 @@
  * joue lui-même la musique avec le moteur de la régie (usePlayerEngine) ; la
  * régie se pilote alors depuis la télécommande (téléphone).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
 import { formatCode, authHeaders, getAdminToken } from "./storage";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { usePlayerEngine } from "./usePlayerEngine";
-import { themeVars } from "@/lib/jukebox";
+import { themeVars, HANDOFF_MS, TV_PAIRED_KEY } from "@/lib/jukebox";
 import { Leaderboard } from "./Blind";
 import { loadYouTubeApi, createPlayer } from "./youtube";
 
@@ -29,7 +29,11 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   const [sound, setSound] = useState(null); // mode son (jeton régie présent) ; null : pas encore lu
   useEffect(() => { setSound(!!wantSound && !!getAdminToken(code)); }, [wantSound, code]);
   const [canSound, setCanSound] = useState(false); // accès régie : « Prendre le son ici » possible
-  useEffect(() => { setCanSound(!!getAdminToken(code)); }, [code]);
+  const [pairedTv, setPairedTv] = useState(false); // télé jumelée (perf360.fr/tv), pas un onglet de la régie
+  useEffect(() => {
+    setCanSound(!!getAdminToken(code));
+    try { setPairedTv(localStorage.getItem(TV_PAIRED_KEY(code)) === "1"); } catch (e) { /* stockage indisponible */ }
+  }, [code]);
   const displayOnly = () => window.location.replace(`/jukebox/${code}/ecran`); // un autre appareil joue le son
   const takeSound = () => { window.location.href = `/jukebox/${code}/ecran?son=1&claim=1`; };
   const [missing, setMissing] = useState(false);
@@ -74,8 +78,8 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   refreshRef.current = refresh;
 
   // mode son : le moteur voit le titre en cours et la file complets
-  const engineData = sound && data?.engine
-    ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null;
+  const engineData = useMemo(() => (sound && data?.engine
+    ? { ...data, now: data.engine.now, queue: data.engine.queue, command: data.engine.command, admin: true } : null), [sound, data]);
   const engine = usePlayerEngine({ code, data: engineData, act, enabled: !!sound && !!data, autoResume: true, single: true, kind: "tv" }); // télé : un seul décodeur vidéo
 
   // Mode son : lancement automatique ; si le navigateur de la télé bloque le
@@ -92,11 +96,12 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
   }, [sound, engine.ready]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (engine.yielded) displayOnly(); }, [engine.yielded]); // eslint-disable-line react-hooks/exhaustive-deps
   // affichage seul : la régie ou la télécommande renvoie le son sur la télé
+  // (seulement une vraie télé jumelée : pas un onglet « écran » ouvert depuis la régie)
   const handoff = data?.playback?.handoff;
   useEffect(() => {
-    if (sound || !canSound || !handoff || handoff.to !== "tv" || !data?.serverTime) return;
-    if (data.serverTime - handoff.at < 30000) takeSound();
-  }, [handoff?.at, canSound, sound]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (sound || !canSound || !pairedTv || !handoff || handoff.to !== "tv" || !data?.serverTime) return;
+    if (data.serverTime - handoff.at < HANDOFF_MS) takeSound();
+  }, [handoff?.at, canSound, pairedTv, sound]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!sound || !engine.started) return;
     let since = null;

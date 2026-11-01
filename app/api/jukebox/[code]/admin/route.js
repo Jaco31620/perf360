@@ -43,7 +43,7 @@ import { soireeVideoChange } from "@/lib/jukeboxChanges";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { adminAccess, ensureRegieCode, listDevices, createJoinPass, revokeDevice, resetRegieCode } from "@/lib/jukeboxAccess";
 import { loadSession, publicSession, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
-import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme, HANDOFF_MS } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
 import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos, AUTO_PID } from "@/lib/jukeboxBlindServer";
 
@@ -100,14 +100,17 @@ export async function POST(req, { params }) {
         if (error) throw error;
         if ((cur[0]?.id || null) !== (body.from || null)) break;
         if (cur.length) {
-          res = await tracks().update({ status: body.skip ? "skipped" : "played" })
-            .eq("session_id", s.id).eq("status", "playing");
-          if (res.error) break;
+          // seulement CE titre, s'il est toujours en cours : deux « suivant » simultanés
+          // (fin de titre sur la télé + appui sur le téléphone) n'en sautent pas un deuxième
+          const { data: done, error: e2 } = await tracks().update({ status: body.skip ? "skipped" : "played" })
+            .eq("id", cur[0].id).eq("status", "playing").select("id");
+          if (e2) throw e2;
+          if (!done?.length) break; // déjà fait par l'autre appel
           if (!body.skip) await countPlay(cur[0].video_id);
         }
         await topUpBlind(s); // blind test automatique : file complétée
         const [nxt] = await queued();
-        if (nxt) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", nxt.id);
+        if (nxt) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", nxt.id).eq("status", "queued");
         if (!res.error) await topUpBlind(s);
         break;
       }
@@ -129,7 +132,7 @@ export async function POST(req, { params }) {
         const player = me ? { ...me, since: body.claim || !holder || holder.id !== me.id ? receivedAt : holder.since } : holder;
         // demande « renvoyer le son sur la télé » gardée 30 s (jusqu'à ce qu'une télé le prenne)
         const ho = s.playback?.handoff;
-        const handoff = ho && !body.claim && receivedAt - (Number(ho.at) || 0) < 30000 ? { handoff: ho } : {};
+        const handoff = ho && !body.claim && receivedAt - (Number(ho.at) || 0) < HANDOFF_MS ? { handoff: ho } : {};
         res = await update({ playback: { id: body.id, pos, playing: !!body.playing, at: receivedAt, ...(Number.isFinite(volume) ? { volume } : {}), ...(player ? { player } : {}), ...handoff } });
         if (!res.error) return Response.json({ ok: true, since: player?.since ?? null });
         break;
@@ -152,7 +155,7 @@ export async function POST(req, { params }) {
         if (error) throw error;
         if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
         res = await tracks().update({ status: "skipped" }).eq("session_id", s.id).eq("status", "playing");
-        if (!res.error) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", t.id);
+        if (!res.error) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", t.id).eq("status", "queued");
         break;
       }
       case "move": {

@@ -19,7 +19,7 @@ import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
-import TvLink from "./TvLink";
+import TvLink, { tvBeat } from "./TvLink";
 import { JoinForm, AccessPanel, useJoinPass } from "./Access";
 import { BlindPanel } from "./Blind";
 
@@ -81,11 +81,11 @@ export default function Regie({ code }) {
   const remoteTimer = useRef(null);
   // « Renvoyer le son sur la télé » : la télé (affichage seul, avec accès son) le reprend
   const [handoffAt, setHandoffAt] = useState(null);
-  const lostSound = !started && !!otherOwner;
+  const lostSound = !started && !!otherOwner; // le son est joué par un autre appareil
   useEffect(() => { if (lostSound) setHandoffAt(null); }, [lostSound]);
   useEffect(() => {
     if (!handoffAt || handoffAt < 0) return;
-    const t = setTimeout(() => setHandoffAt((h) => (h === handoffAt ? -1 : h)), 15000);
+    const t = setTimeout(() => setHandoffAt((h) => (h === handoffAt ? -1 : h)), 25000); // la télé prend le son une fois la lecture partie
     return () => clearTimeout(t);
   }, [handoffAt]);
   const sendToTv = () => { setHandoffAt(Date.now()); act("handoff", { to: "tv" }, true); };
@@ -125,7 +125,7 @@ export default function Regie({ code }) {
     { id: "tools", label: "🔧 Outils" },
   ];
   const shown = tabs.some((t) => t.id === tab) ? tab : "queue"; // onglet retiré (blind test coupé)
-  const remote = !started && !!otherOwner; // le son est joué par un autre appareil (télé)
+  const remote = lostSound; // le son est joué par un autre appareil (télé)
   const pb = data.playback;
   const remotePlaying = !!(remote && now && pb?.id === now.id && pb.playing);
   const remoteVol = remoteVolume ?? pb?.volume ?? 100;
@@ -224,7 +224,7 @@ export default function Regie({ code }) {
               </div>
             )}
             {started && handoffAt === -1 && (
-              <p className="text-xs text-amber-300">Aucune télé n'a repris le son. La télé doit afficher l'écran de la soirée et avoir été jumelée en « 🔊 Affichage + son » au moins une fois (sinon : 📺 Connecter une télé → Affichage + son).</p>
+              <p className="text-xs text-amber-300" onClick={() => setHandoffAt(null)} title="Masquer">Aucune télé n'a repris le son. La télé doit afficher l'écran de la soirée et avoir été jumelée en « 🔊 Affichage + son » au moins une fois (sinon : 📺 Connecter une télé → Affichage + son). ✕</p>
             )}
             {remote && (
               <div className="flex items-center gap-3" title={`Pilote ${ownerName}`}>
@@ -304,7 +304,7 @@ export default function Regie({ code }) {
       </div>
 
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
-      {tvOpen && <TvLink code={code} defaultSound={false} onClose={() => setTvOpen(false)} />}
+      {tvOpen && <TvLink code={code} defaultSound={false} beat={tvBeat(data?.playback)} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 
       {bigQr && (
