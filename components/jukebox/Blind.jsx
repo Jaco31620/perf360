@@ -54,6 +54,22 @@ function Fold({ title, summary, children, open: initial = false }) {
   );
 }
 
+/* Titre visible en régie / télécommande avant la réponse (bien en vue, pas dans un bloc replié). */
+function PeekToggle({ settings, act }) {
+  return (
+    <div className="bg-white/5 rounded-2xl px-4 py-3 space-y-1">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-bold text-sm">👀 Titre visible pour l'organisateur</span>
+        <button type="button" role="switch" aria-checked={settings.peek} onClick={() => act("blind", { peek: !settings.peek })}
+          className={`font-bold px-3 py-1 rounded-full shrink-0 ${settings.peek ? "bg-fuchsia-600" : "bg-white/10"}`}>{settings.peek ? "Oui" : "Non"}</button>
+      </div>
+      <p className="text-xs text-white/50">{settings.peek
+        ? "La régie et la télécommande montrent le titre avant la réponse : pour aider, ou accepter une réponse approchante."
+        : "Titre masqué aussi en régie et sur la télécommande (l'organisateur joue). « Afficher quand même » reste possible."}</p>
+    </div>
+  );
+}
+
 function Timing({ settings, act }) {
   const select = "bg-gray-900 border border-white/20 rounded-lg px-2 py-1 font-semibold";
   return (
@@ -71,12 +87,6 @@ function Timing({ settings, act }) {
         </select>
       </label>
       <p className="text-xs text-white/40">Les délais comptent le temps de lecture : ils s'arrêtent pendant une pause.</p>
-      <label className="flex items-center justify-between gap-3">
-        <span className="text-white/70">Titre visible pour l'organisateur</span>
-        <button type="button" role="switch" aria-checked={settings.peek} onClick={() => act("blind", { peek: !settings.peek })}
-          className={`font-bold px-3 py-1 rounded-full shrink-0 ${settings.peek ? "bg-fuchsia-600" : "bg-white/10"}`}>{settings.peek ? "Oui" : "Non"}</button>
-      </label>
-      <p className="text-xs text-white/40">Régie et télécommande montrent le titre avant la réponse (pour aider, ou accepter une réponse approchante). « Non » si l'organisateur joue aussi.</p>
     </>
   );
 }
@@ -109,6 +119,8 @@ function BlindSetup({ settings, blind, act }) {
       <Fold title="⏱️ Délais" summary={timingText(settings)}>
         <Timing settings={settings} act={act} />
       </Fold>
+
+      <PeekToggle settings={settings} act={act} />
 
       {played > 0 && (
         <button onClick={() => newGame(act)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-2xl py-3">
@@ -206,6 +218,8 @@ function BlindLive({ settings, blind, now, act, controls }) {
             className="mt-2 text-xs text-white/40 hover:text-red-400">Remettre les scores à zéro</button>
         </div>
       )}
+
+      <PeekToggle settings={settings} act={act} />
 
       <Fold title="🎲 Pioche et ⏱️ délais" summary={`${pick.available ?? "…"} titre${pick.available > 1 ? "s" : ""} restant${pick.available > 1 ? "s" : ""} · ${pick.text}`}>
         <BlindFilters settings={settings} facets={blind?.facets} onChange={(patch) => act("blind", patch, true)} />
