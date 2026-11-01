@@ -37,6 +37,7 @@ export default function SuperAdmin() {
   const goTo = (on) => { chooseTab(on); setFocus({ on, at: Date.now() }); };
   const [tab, setTab] = useState("soirees"); // onglet retenu par appareil
   const [demande, setDemande] = useState(null); // demande ouverte depuis l'e-mail
+  const [justSent, setJustSent] = useState(null); // code créé par la validation d'une demande
   useEffect(() => { try { const t = localStorage.getItem("jukebox:superTab"); if (["soirees", "demandes", "codes", "reglages", "memory", "queue"].includes(t)) setTab(t); } catch (e) { /* ignoré */ }
     // lien de l'e-mail de demande : /jukebox/admin?demande=<id>
     const d = new URLSearchParams(window.location.search).get("demande");
@@ -162,11 +163,17 @@ export default function SuperAdmin() {
 
       {tab === "demandes" && data && (
         <Requests list={data.requests} activations={data.activations} defaults={cfg?.defaultFeatures} origin={origin} action={action} highlight={demande}
-          onShowCode={(c) => { setActFilter(c); chooseTab("codes"); window.scrollTo({ top: 0 }); }} />
+          onShowCode={(c) => { setActFilter(c); chooseTab("codes"); window.scrollTo({ top: 0 }); }}
+          onHandled={(activation) => {
+            // demande traitée : on quitte le lien ?demande=… et, si validée, on montre le code créé
+            setDemande(null);
+            try { window.history.replaceState(null, "", "/jukebox/admin"); } catch (e) { /* ignoré */ }
+            if (activation) { setActFilter(activation.code); setJustSent({ id: activation.id, sentTo: activation.sentTo }); chooseTab("codes"); window.scrollTo({ top: 0 }); }
+          }} />
       )}
 
       {tab === "codes" && data && (
-        <Activations list={data.activations} filter={actFilter} setFilter={setActFilter}
+        <Activations justSent={justSent} list={data.activations} filter={actFilter} setFilter={setActFilter}
           onOpenParty={(code) => { setFilter(code); chooseTab("soirees"); window.scrollTo({ top: 0 }); }} sessions={data.sessions} defaults={cfg?.defaultFeatures} origin={origin}
           creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
       )}
@@ -238,6 +245,9 @@ function applyLocally(d, body) {
     const { action, id, resetUsed, ...patch } = body;
     return { ...d, activations: d.activations.map((a) => (a.id === id ? { ...a, ...patch, ...(resetUsed ? { used: 0 } : {}) } : a)) };
   }
+  if ((body.action === "reqApprove" || body.action === "reqReject") && d.requests)
+    return { ...d, requests: d.requests.map((r) => (r.id === body.id ? { ...r, status: body.action === "reqApprove" ? "approved" : "rejected", handledAt: new Date().toISOString() } : r)) };
+  if (body.action === "reqDelete" && d.requests) return { ...d, requests: d.requests.filter((r) => r.id !== body.id) };
   if (body.action === "actDelete" && d.activations) return { ...d, activations: d.activations.filter((a) => a.id !== body.id) };
   if (body.action !== "settings") return d;
   const { action, defaultFeatures, defaultOptions, ...rest } = body;

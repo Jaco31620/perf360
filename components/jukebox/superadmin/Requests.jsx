@@ -14,7 +14,7 @@ import { validLabel } from "@/lib/jukebox";
 
 const STATUS = { approved: ["✓ Validée", "bg-green-100 text-green-700"], rejected: ["Refusée", "bg-gray-100 text-gray-500"] };
 
-export function Requests({ list, activations, defaults, origin, action, highlight, onShowCode }) {
+export function Requests({ list, onHandled, activations, defaults, origin, action, highlight, onShowCode }) {
   const [history, setHistory] = useState(false);
   const [failed, setFailed] = useState(null); // { activation, mailError } : code créé, e-mail non parti
   if (list == null) {
@@ -36,7 +36,7 @@ export function Requests({ list, activations, defaults, origin, action, highligh
       {failed && <MailFailed result={failed} origin={origin} onClose={() => setFailed(null)} />}
       {pending.length === 0 && <p className="text-gray-400 text-center py-8">Aucune demande en attente.</p>}
       {pending.map((r) => (
-        <Pending key={r.id} r={r} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
+        <Pending key={r.id} r={r} onHandled={onHandled} defaults={defaults} origin={origin} action={action} highlight={r.id === highlight} onFailed={setFailed} />
       ))}
       {done.length > 0 && (
         <div>
@@ -83,7 +83,7 @@ function MailFailed({ result, origin, onClose }) {
   );
 }
 
-function Pending({ r, defaults, origin, action, highlight, onFailed }) {
+function Pending({ r, onHandled, defaults, origin, action, highlight, onFailed }) {
   const [retention, setRetention] = useState(null);
   const [label, setLabel] = useState(r.name);
   const [max, setMax] = useState(1);
@@ -104,7 +104,8 @@ function Pending({ r, defaults, origin, action, highlight, onFailed }) {
       ...texts({ maxParties: max, expiresAt, validDays: retention }),
     }, `Valider la demande de ${r.name} ?\n\nUn code d'activation (${actMaxLabel(max)}) sera créé et envoyé à ${r.email}.`);
     setBusy(false);
-    if (d?.mailError) onFailed(d); // e-mail non parti : message à envoyer à la main
+    if (d?.mailError) { onFailed(d); onHandled(null); } // e-mail non parti : message à envoyer à la main
+    else if (d?.activation) onHandled({ ...d.activation, sentTo: d.email });
   };
 
   return (
@@ -136,7 +137,7 @@ function Pending({ r, defaults, origin, action, highlight, onFailed }) {
         </button>
         <button onClick={() => {
           const notify = confirm(`Refuser la demande de ${r.name}.\n\nOK : prévenir par e-mail · Annuler : refuser sans e-mail`);
-          action({ action: "reqReject", id: r.id, notify });
+          action({ action: "reqReject", id: r.id, notify }).then((d) => d && onHandled(null));
         }} className="font-bold bg-gray-100 px-4 py-2 rounded-full">Refuser</button>
       </div>
     </div>

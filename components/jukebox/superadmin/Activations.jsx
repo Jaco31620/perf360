@@ -28,7 +28,7 @@ const activationText = ({ origin, a }) => buildActivationText({
   validText: a.validDays ? validLabel(a.validDays) : null,
 });
 
-export function Activations({ list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
+export function Activations({ justSent, list, sessions, defaults, origin, creationMode, action, onUseCodes, filter, setFilter, onOpenParty }) {
   const [shared, setShared] = useState(null); // code dont le message est affiché
   if (list == null) {
     return (
@@ -60,7 +60,8 @@ export function Activations({ list, sessions, defaults, origin, creationMode, ac
         const parties = sessions.filter((s) => s.activationId === a.id);
         const [label, cls] = ACT_STATUS[a.status] || ACT_STATUS.active;
         return (
-          <div key={a.id} className="bg-white rounded-2xl border border-purple-100 p-4 space-y-3">
+          <div key={a.id} className={`bg-white rounded-2xl border p-4 space-y-3 ${justSent?.id === a.id ? "border-green-400 ring-4 ring-green-100" : "border-purple-100"}`}>
+            {justSent?.id === a.id && <p className="text-sm font-semibold text-green-700 bg-green-50 rounded-xl px-3 py-2">✓ Demande validée : code créé et envoyé par e-mail{justSent.sentTo ? ` à ${justSent.sentTo}` : ""}.</p>}
             <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
               <div className="flex-1 min-w-[220px]">
                 <p className="font-bold text-gray-900">
