@@ -16,7 +16,9 @@ const pairFrom = (text) => {
   return m ? m[1] : null;
 };
 
-export default function TvLink({ code, onClose, defaultSound = true }) {
+// beat : horodatage du dernier signe de vie d'un lecteur (playback.at) — en
+// mode son, la fenêtre se ferme d'elle-même dès que la télé joue.
+export default function TvLink({ code, onClose, defaultSound = true, beat = null }) {
   const [sound, setSound] = useState(defaultSound);
   const [typed, setTyped] = useState("");
   const [camera, setCamera] = useState("off"); // off | on | denied | none
@@ -32,6 +34,19 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
   const soundRef = useRef(sound);
   soundRef.current = sound;
   const sent = useRef(false);
+  const beatRef = useRef(beat);
+  beatRef.current = beat;
+  const [slow, setSlow] = useState(false); // la télé tarde : on rappelle d'appuyer sur OK
+
+  // mode son : la télé a pris la main (nouveau signe de vie) → fermeture
+  useEffect(() => {
+    if (done?.sound && beat && beat !== done.beat) onClose();
+  }, [done, beat]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!done?.sound) return;
+    const t = setTimeout(() => setSlow(true), 12000);
+    return () => clearTimeout(t);
+  }, [done]);
 
   const send = async (pair) => {
     if (sent.current) return;
@@ -47,7 +62,7 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || "Connexion impossible.");
       stop();
-      setDone({ sound: withSound });
+      setDone({ sound: withSound, beat: beatRef.current });
     } catch (e) {
       setError(e.message);
       sent.current = false;
@@ -154,13 +169,14 @@ export default function TvLink({ code, onClose, defaultSound = true }) {
         </div>
         {done ? (
           <div className="space-y-3">
-            <p className="text-green-300 bg-green-500/10 rounded-2xl px-4 py-3 font-semibold">✓ La télé ouvre la soirée dans quelques secondes.</p>
-            {done.sound && (
-              <>
-                <p className="text-sm text-white/70">Appuyez sur <b>OK</b> avec la télécommande de la télé pour lancer la musique.</p>
-                <p className="text-xs text-amber-300">⚠️ La télé joue la musique : ne la lancez pas aussi sur la page régie d'un ordinateur.</p>
-              </>
-            )}
+            <p className="text-green-300 bg-green-500/10 rounded-2xl px-4 py-3 font-semibold">
+              {done.sound ? "✓ Connexion… la télé ouvre la soirée." : "✓ La télé ouvre la soirée dans quelques secondes."}
+            </p>
+            {done.sound && (slow ? (
+              <p className="text-sm text-white/70">Toujours rien ? Si la télé affiche « Lancer la musique », appuyez sur <b>OK</b> avec sa télécommande.</p>
+            ) : (
+              <p className="text-sm text-white/50">Cette fenêtre se fermera dès que la télé sera prête.</p>
+            ))}
             <button onClick={close} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2">Fermer</button>
           </div>
         ) : (

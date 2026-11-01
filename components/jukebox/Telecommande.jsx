@@ -232,7 +232,7 @@ export default function Telecommande({ code }) {
         </div>
       </nav>
 
-      {tvOpen && <TvLink code={code} onClose={() => setTvOpen(false)} />}
+      {tvOpen && <TvLink code={code} beat={data?.playback?.at ?? null} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
       {guestQr && (
