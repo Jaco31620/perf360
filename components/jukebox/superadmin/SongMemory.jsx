@@ -121,10 +121,11 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
     try {
       for (let total = 0; !stopEnrich.current;) {
         const d = await call("POST", { action: "enrich" });
-        total += d.done;
+        const step = (d.done || 0) + (d.isrc?.done || 0);
+        total += step;
         setEnriching({ done: total, pending: d.pending });
         load();
-        if (!d.pending || !d.done) break;
+        if (!d.pending || !step) break;
       }
       onChanged?.();
     } catch (e) { alert(e.message); } finally { setEnriching(false); }
@@ -151,10 +152,10 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
           </p>
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
-              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} sans année ni langue : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube, environ 4 s par titre).</span>
+              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube).</span>
               {enriching ? (
                 <span className="flex items-center gap-2 font-bold">
-                  ⏳ {enriching.done} titre{enriching.done > 1 ? "s" : ""} enrichi{enriching.done > 1 ? "s" : ""}{enriching.pending != null ? `, ${enriching.pending} ligne${enriching.pending > 1 ? "s" : ""} restante${enriching.pending > 1 ? "s" : ""}` : ""}…
+                  ⏳ {enriching.done} titre{enriching.done > 1 ? "s" : ""} complété{enriching.done > 1 ? "s" : ""}{enriching.pending != null ? `, ${enriching.pending} ligne${enriching.pending > 1 ? "s" : ""} restante${enriching.pending > 1 ? "s" : ""}` : ""}…
                   <button onClick={() => { stopEnrich.current = true; }} className="underline font-normal">arrêter</button>
                 </span>
               ) : (
