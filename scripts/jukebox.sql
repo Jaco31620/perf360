@@ -332,3 +332,12 @@ alter table public.jukebox_activations
 -- soirée, recherche d'un client par e-mail.
 alter table public.jukebox_activations
   add column if not exists email text;
+
+-- v26 (02/11/2026) : ISRC (identifiant international de l'enregistrement,
+-- donné par Deezer) sur la mémoire des titres : la même chanson sous
+-- plusieurs fiches Deezer (album, single, best-of…) est reconnue et reprend
+-- la vidéo déjà connue (validée d'abord). "" = Deezer n'en a pas.
+alter table public.jukebox_songs
+  add column if not exists isrc text;
+create index if not exists jukebox_songs_isrc_idx
+  on public.jukebox_songs (isrc) where isrc is not null and isrc <> '';
