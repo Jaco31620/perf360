@@ -122,6 +122,7 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1.5">
+        <button onClick={() => play(start)} disabled={!ready} className={btn} title="Écouter depuis le début gardé">▶ Écouter le début</button>
         <button onClick={setStartHere} disabled={!ready} className={btn} title="La soirée démarrera la vidéo ici">⏮ Début ici<Key k="D" /></button>
         <span className="flex items-center gap-1 text-xs">
           <button onClick={() => save(start - 1, end)} className={nudge} aria-label="Début −1 s">−1</button>
@@ -135,14 +136,15 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
           {end != null && <button onClick={() => save(start, end + 1)} className={nudge} aria-label="Fin +1 s">+1</button>}
         </span>
         <button onClick={setEndHere} disabled={!ready} className={btn} title="La soirée passera au titre suivant ici">Fin ici ⏭<Key k="F" /></button>
+        <button onClick={() => play(keptEnd - 6, end == null ? null : end)} disabled={!ready} className={btn} title="Écouter les 6 dernières secondes gardées">▶ Écouter la fin</button>
         <span className="text-[11px] text-gray-400 ml-auto tabular-nums">{fmt(r1(now))}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button onClick={() => play(start)} disabled={!ready} className={btn}>▶ Écouter le début</button>
-        <button onClick={() => play(keptEnd - 6, end == null ? null : end)} disabled={!ready} className={btn}>▶ Écouter la fin</button>
-        {trimmed && <button onClick={() => save(0, null)} className="text-xs text-gray-400 hover:text-red-600 underline">sans rognage</button>}
-        {trimmed && <span className="text-xs text-fuchsia-700 font-semibold">✂️ {formatDuration(Math.round(keptEnd - start))} gardées</span>}
-      </div>
+      {trimmed && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button onClick={() => save(0, null)} className="text-xs text-gray-400 hover:text-red-600 underline">sans rognage</button>
+          <span className="text-xs text-fuchsia-700 font-semibold">✂️ {formatDuration(Math.round(keptEnd - start))} gardées</span>
+        </div>
+      )}
       {hint === undefined ? (
         <p className="text-[11px] text-gray-400">SponsorBlock…</p>
       ) : hintUseful ? (

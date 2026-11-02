@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
 import { authHeaders, participantId } from "./storage";
 import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan } from "@/lib/jukebox";
+import { backdropClose } from "@/lib/backdrop";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
 export function Settings({ session, act }) {
@@ -485,7 +486,7 @@ export function VideoChooser({ title, subtitle, initial, load, choose: save, onC
   })();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-3" onClick={() => !busy && onClose()}>
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !busy && onClose())}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gray-900 text-white rounded-3xl p-5 space-y-4 shadow-2xl">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">

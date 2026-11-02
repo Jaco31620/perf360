@@ -6,6 +6,7 @@ import TrimPlayer from "../TrimPlayer";
 import { formatDuration } from "@/lib/jukebox";
 import { fmtDate, FR_NEXT, MODE_TAG, modeLabel } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
+import { backdropClose } from "@/lib/backdrop";
 
 export function SongVideoChooser({ song, call, onClose, onDone }) {
   return (
@@ -68,7 +69,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
   const tool = "text-sm font-bold bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl text-left whitespace-nowrap";
   const tag = "text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap";
   return (
-    <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-2 sm:p-3" onClick={onClose}>
+    <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-2 sm:p-3" {...backdropClose(onClose)}>
       {/* Écran de portable : vidéo à gauche (taille réglée sur la hauteur de l'écran), infos et boutons à droite. */}
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-6xl max-h-[97vh] flex flex-col bg-white rounded-3xl p-4 gap-3 shadow-2xl">
         <div className="flex items-center gap-3 shrink-0">
@@ -249,7 +250,7 @@ export function SongTitleChooser({ song, call, onClose, onDone }) {
   };
   const current = song.key.split(":")[1];
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" onClick={() => !busy && onClose()}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !busy && onClose())}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-5 space-y-3 shadow-2xl">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">

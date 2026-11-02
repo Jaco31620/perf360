@@ -13,6 +13,7 @@ import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, them
 import { MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
 import { Leaderboard } from "./Blind";
 import { useWakeLock } from "./useWakeLock";
+import { backdropClose } from "@/lib/backdrop";
 
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
@@ -342,7 +343,7 @@ export default function Participant({ code }) {
         </>)}
       </div>
       {picked && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" onClick={() => !adding && setPicked(null)}>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !adding && setPicked(null))}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); add(picked); }}
             className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">

@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, ZoomIn } from "lucide-react";
 import { getAdminToken } from "./storage";
+import { backdropClose } from "@/lib/backdrop";
 
 const pairFrom = (text) => {
   const s = String(text || "").trim().toLowerCase();
@@ -177,7 +178,7 @@ export default function TvLink({ code, onClose, defaultSound = true, beat = null
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 flex items-end sm:items-center justify-center p-3" onClick={close}>
+    <div className="fixed inset-0 z-50 bg-black/85 flex items-end sm:items-center justify-center p-3" {...backdropClose(close)}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-gray-900 text-white rounded-3xl p-5 space-y-4 shadow-2xl">
         <div className="flex items-start gap-3">
           <p className="flex-1 font-bold text-lg">📺 Connecter une télé</p>

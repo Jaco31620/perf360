@@ -15,6 +15,7 @@ import { exportCloudImage, renderCloudBlob, blobToBase64 } from "./exportImage";
 import { getAdminToken, setAdminToken, rememberCloud, forgetCloud, formatCode } from "./storage";
 import { MAX_QUESTION_LEN, MAX_WORD_LEN, MAX_CHOICES, maxLabel } from "@/lib/nuage";
 import { PALETTES, BACKGROUNDS, WEIGHTS, ARRANGEMENTS, EFFECTS, IMAGE_SIZES, normalizeStyle, resolveTheme } from "@/lib/nuageThemes";
+import { backdropClose } from "@/lib/backdrop";
 
 export default function Presenter({ code }) {
   const router = useRouter();
@@ -301,7 +302,7 @@ function MailDialog({ code, token, words, theme, question, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" {...backdropClose(onClose)}>
       <form onSubmit={send} onClick={(e) => e.stopPropagation()}
         className="w-full max-w-lg bg-white text-gray-900 rounded-3xl p-6 space-y-4 shadow-2xl max-h-full overflow-y-auto">
         <div className="flex items-center justify-between">
@@ -435,7 +436,7 @@ function TitleImage({ image, code, token, onChange, size, onSize }) {
 function StylePanel({ style, onChange, onClose, image, code, token, onImageChange }) {
   const isPreset = BACKGROUNDS.some((b) => b.value === style.bg);
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end" {...backdropClose(onClose)}>
       <div className="w-full max-w-sm h-full bg-white text-gray-900 overflow-y-auto p-6 space-y-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold">Style</h2>
@@ -636,7 +637,7 @@ function Settings({ session, words, hidden, code, token, origin, onClose, act, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/50 flex justify-end" {...backdropClose(onClose)}>
       <div className="w-full max-w-sm h-full bg-white text-gray-900 overflow-y-auto p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold">Réglages</h2>

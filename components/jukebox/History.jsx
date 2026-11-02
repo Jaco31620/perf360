@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RotateCcw, X } from "lucide-react";
 import { authHeaders } from "./storage";
+import { backdropClose } from "@/lib/backdrop";
 
 const hour = (iso) => (iso ? new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "");
 
@@ -63,7 +64,7 @@ export default function History({ code, name, onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-3" {...backdropClose(onClose)}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-gray-900 text-white rounded-3xl shadow-2xl">
         <div className="flex items-center gap-3 px-5 pt-5 pb-3">
           <h2 className="text-lg font-bold flex-1">🕘 Historique {list && <span className="text-white/40 font-normal">({list.length})</span>}</h2>
