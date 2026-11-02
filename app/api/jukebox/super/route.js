@@ -44,7 +44,7 @@ import { listActivations, createActivation, updateActivation, deleteActivation, 
 import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
-import { loadSession, songsCount, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, songsCount, songStatusCounts, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
@@ -64,6 +64,8 @@ export async function GET(req) {
       return Response.json({ items: await prefillItems() }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("playlists"))
       return Response.json({ playlists: await deezerPlaylistSearch(url.searchParams.get("playlists")) }, { headers: { "cache-control": "no-store" } });
+    if (url.searchParams.get("songCounts"))
+      return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
       const params = Object.fromEntries(url.searchParams);
       const songs = params.status === "changes" // changements de vidéo proposés en soirée

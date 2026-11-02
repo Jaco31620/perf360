@@ -67,6 +67,19 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
   const [preview, setPreview] = useState(null); // clé du titre en aperçu
   const [review, setReview] = useState(null); // revue : clés des titres à passer, position
 
+  const [counts, setCounts] = useState({}); // nombre de titres par filtre (Proposés, À vérifier…)
+  const countsTimer = useRef(null);
+  const loadCounts = useCallback(() => {
+    clearTimeout(countsTimer.current);
+    countsTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/jukebox/super?songCounts=1", { cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" } });
+        if (res.ok) setCounts(await res.json());
+      } catch (e) { /* compteurs facultatifs */ }
+    }, 1500);
+  }, []);
+  useEffect(() => () => clearTimeout(countsTimer.current), []);
+
   const lastAct = useRef(0); // liste relue avant la dernière action : périmée
   const queue = useRef(Promise.resolve());
   const load = useCallback(async () => {
@@ -81,10 +94,11 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
       if (started < lastAct.current) return;
       setSongs(d.songs);
       setErr("");
+      loadCounts();
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, mode, lang, decade, sort]);
+  }, [q, status, mode, lang, decade, sort, loadCounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,6 +117,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
     queue.current = p.catch(() => {});
     try {
       await p;
+      loadCounts();
       if (["forgetSong", "mergeSongs"].includes(body.action)) onChanged?.(); // nombre de titres en mémoire
     } catch (e) { alert(e.message); lastAct.current = Date.now(); load(); }
   };
@@ -198,12 +213,15 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
           })()}
           <div className="flex flex-wrap gap-2 items-center">
             <div className="flex flex-wrap bg-gray-100 rounded-2xl p-0.5 text-sm">
-              {STATUS_FILTERS.map(([id, label]) => (
-                <button key={id} onClick={() => setStatus(id)}
-                  className={`px-3 py-1 rounded-full font-bold ${status === id ? "bg-fuchsia-600 text-white" : "text-gray-500 hover:text-gray-900"}`}>
-                  {label}
-                </button>
-              ))}
+              {STATUS_FILTERS.map(([id, label]) => {
+                const n = counts[id] || 0; // compteur : seulement sur les filtres « à traiter »
+                return (
+                  <button key={id} onClick={() => setStatus(id)}
+                    className={`px-3 py-1 rounded-full font-bold ${status === id ? "bg-fuchsia-600 text-white" : n ? "text-gray-900 hover:text-fuchsia-700" : "text-gray-500 hover:text-gray-900"}`}>
+                    {label}{n > 0 && <span className={`ml-1 font-black ${status === id ? "" : "text-fuchsia-600"}`}>({n})</span>}
+                  </button>
+                );
+              })}
             </div>
             <select value={mode} onChange={(e) => setMode(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
               <option value="">Tous les modes</option>
