@@ -12,6 +12,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { loadSession } from "@/lib/jukeboxServer";
 import { adminAccess, createDevice } from "@/lib/jukeboxAccess";
 import { isValidCode } from "@/lib/jukebox";
+import { logEvent } from "@/lib/jukeboxEvents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export async function POST(req) {
     const { error } = await getSupabaseAdmin().from("jukebox_config")
       .upsert({ key: `tv:${id}`, value: JSON.stringify({ code, at: Date.now(), ...(tvToken ? { token: tvToken } : {}) }) });
     if (error) throw error;
+    await logEvent(s.id, "tv_pair", null, { sound: tvToken ? "avec le son" : "affichage seul" });
     return Response.json({ ok: true });
   } catch (e) {
     console.error("jukebox tv:", e);

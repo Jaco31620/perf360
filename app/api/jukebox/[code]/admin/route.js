@@ -37,8 +37,13 @@
  *   joinPass               → passe à usage unique pour ajouter un appareil (QR, 10 min)
  *   revokeDevice { id }    → retirer un appareil
  *   regieCode { logoutAll } → nouveau code régie (appareils déconnectés si logoutAll)
+ *   log { kind, detail }   → incident du lecteur (journal de la soirée)
+ * Chaque action réussie est notée au journal (lib/jukeboxEvents) et signalée
+ * aux écrans en temps réel (lib/jukeboxLive).
  */
 import { tooMany } from "@/lib/jukeboxRate";
+import { logEvent, actorOf } from "@/lib/jukeboxEvents";
+import { notify } from "@/lib/jukeboxLive";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { soireeVideoChange } from "@/lib/jukeboxChanges";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
@@ -77,6 +82,11 @@ export async function POST(req, { params }) {
       return data;
     };
     let res = { error: null };
+    // journal + signal temps réel après une action réussie
+    const actor = actorOf(req, { isSuper: isJukeboxSuper(req) });
+    let ev = null; // { kind, data } noté au journal
+    let live = "queue"; // signal aux écrans (null : rien n'a changé pour eux)
+    const after = () => Promise.all([ev && logEvent(s.id, ev.kind, actor, ev.data), live && notify(s.code, live)]);
     // `playback` (lecteur qui joue le son, position, renvoi vers la télé) : écrit
     // par plusieurs appareils à la fois → mise à jour conditionnelle (version `v`)
     // recalculée sur la valeur relue en cas de conflit. make(prev) → nouvel état
@@ -106,41 +116,52 @@ export async function POST(req, { params }) {
       case "open":
       case "close":
         res = await update({ status: body.action === "open" ? "open" : "closed" });
+        ev = { kind: body.action === "open" ? "adds_open" : "adds_blocked" }; live = "session";
         break;
       case "max":
         res = await update({ max_per_participant: normalizeMax(body.max) });
+        ev = { kind: "setting", data: { max: normalizeMax(body.max) } }; live = "session";
         break;
       case "searchMode":
         res = await update({ options: { ...(s.options || {}), searchMode: normalizeMode(body.mode) } });
+        ev = { kind: "setting", data: { searchMode: normalizeMode(body.mode) } }; live = "session";
         break;
       case "options": {
         const { searchMode, ...rest } = body; // le mode a sa propre action
         res = await update({ options: regieOptions(rest, s.options || {}) });
+        ev = { kind: "setting", data: { options: Object.keys(rest).filter((k) => k !== "action").join(", ") } }; live = "session";
         break;
       }
       case "name": {
         const name = String(body.name || "").trim().slice(0, MAX_NAME_LEN);
         if (!name) return Response.json({ error: "Nom vide." }, { status: 400 });
         res = await update({ name });
+        ev = { kind: "rename", data: { name } }; live = "session";
         break;
       }
       case "next": {
-        const { data: cur, error } = await tracks().select("id,video_id").eq("session_id", s.id).eq("status", "playing");
+        const { data: cur, error } = await tracks().select("id,video_id,title,channel").eq("session_id", s.id).eq("status", "playing");
         if (error) throw error;
-        if ((cur[0]?.id || null) !== (body.from || null)) break;
+        if ((cur[0]?.id || null) !== (body.from || null)) { live = null; break; }
         if (cur.length) {
           // seulement CE titre, s'il est toujours en cours : deux « suivant » simultanés
           // (fin de titre sur la télé + appui sur le téléphone) n'en sautent pas un deuxième
           const { data: done, error: e2 } = await tracks().update({ status: body.skip ? "skipped" : "played" })
             .eq("id", cur[0].id).eq("status", "playing").select("id");
           if (e2) throw e2;
-          if (!done?.length) break; // déjà fait par l'autre appel
+          if (!done?.length) { live = null; break; } // déjà fait par l'autre appel
           if (!body.skip) await countPlay(cur[0].video_id);
         }
         await topUpBlind(s); // blind test automatique : file complétée
         const [nxt] = await queued();
         if (nxt) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", nxt.id).eq("status", "queued");
         if (!res.error) await topUpBlind(s);
+        if (!res.error && (body.skip || nxt)) {
+          const { data: started } = nxt ? await tracks().select("title,channel").eq("id", nxt.id).maybeSingle() : { data: null };
+          ev = body.skip
+            ? { kind: "skip", data: { title: cur[0] ? `${cur[0].channel} – ${cur[0].title}` : null, next: started ? `${started.channel} – ${started.title}` : null } }
+            : { kind: "play", data: { title: started ? `${started.channel} – ${started.title}` : null } };
+        }
         break;
       }
       case "playback": {
@@ -167,12 +188,17 @@ export async function POST(req, { params }) {
         });
         if (r.response) return r.response;
         if (r.error) { res = r; break; }
+        live = "playback";
+        if (r.next.player && r.next.player.since === receivedAt) // le son vient de changer d'appareil
+          ev = { kind: "sound", data: { device: r.next.player.kind === "tv" ? "télé" : "ordinateur", claim: body.claim ? "oui" : null } };
+        await after();
         return Response.json({ ok: true, since: r.next.player?.since ?? null });
       }
       case "handoff": { // l'ordinateur rend le son : une télé jumelée (affichage seul, avec accès son) le reprend
         if (!s.playback) return Response.json({ error: "Rien n'est en cours de lecture." }, { status: 400 });
         const r = await casPlayback((prev) => ({ ...(prev || {}), handoff: { to: "tv", at: receivedAt } }));
         if (r.error) res = r;
+        ev = { kind: "handoff" }; live = "playback";
         break;
       }
       case "command": {
@@ -183,13 +209,16 @@ export async function POST(req, { params }) {
         const cmd = { id: `${receivedAt}-${Math.random().toString(36).slice(2, 8)}`, type: body.type, value };
         const list = [...(Array.isArray(s.command?.list) ? s.command.list : []), cmd].slice(-6);
         res = await update({ command: { ...cmd, list } });
+        if (body.type !== "volume") ev = { kind: body.type === "pause" ? "pause" : "resume" };
+        live = "command";
         break;
       }
       case "playnow": {
-        const { data: t, error } = await tracks().select("id")
+        const { data: t, error } = await tracks().select("id,title,channel")
           .eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued").maybeSingle();
         if (error) throw error;
         if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+        ev = { kind: "playnow", data: { title: `${t.channel} – ${t.title}` } };
         res = await tracks().update({ status: "skipped" }).eq("session_id", s.id).eq("status", "playing");
         if (!res.error) res = await tracks().update({ status: "playing", played_at: new Date().toISOString() }).eq("id", t.id).eq("status", "queued");
         break;
@@ -220,6 +249,7 @@ export async function POST(req, { params }) {
       }
       case "clearDedication":
         res = await tracks().update({ dedication: null }).eq("session_id", s.id).eq("id", String(body.id || ""));
+        ev = { kind: "dedication_cleared" };
         break;
       case "videos":
       case "replaceVideo": {
@@ -231,6 +261,7 @@ export async function POST(req, { params }) {
         if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
         const mode = publicSession(s).searchMode;
         if (body.action === "videos") {
+          live = null;
           const { candidates } = await songAlternatives(t, mode);
           return Response.json({ ok: true, current: t.video_id, candidates });
         }
@@ -246,6 +277,8 @@ export async function POST(req, { params }) {
         const memory = key ? await soireeVideoChange({
           key, video, session: s, bySuper: isJukeboxSuper(req), remember: () => rememberSong(key, video, null, false),
         }) : null;
+        ev = { kind: "video_changed", data: { title: `${t.channel} – ${t.title}`, video: video.id } };
+        await after();
         return Response.json({ ok: true, memory });
       }
       case "access":
@@ -254,15 +287,20 @@ export async function POST(req, { params }) {
         return Response.json({ ok: true, pass: await createJoinPass(s) });
       case "revokeDevice":
         await revokeDevice(s, body.id);
+        ev = { kind: "device_revoked" }; live = null;
+        await after();
         return Response.json({ ok: true, devices: await listDevices(s, access.deviceId) });
       case "regieCode": {
         const regieCode = await resetRegieCode(s, !!body.logoutAll);
+        ev = { kind: "regie_code", data: { logoutAll: body.logoutAll ? "oui" : null } }; live = null;
+        await after();
         return Response.json({ ok: true, regieCode, devices: body.logoutAll ? [] : await listDevices(s, access.deviceId) });
       }
       case "remove": {
         // titre pioché par le blind test : écarté (pas repioché ce soir), un autre le remplace
-        const { data: t } = await tracks().select("participant_id").eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued").maybeSingle();
-        if (!t) break;
+        const { data: t } = await tracks().select("participant_id,title,channel").eq("session_id", s.id).eq("id", String(body.id || "")).eq("status", "queued").maybeSingle();
+        if (!t) { live = null; break; }
+        ev = { kind: "remove", data: { title: `${t.channel} – ${t.title}` } };
         res = t.participant_id === AUTO_PID
           ? await tracks().update({ status: "removed" }).eq("id", String(body.id))
           : await tracks().delete().eq("id", String(body.id));
@@ -271,6 +309,7 @@ export async function POST(req, { params }) {
       }
       case "reset":
         res = await tracks().delete().eq("session_id", s.id).in("status", ["queued", "playing"]);
+        ev = { kind: "reset" };
         break;
       case "theme":
       case "logo": {
@@ -293,6 +332,7 @@ export async function POST(req, { params }) {
           }
         }
         res = await update({ options: { ...(s.options || {}), theme: normalizeTheme(theme) } });
+        ev = { kind: "theme" }; live = "session";
         break;
       }
       case "blind":
@@ -304,6 +344,14 @@ export async function POST(req, { params }) {
           return Response.json({ error: "Requête invalide." }, { status: 400 });
         const blind = sessionBlind(s);
         if (!blind) return Response.json({ error: "Blind test non activé pour cette soirée." }, { status: 403 });
+        live = "blind";
+        ev = {
+          blind: { kind: "on" in body ? (body.on ? "blind_start" : "blind_stop") : "blind_settings", data: "mode" in body ? { mode: body.mode } : null },
+          blindReveal: { kind: "blind_reveal" },
+          blindAccept: { kind: "blind_accept", data: { name: String(body.name || "").slice(0, 40), part: body.part === "title" ? "titre" : "artiste" } },
+          blindNewGame: { kind: "blind_new_game", data: { scores: body.scores ? "remis à zéro" : null } },
+          blindReset: { kind: "blind_reset" },
+        }[body.action];
         if (body.action === "blindReset") {
           res = await sb.from("jukebox_answers").delete().eq("session_id", s.id);
           break;
@@ -349,6 +397,7 @@ export async function POST(req, { params }) {
         const played = () => tracks().select("*").eq("session_id", s.id).in("status", ["played", "skipped"]);
         if (body.action === "clearHistory") {
           res = await tracks().delete().eq("session_id", s.id).in("status", ["played", "skipped"]);
+          ev = { kind: "history_cleared" }; live = null;
           break;
         }
         if (body.action === "history") {
@@ -368,15 +417,26 @@ export async function POST(req, { params }) {
           session_id: s.id, video_id: t.video_id, title: t.title, channel: t.channel, thumb: t.thumb,
           duration: t.duration, video_title: t.video_title || null, participant_id: "regie-replay", author: t.author, position: Date.now(),
         });
+        ev = { kind: "replay", data: { title: `${t.channel} – ${t.title}` } };
         break;
       }
       case "delete":
         res = await sb.from("jukebox_sessions").delete().eq("id", s.id);
+        live = "session"; // journal supprimé avec la soirée
         break;
+      case "log": { // incident signalé par un lecteur (régie ou télé avec le son)
+        const kinds = ["player_error", "stuck", "duplicate_tab", "autoplay_blocked", "retry_next"];
+        if (!kinds.includes(body.kind)) return Response.json({ error: "Requête invalide." }, { status: 400 });
+        if (await tooMany(`log:${s.id}`, 60, 600)) return Response.json({ ok: true }); // trop d'incidents : on n'en note plus
+        ev = { kind: body.kind, data: body.detail && typeof body.detail === "object" ? Object.fromEntries(Object.entries(body.detail).slice(0, 6).map(([k, v]) => [String(k).slice(0, 20), typeof v === "number" ? v : String(v ?? "").slice(0, 120)])) : null };
+        live = null;
+        break;
+      }
       default:
         return Response.json({ error: "Action inconnue." }, { status: 400 });
     }
     if (res.error) throw res.error;
+    await after();
     return Response.json({ ok: true });
   } catch (e) {
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });

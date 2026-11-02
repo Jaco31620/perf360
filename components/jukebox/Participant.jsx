@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
+import { useLive } from "./useLive";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
 import { MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
 import { Leaderboard } from "./Blind";
@@ -60,11 +61,11 @@ export default function Participant({ code }) {
     pid.current = participantId();
     setNameState(getName());
     refresh();
-    // toutes les 4 s ; toutes les 1,5 s pendant un blind test (compte à rebours, « trop tard »)
-    let tick = 0;
-    const id = setInterval(() => { tick++; if (!document.hidden && (blindRef.current?.on || tick % 3 === 0)) refresh(); }, 1500);
-    return () => clearInterval(id);
   }, [code, refresh]);
+  // temps réel : relecture à chaque changement de la file ; filet de sécurité 15 s (4,5 s sans
+  // temps réel) ; toutes les 1,5 s pendant un blind test (compte à rebours, « trop tard »)
+  const blindOn = !!data?.blind?.on;
+  useLive(code, refresh, { fast: blindOn ? 1500 : 4500, slow: blindOn ? 1500 : 15000, hiddenPause: true });
 
   const saveName = (e) => {
     e.preventDefault();

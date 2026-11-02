@@ -50,6 +50,8 @@ import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
 import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
+import { logEvent, listEvents } from "@/lib/jukeboxEvents";
+import { notify } from "@/lib/jukeboxLive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +66,11 @@ export async function GET(req) {
       return Response.json({ items: await prefillItems() }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("playlists"))
       return Response.json({ playlists: await deezerPlaylistSearch(url.searchParams.get("playlists")) }, { headers: { "cache-control": "no-store" } });
+    if (url.searchParams.get("events")) { // journal d'une soirée (code)
+      const sess = await loadSession(url.searchParams.get("events"), { any: true });
+      if (!sess) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
+      return Response.json({ events: await listEvents(sess.id) }, { headers: { "cache-control": "no-store" } });
+    }
     if (url.searchParams.get("songCounts"))
       return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
@@ -232,10 +239,22 @@ export async function POST(req) {
         const s = await loadSession(body.code, { any: true });
         if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
         const sb = getSupabaseAdmin();
+        // journal de la soirée + signal aux écrans (fermeture, fonctions, nom…)
+        const superLog = async () => {
+          if (body.action === "delete") return; // journal supprimé avec la soirée
+          if (body.action === "regie" && !body.reset) return; // simple lecture du code
+          const data = body.action === "prolong" ? { days: parseInt(body.days, 10) || 1 }
+            : body.action === "close" ? { closed: body.closed ? "fermée" : "rouverte" }
+            : body.action === "validity" ? { days: cleanValid(body.days) || "sans limite" }
+            : body.action === "rename" ? { name: String(body.name || "").slice(0, 60) }
+            : body.action === "regie" ? { logoutAll: body.logoutAll ? "oui" : null } : null;
+          await Promise.all([logEvent(s.id, `super_${body.action}`, "Super-admin", data), body.action !== "regie" && notify(s.code, "session")]);
+        };
         if (body.action === "features") {
           const options = { ...(s.options || {}), features: normalizeFeatures(body.features, normalizeFeatures(s.options?.features)) };
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true });
         }
         if (body.action === "prolong") {
@@ -247,6 +266,7 @@ export async function POST(req) {
           delete options.closedAt;
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true, endsAt: options.closesAt });
         }
         if (body.action === "close") {
@@ -256,6 +276,7 @@ export async function POST(req) {
           else { delete options.closedAt; if (body.noLimit) { delete options.validDays; delete options.closesAt; } }
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true });
         }
         if (body.action === "validity") {
@@ -265,6 +286,7 @@ export async function POST(req) {
           if (cleanValid(body.days)) options.validDays = cleanValid(body.days); else delete options.validDays;
           const { error } = await sb.from("jukebox_sessions").update({ options }).eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true });
         }
         if (body.action === "rename") {
@@ -272,16 +294,19 @@ export async function POST(req) {
           if (!name) return Response.json({ error: "Nom vide." }, { status: 400 });
           const { error } = await sb.from("jukebox_sessions").update({ name }).eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true });
         }
         if (body.action === "delete") {
           const { error } = await sb.from("jukebox_sessions").delete().eq("id", s.id);
           if (error) throw error;
+          await superLog();
           return Response.json({ ok: true });
         }
         // regie : code régie de la soirée (reset : nouveau code, logoutAll : appareils déconnectés)
         const regieCode = body.reset ? await resetRegieCode(s, !!body.logoutAll) : await ensureRegieCode(s);
-        return Response.json({ ok: true, regieCode });
+        await superLog();
+          return Response.json({ ok: true, regieCode });
       }
       default:
         return Response.json({ error: "Action inconnue." }, { status: 400 });

@@ -15,7 +15,8 @@ import { missingFrom } from "./ClosingNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Play } from "lucide-react";
-import { formatCode, authHeaders, getAdminToken } from "./storage";
+import { formatCode, authHeaders, getAdminToken, setScreen } from "./storage";
+import { useLive } from "./useLive";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { usePlayerEngine } from "./usePlayerEngine";
@@ -196,9 +197,11 @@ export default function Ecran({ code, sound: wantSound, claim = false }) {
     setOrigin(window.location.origin);
     if (sound === null) return;
     refresh();
-    const id = setInterval(refresh, sound ? 1500 : 3000); // mode son : enchaînements suivis de près
-    return () => clearInterval(id);
   }, [refresh]);
+  setScreen("ecran"); // journal de la soirée : actions faites depuis la télé
+  // temps réel : relecture à chaque changement ; filet de sécurité 6 s, sinon (canal indisponible,
+  // blind test) l'ancienne cadence : 1,5 s en mode son (enchaînements suivis de près), 3 s sinon
+  useLive(code, refresh, { ctl: true, enabled: sound !== null, fast: sound ? 1500 : 3000, slow: data?.blind?.on ? (sound ? 1500 : 3000) : 6000 });
 
   // Bouton bien visible hors plein écran ; en plein écran, il n'apparaît que
   // quelques secondes quand on bouge la souris (pour pouvoir en sortir).

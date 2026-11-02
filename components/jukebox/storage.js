@@ -34,9 +34,15 @@ export function setSuperToken(token) {
   try { token ? localStorage.setItem("jukebox_super", token) : localStorage.removeItem("jukebox_super"); } catch (e) { /* ignoré */ }
 }
 
+/* Écran courant (régie, télécommande, télé) : indiqué au serveur pour le
+ * journal de la soirée (« qui a fait quoi »). */
+let screen = null;
+export const setScreen = (name) => { screen = name; };
+
 /* En-têtes d'accès régie : jeton de la soirée et/ou super-admin. */
 export function authHeaders(code) {
   const h = {};
+  if (screen) h["x-jukebox-from"] = screen;
   const t = getAdminToken(code);
   const s = getSuperToken();
   if (t) h["x-jukebox-admin"] = t;

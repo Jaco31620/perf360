@@ -5,6 +5,8 @@
  */
 import { loadSession } from "@/lib/jukeboxServer";
 import { joinWithCode, joinWithPass } from "@/lib/jukeboxAccess";
+import { logEvent } from "@/lib/jukeboxEvents";
+import { deviceLabel } from "@/lib/jukeboxAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ export async function POST(req, { params }) {
     const ua = req.headers.get("user-agent") || "";
     const r = body?.pass ? await joinWithPass(s, body.pass, ua) : await joinWithCode(s, body?.pin, ua);
     if (r.error) return Response.json({ error: r.error }, { status: r.status });
+    await logEvent(s.id, "device_join", null, { device: deviceLabel(ua), via: body?.pass ? "QR" : "code régie" });
     return Response.json({ ok: true, token: r.token });
   } catch (e) {
     console.error("jukebox join:", e);

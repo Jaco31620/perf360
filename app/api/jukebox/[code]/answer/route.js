@@ -10,6 +10,7 @@ import { loadSession } from "@/lib/jukeboxServer";
 import { MAX_AUTHOR_LEN } from "@/lib/jukebox";
 import { checkAnswer, pointsFor, MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
 import { sessionBlind, expectedParts, revealedFor, playPos } from "@/lib/jukeboxBlindServer";
+import { notify } from "@/lib/jukeboxLive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,7 @@ export async function POST(req, { params }) {
       if (error?.code === "23505") return busy(); // première réponse envoyée deux fois
       if (error) throw error;
     }
+    await notify(s.code, "answer"); // régie et écran : réponses et scores
     return Response.json({
       ok: true, artist: next.artist_ok, title: next.title_ok, newArtist, newTitle, gained,
       points: next.points, attemptsLeft: MAX_ATTEMPTS - next.attempts,

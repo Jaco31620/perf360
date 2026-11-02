@@ -341,3 +341,18 @@ alter table public.jukebox_songs
   add column if not exists isrc text;
 create index if not exists jukebox_songs_isrc_idx
   on public.jukebox_songs (isrc) where isrc is not null and isrc <> '';
+
+-- v27 (02/11/2026) : journal d'événements des soirées (qui a fait quoi et
+-- quand : ajouts, sauts, pause, son pris sur un appareil, blind test,
+-- erreurs du lecteur). Supprimé avec la soirée. Accès serveur seulement.
+create table if not exists public.jukebox_events (
+  id bigserial primary key,
+  session_id uuid not null references public.jukebox_sessions(id) on delete cascade,
+  at timestamptz not null default now(),
+  kind text not null,
+  actor text,
+  data jsonb
+);
+create index if not exists jukebox_events_session_idx
+  on public.jukebox_events (session_id, at desc);
+alter table public.jukebox_events enable row level security;

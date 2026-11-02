@@ -20,6 +20,7 @@ import { MAX_NAME_LEN, normalizeMax, normalizeFeatures, normalizeDefaults, clean
 import { loadConfig, isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { sendAccessMail } from "@/lib/jukeboxRequests";
 import { checkActivation, consumeActivation, refundActivation, ActivationError } from "@/lib/jukeboxActivation";
+import { logEvent } from "@/lib/jukeboxEvents";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,6 +107,9 @@ async function create(req, onActivation) {
         const mailedTo = activation?.email
           ? await sendAccessMail({ to: activation.email, origin: new URL(req.url).origin, code, name, regieCode }).then(() => activation.email, () => null)
           : null;
+        await logEvent(row.id, "created", isSuper ? "Super-admin" : activation?.label || null, {
+          activation: activation?.code || null, validDays: validDays || "sans limite", mailedTo: mailedTo ? "accès envoyés par e-mail" : null,
+        });
         return Response.json({ code, adminToken: token, regieCode, endsAt: autoCloseAt(Date.now(), validDays), mailedTo });
       }
       if (error.code !== "23505") throw error; // 23505 = code déjà pris → on retente

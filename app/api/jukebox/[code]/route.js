@@ -28,6 +28,8 @@ import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trac
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, closedReason } from "@/lib/jukebox";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
+import { logEvent, actorOf } from "@/lib/jukeboxEvents";
+import { notify } from "@/lib/jukeboxLive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -179,6 +181,10 @@ export async function POST(req, { params }) {
       position: publicSession(s).fairQueue ? fairPosition(rows.filter((r) => r.status === "queued"), pid) : Date.now(),
     });
     if (error) throw error;
+    await Promise.all([
+      logEvent(s.id, "add", admin ? actorOf(req, { isSuper: true }) : `Invité · ${author}`, { title: `${v.channel} – ${v.title}`, via: deezerId > 0 ? "Deezer" : "YouTube" }),
+      notify(s.code, "queue"),
+    ]);
     return Response.json({ ok: true });
   } catch (e) {
     if (e instanceof AddLimit) return Response.json({ error: e.message }, { status: 429 });
@@ -199,9 +205,13 @@ export async function DELETE(req, { params }) {
   try {
     const s = await loadSession(code);
     if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
-    const { error } = await getSupabaseAdmin().from("jukebox_tracks").delete()
-      .eq("session_id", s.id).eq("id", String(body?.id || "")).eq("participant_id", pid).eq("status", "queued");
+    const { data: gone, error } = await getSupabaseAdmin().from("jukebox_tracks").delete()
+      .eq("session_id", s.id).eq("id", String(body?.id || "")).eq("participant_id", pid).eq("status", "queued").select("title,channel,author");
     if (error) throw error;
+    if (gone?.length) await Promise.all([
+      logEvent(s.id, "unadd", `Invité · ${gone[0].author}`, { title: `${gone[0].channel} – ${gone[0].title}` }),
+      notify(s.code, "queue"),
+    ]);
     return Response.json({ ok: true });
   } catch (e) {
     console.error("jukebox DELETE:", e);

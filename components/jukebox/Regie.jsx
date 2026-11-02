@@ -14,7 +14,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { usePlayerEngine } from "./usePlayerEngine";
-import { setAdminToken, authHeaders, rememberParty, forgetParty, formatCode } from "./storage";
+import { setAdminToken, authHeaders, rememberParty, forgetParty, formatCode, setScreen } from "./storage";
+import { useLive } from "./useLive";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
@@ -66,11 +67,10 @@ export default function Regie({ code }) {
     } catch (e) { /* réseau : on retentera */ }
   }, [code, fresh]);
 
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 1500);
-    return () => clearInterval(id);
-  }, [refresh]);
+  setScreen("regie"); // journal de la soirée : actions faites depuis la régie
+  useEffect(() => { refresh(); }, [refresh]);
+  // temps réel : relecture à chaque changement ; filet de sécurité 6 s (1,5 s sans temps réel ou pendant un blind test)
+  useLive(code, refresh, { ctl: true, fast: 1500, slow: data?.blind?.on ? 1500 : 6000 });
 
   refreshRef.current = refresh;
   const passError = useJoinPass(code, refresh); // QR « Ajouter un appareil »

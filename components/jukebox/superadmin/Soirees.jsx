@@ -13,6 +13,7 @@ import { FEATURES } from "@/lib/jukebox";
 import { inviteText, guestText } from "@/lib/jukeboxMessages";
 import { fmtDate, SearchInput, ValiditySelect } from "./shared";
 import { ShareBox } from "./SoireeForms";
+import { Journal } from "./Journal";
 
 const LIVE_MS = 3 * 60e3; // lecteur actif il y a moins de 3 min : soirée en cours
 
@@ -42,6 +43,7 @@ export function Soirees({ sessions, activations = [], staleDays = 7, origin, act
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(null); // code de la soirée dépliée
   const [share, setShare] = useState(null); // { code, kind: "orga" | "guests", regieCode? }
+  const [journal, setJournal] = useState(null); // code de la soirée dont le journal est ouvert
   const q = filter.trim().toLowerCase();
   const emailOf = Object.fromEntries((activations || []).map((a) => [a.id, (a.email || "").toLowerCase()]));
   const matches = (s) => !q || s.name.toLowerCase().includes(q) || s.code.includes(q.replace(/\s/g, "")) || (s.organizer || "").toLowerCase().includes(q) || (emailOf[s.activationId] || "").includes(q);
@@ -183,10 +185,12 @@ export function Soirees({ sessions, activations = [], staleDays = 7, origin, act
                   <Link href={`/jukebox/${s.code}/regie`} target="_blank" className="font-bold bg-gray-900 text-white px-3 py-1.5 rounded-full">💻 Régie</Link>
                   <Link href={`/jukebox/${s.code}/ecran`} target="_blank" className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">📺 Écran</Link>
                   <button onClick={() => rename(s)} className="font-bold bg-gray-100 px-3 py-1.5 rounded-full">✏️ Renommer</button>
+                  <button onClick={() => setJournal(journal === s.code ? null : s.code)} className={`font-bold px-3 py-1.5 rounded-full ${journal === s.code ? "bg-gray-900 text-white" : "bg-gray-100"}`}>📜 Journal</button>
                   <button onClick={toggleClose} className={`font-bold px-3 py-1.5 rounded-full ml-auto ${st === "ended" ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}>{st === "ended" ? "🔓 Rouvrir" : "🔒 Fermer"}</button>
                 <button onClick={del} className="font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Supprimer</button>
                 </div>
 
+                {journal === s.code && <Journal code={s.code} />}
                 {share?.code === s.code && share.kind === "orga" && (
                   <ShareBox title={`Invitation pour l'organisateur de « ${s.name} »`} subject={`Jukebox · soirée « ${s.name} »`}
                     message={inviteText({ origin, code: s.code, name: s.name, regieCode: share.regieCode })} onClose={() => setShare(null)} />

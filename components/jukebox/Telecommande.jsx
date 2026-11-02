@@ -13,7 +13,8 @@
  */
 import { ClosingBanner, ClosedMessage, missingFrom } from "./ClosingNotice";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setAdminToken, authHeaders, formatCode } from "./storage";
+import { setAdminToken, authHeaders, formatCode, setScreen } from "./storage";
+import { useLive } from "./useLive";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
 import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
@@ -66,12 +67,14 @@ export default function Telecommande({ code }) {
     } catch (e) { /* réseau : on retentera */ }
   }, [code, fresh]);
 
+  setScreen("telecommande"); // journal de la soirée : actions faites depuis la télécommande
   useEffect(() => {
     refresh();
-    const id = setInterval(() => { if (!document.hidden) refresh(); }, 2000);
     const t = setInterval(() => tick((n) => n + 1), 1000); // barre de progression
-    return () => { clearInterval(id); clearInterval(t); };
+    return () => clearInterval(t);
   }, [refresh]);
+  // temps réel : relecture à chaque changement ; filet de sécurité 6 s (2 s sans temps réel ou pendant un blind test)
+  useLive(code, refresh, { ctl: true, fast: 2000, slow: data?.blind?.on ? 2000 : 6000, hiddenPause: true });
 
   refreshRef.current = refresh;
   const passError = useJoinPass(code, refresh); // QR « Ajouter un téléphone » de la régie

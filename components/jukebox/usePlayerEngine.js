@@ -59,13 +59,14 @@ const NB = (single) => (single ? 1 : 2);
 /* Onglet dupliqué : il hérite du sessionStorage, donc du même identifiant de
  * lecteur (deux sons à la fois). Les onglets se signalent leur identifiant ;
  * le nouveau venu qui retrouve le sien chez un autre en change. */
-function watchDuplicate(code, idRef) {
+function watchDuplicate(code, idRef, onDuplicate) {
   if (typeof BroadcastChannel === "undefined") return () => {};
   const ch = new BroadcastChannel(`jukebox:player:${code}`);
   ch.onmessage = (e) => {
     const m = e.data || {};
     if (m.type === "hello" && m.id === idRef.current) ch.postMessage({ type: "taken", id: m.id, nonce: m.nonce });
     if (m.type === "taken" && m.id === idRef.current && m.nonce === nonce) {
+      onDuplicate?.();
       idRef.current = Math.random().toString(36).slice(2, 12);
       try { sessionStorage.setItem(`jukebox:player:${code}`, idRef.current); } catch (err) { /* ignoré */ }
     }
@@ -78,7 +79,19 @@ function watchDuplicate(code, idRef) {
 export function usePlayerEngine({ code, data, act, enabled, autoResume = false, single = false, kind = "pc" }) {
   const myId = useRef(null);
   if (myId.current === null && typeof window !== "undefined") myId.current = deviceId(code);
-  useEffect(() => watchDuplicate(code, myId), [code]);
+  // incident noté au journal de la soirée (super-admin) : au plus un par type toutes les 30 s
+  const lastIncident = useRef({});
+  const incident = useCallback((what, detail = {}) => {
+    const t = Date.now();
+    if (t - (lastIncident.current[what] || 0) < 30000) return;
+    lastIncident.current[what] = t;
+    fetch(`/api/jukebox/${code}/admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders(code) },
+      body: JSON.stringify({ action: "log", kind: what, detail: { ...detail, lecteur: kind === "tv" ? "télé" : "ordinateur" } }),
+    }).catch(() => {});
+  }, [code, kind]);
+  useEffect(() => watchDuplicate(code, myId, () => incident("duplicate_tab")), [code, incident]);
   const claimNext = useRef(false); // prochain envoi d'état : « je prends le son »
   const mySince = useRef(null); // heure (serveur) de notre prise du son
   const [yielded, setYielded] = useState(false); // un autre appareil a pris le son
@@ -279,7 +292,8 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
         primed.current.ready = true;
       }
     },
-    error: (i) => {
+    error: (i, errCode) => {
+      if (i === active.current) incident("player_error", { code: errCode, track: loaded.current });
       if (i === active.current) { if (advancing.current) pendingSkip.current = true; else advance(true); } // lecture bloquée, vidéo retirée…
       else if (primed.current?.idx === i) primed.current = null;
     },
@@ -296,7 +310,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
         events: {
           onReady: () => { if (++readyCount === NB(single)) setReady(true); },
           onStateChange: (e) => onEvent.current.state(i, e),
-          onError: () => onEvent.current.error(i),
+          onError: (e) => onEvent.current.error(i, e?.data),
         },
       }));
     });
@@ -351,6 +365,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       if (now && stallSince.current && Date.now() - stallSince.current > 12000 && wantPlay.current) {
         stallSince.current = Date.now();
         console.warn("jukebox: chargement bloqué, relance");
+        incident("stuck", { track: loaded.current });
         p.seekTo(p.getCurrentTime(), true);
         p.playVideo();
       }
@@ -358,6 +373,7 @@ export function usePlayerEngine({ code, data, act, enabled, autoResume = false, 
       if (now && loaded.current === now.id && p.getPlayerState?.() === 0 && !advancing.current && !switching.current && Date.now() - lastRetry.current > 5000) {
         lastRetry.current = Date.now();
         console.warn("jukebox: titre terminé sans suite, relance du suivant");
+        incident("retry_next", { track: now.id });
         advance(false, now.id);
       }
       if (!now || fading.current || loaded.current !== now.id || p.getPlayerState() !== 1) return;
