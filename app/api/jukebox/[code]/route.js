@@ -108,6 +108,7 @@ export async function GET(req, { params }) {
 }
 
 const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+class AddLimit extends Error {}
 const sameSong = (r, song) => norm(r.title) === norm(song.title) && norm(r.channel) === norm(song.channel);
 
 export async function POST(req, { params }) {
@@ -140,12 +141,17 @@ export async function POST(req, { params }) {
         return Response.json({ error: `Vous avez déjà ${mine} titre${mine > 1 ? "s" : ""} en attente : patientez qu'il${mine > 1 ? "s" : ""} passe${mine > 1 ? "nt" : ""}.` }, { status: 429 });
     }
 
-    // quota YouTube partagé par toutes les soirées : ajouts des invités limités, surtout PAR INVITÉ
-    // (tous les invités d'une salle partagent souvent la même adresse IP : limite IP large, anti-abus seulement)
-    if (!admin && await tooMany(`addp:${s.id}:${pid}`, 10, 600))
-      return Response.json({ error: "Vous avez proposé beaucoup de titres d'un coup : réessayez dans quelques minutes." }, { status: 429 });
-    if (!admin && (await tooMany(`add:${s.id}`, 150, 600) || await tooMany(`addip:${clientIp(req)}`, 120, 600)))
+    // anti-abus large, sur toutes les tentatives (les invités d'une salle partagent souvent la même adresse IP)
+    if (!admin && await tooMany(`addip:${clientIp(req)}`, 120, 600))
       return Response.json({ error: "Beaucoup d'ajouts en ce moment : réessayez dans quelques minutes." }, { status: 429 });
+    // quota YouTube partagé par toutes les soirées : seuls les ajouts qui lancent une vraie recherche
+    // YouTube (titre absent du catalogue et du cache) comptent, par invité et par soirée
+    const beforeSearch = admin ? undefined : async () => {
+      if (await tooMany(`addp:${s.id}:${pid}`, 10, 600))
+        throw new AddLimit("Vous avez proposé beaucoup de nouveaux titres d'un coup : réessayez dans quelques minutes.");
+      if (await tooMany(`add:${s.id}`, 150, 600))
+        throw new AddLimit("Beaucoup d'ajouts en ce moment : réessayez dans quelques minutes.");
+    };
 
     let v;
     if (deezerId > 0) {
@@ -154,7 +160,7 @@ export async function POST(req, { params }) {
       if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
       // déjà dans la file (même titre, même artiste) : refusé avant toute recherche YouTube
       if (rows.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
-      const yt = await youtubeForSong(song, publicSession(s).searchMode);
+      const yt = await youtubeForSong(song, publicSession(s).searchMode, { beforeSearch });
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
       v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };
     } else {
@@ -175,6 +181,7 @@ export async function POST(req, { params }) {
     if (error) throw error;
     return Response.json({ ok: true });
   } catch (e) {
+    if (e instanceof AddLimit) return Response.json({ error: e.message }, { status: 429 });
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox POST:", e);
     return Response.json({ error: "Ajout impossible." }, { status: 502 });
