@@ -411,7 +411,6 @@ function CatalogMigration({ catalog, call, onDone }) {
       <div className="flex flex-wrap items-center gap-3">
         <span>🧱 <b>Nouveau catalogue</b> (chansons / versions) : {done ? <>{catalog.works} chanson{catalog.works > 1 ? "s" : ""}, {catalog.versions} version{catalog.versions > 1 ? "s" : ""} (ancien catalogue : {catalog.oldVersions} lignes)</> : "pas encore rempli"}.</span>
         <button onClick={() => run(false)} disabled={busy} className="font-bold bg-indigo-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Migration…" : done ? "Relancer la migration" : "Migrer le catalogue"}</button>
-        {done && !busy && <button onClick={() => run(true)} className="underline text-indigo-700">tout refaire depuis l'ancien</button>}
       </div>
       {report && (
         <p>
