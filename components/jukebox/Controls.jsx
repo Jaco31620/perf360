@@ -164,7 +164,11 @@ export function AddTrack({ code, queue, now, onAdded }) {
   const [busy, setBusy] = useState(""); // "search" | id du titre en cours d'ajout
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
-  const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId)]);
+  // file d'attente (le titre en cours peut être remis : il repassera) — vidéo, ou titre + artiste (résultats Deezer)
+  const songKey = (t) => `${String(t.title || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}|${String(t.channel || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim()}`;
+  const queuedKeys = new Set([...queue.map((t) => t.videoId), ...queue.map(songKey)]);
+  const inQueue = { has: (id) => queuedKeys.has(id) || (results || []).some((v) => v.id === id && queuedKeys.has(songKey(v))) };
+  const isNow = (v) => !!now && (now.videoId === v.id || songKey(now) === songKey(v));
 
   const search = async (e) => {
     e.preventDefault();
@@ -224,6 +228,8 @@ export function AddTrack({ code, queue, now, onAdded }) {
                   <p className="text-sm font-semibold truncate">{v.title}</p>
                   <p className="text-xs text-white/50 truncate">
                     {v.channel} · {formatDuration(v.duration)}{v.known ? ` · ⚡ ${v.known === 2 ? "validé" : "en mémoire"}` : ""}
+                    {isNow(v) ? <span className="text-fuchsia-300 font-semibold"> · ▶ en cours</span>
+                      : v.playedAt ? <span className="text-amber-300 font-semibold"> · 🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
                   </p>
                 </div>
                 {inQueue.has(v.id) ? (

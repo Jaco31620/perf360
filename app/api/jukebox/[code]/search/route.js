@@ -7,6 +7,9 @@
 import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { loadSession, publicSession, isAdminReq, ytVideo, deezerSearch, preferKnown, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_QUERY_LEN, parseVideoId } from "@/lib/jukebox";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+
+const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +30,18 @@ export async function GET(req, { params }) {
       return Response.json(video ? { results: [video] } : { results: [], error: REJECT_MESSAGES[reason] });
     }
     const query = q.slice(0, MAX_QUERY_LEN);
-    return Response.json({ results: await preferKnown(await deezerSearch(query), publicSession(s).searchMode, query) });
+    const results = await preferKnown(await deezerSearch(query), publicSession(s).searchMode, query);
+    // titres déjà passés ce soir (même titre + artiste, ou même vidéo) : heure du dernier passage
+    const { data: played } = await getSupabaseAdmin().from("jukebox_tracks").select("title,channel,video_id,played_at")
+      .eq("session_id", s.id).in("status", ["played", "skipped"]).order("played_at", { ascending: false }).limit(500);
+    const last = new Map();
+    for (const t of played || []) {
+      for (const k of [`${norm(t.title)}|${norm(t.channel)}`, t.video_id]) if (!last.has(k)) last.set(k, t.played_at);
+    }
+    return Response.json({ results: results.map((r) => {
+      const at = last.get(`${norm(r.title)}|${norm(r.channel)}`) || last.get(r.id);
+      return at ? { ...r, playedAt: at } : r;
+    }) });
   } catch (e) {
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox search:", e);

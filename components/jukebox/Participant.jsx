@@ -261,6 +261,7 @@ export default function Participant({ code }) {
                       <p className="text-xs text-gray-500 truncate">
                         {v.channel} · {formatDuration(v.duration)}
                         {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span> : null}
+                        {v.playedAt && !isQueued(v) ? <span className="text-amber-700 font-semibold"> · 🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
                       </p>
                     </div>
                     {isQueued(v) ? (

@@ -155,13 +155,15 @@ export async function POST(req, { params }) {
         throw new AddLimit("Beaucoup d'ajouts en ce moment : réessayez dans quelques minutes.");
     };
 
+    // doublons : la file d'attente ; la régie peut remettre le titre en cours (il repassera)
+    const waiting = admin ? rows.filter((r) => r.status !== "playing") : rows;
     let v;
     if (deezerId > 0) {
       // titre Deezer → sa vidéo YouTube (affichage : titre, artiste et pochette Deezer)
       const song = await deezerTrack(deezerId);
       if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
       // déjà dans la file (même titre, même artiste) : refusé avant toute recherche YouTube
-      if (rows.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
+      if (waiting.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
       const yt = await youtubeForSong(song, publicSession(s).searchMode, { beforeSearch });
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
       v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };
@@ -171,7 +173,7 @@ export async function POST(req, { params }) {
       if (!video) return Response.json({ error: REJECT_MESSAGES[reason] }, { status: 422 });
       v = video;
     }
-    if (rows.some((r) => r.video_id === v.id))
+    if (waiting.some((r) => r.video_id === v.id))
       return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
 
     const { error } = await sb.from("jukebox_tracks").insert({

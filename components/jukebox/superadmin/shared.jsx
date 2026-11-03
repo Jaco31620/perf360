@@ -27,6 +27,12 @@ export function ValiditySelect({ value, onChange, className = "" }) {
 }
 
 export const modeLabel = (m) => SEARCH_MODES.find((x) => x.id === m)?.label || m;
+export const MODE_ICON = { normal: "📝", clip: "🎬", karaoke: "🎤" };
+const MODE_TEXT = { normal: "text-sky-700", clip: "text-emerald-700", karaoke: "text-fuchsia-700" };
+/* Version d'une ligne (au-dessus du titre) : bien visible, une couleur par version. */
+export function VersionLabel({ mode, className = "" }) {
+  return <p className={`text-[11px] font-black uppercase tracking-wider ${MODE_TEXT[mode] || "text-gray-500"} ${className}`}>{MODE_ICON[mode] || "•"} Version {modeLabel(mode)}</p>;
+}
 
 /* Champ de recherche avec croix pour l'effacer (Échap efface aussi). */
 export function SearchInput({ value, onChange, placeholder, className = "" }) {

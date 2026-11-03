@@ -4,7 +4,7 @@ import { getSuperToken } from "../storage";
 import { VideoPreview, PreviewThumb } from "../Controls";
 import { SEARCH_MODES, formatDuration } from "@/lib/jukebox";
 import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
-import { FR_NEXT, MODE_TAG, modeLabel, SearchInput } from "./shared";
+import { FR_NEXT, MODE_TAG, modeLabel, SearchInput, VersionLabel } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
@@ -296,6 +296,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                 <li className="flex flex-wrap items-center gap-3 py-2.5">
                   <PreviewThumb videoId={s.videoId} active={preview === s.key} onClick={() => setPreview(preview === s.key ? null : s.key)} />
                   <div className="flex-1 min-w-[160px]">
+                    <VersionLabel mode={s.mode} />
                     {editing === s.key ? (
                       <SongTextForm song={s} onCancel={() => setEditing(null)}
                         onSave={(artist, title) => { setEditing(null); run({ action: "songText", key: s.key, artist, title }); }} />
@@ -304,7 +305,6 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                     )}
                     <VideoTitle song={s} className="truncate" />
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${MODE_TAG[s.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(s.mode)}</span>
                       {s.missing
                         ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-100 text-red-700" title="La vidéo n'existe plus ou n'est plus lisible : choisissez-en une autre">⚠️ Vidéo disparue · à remplacer</span>
                         : s.validated

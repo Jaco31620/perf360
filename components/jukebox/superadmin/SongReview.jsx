@@ -4,7 +4,7 @@ import { getSuperToken } from "../storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "../Controls";
 import TrimPlayer from "../TrimPlayer";
 import { formatDuration } from "@/lib/jukebox";
-import { fmtDate, FR_NEXT, MODE_TAG, modeLabel } from "./shared";
+import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
 
@@ -126,7 +126,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   <p className="mt-1.5 text-xs font-bold text-orange-700 bg-orange-50 rounded-lg px-2 py-1">🧐 À vérifier de près : {song.suspect.join(" · ")}</p>
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <span className={`${tag} ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{modeLabel(song.mode)}</span>
+                  <span className={`${tag} ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{MODE_ICON[song.mode]} Version {modeLabel(song.mode)}</span>
                   {song.missing
                     ? <span className={`${tag} bg-red-100 text-red-700`}>⚠️ Vidéo disparue · à remplacer</span>
                     : song.validated
