@@ -15,10 +15,13 @@ const { findDuplicates } = await import("@/lib/jukeboxLibrary");
 
 /* ---------- preferKnown : textKey ---------- */
 describe("preferKnown : même interprète + titre à la ponctuation près", () => {
+  // rows : versions connues, une par fiche Deezer (clé « dz:<id>:<mode> » de commodité → chanson « w<id> »)
   const memory = (rows) => {
+    const withWork = rows.map((r) => ({ ...r, work_id: `w${r.key.split(":")[1]}`, deezer_id: Number(r.key.split(":")[1]), mode: "normal" }));
     sb = fakeSupabase(({ table, op }) => {
-      if (table !== "jukebox_songs") return { data: null, error: null };
-      if (op("in") && op("in").args[0] === "key") return { data: rows, error: null }; // par fiche Deezer
+      if (table === "jukebox_work_aliases") return { data: withWork.map((r) => ({ deezer_id: r.deezer_id, work_id: r.work_id })), error: null };
+      if (table !== "jukebox_catalog") return { data: null, error: null };
+      if (op("in") && op("in").args[0] === "work_id") return { data: withWork, error: null }; // par fiche Deezer → chanson
       return { data: [], error: null }; // par libellé
     });
   };
@@ -130,7 +133,7 @@ describe("findDuplicates (mémoire simulée)", () => {
   ];
   beforeEach(() => {
     sb = fakeSupabase(({ table }) => {
-      if (table === "jukebox_songs") return { data: rows, error: null };
+      if (table === "jukebox_catalog") return { data: rows, error: null };
       if (table === "jukebox_config") return { data: { value: JSON.stringify(["dz:12:normal|dz:13:normal"]) }, error: null };
       return { data: null, error: null };
     });

@@ -13,7 +13,7 @@ import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./So
  * Année et langue valent pour toutes les versions (modes) du titre. */
 function applySong(list, body) {
   if (!list) return list;
-  const id = String(body.key || "").split(":")[1];
+  const id = String(body.key || "").split(":")[1]; // chanson (« w:<chanson>:<version> ») : texte et année valent pour toutes ses versions
   switch (body.action) {
     case "forgetSong": return list.filter((s) => s.key !== body.key);
     case "mergeSongs": return list.filter((s) => !body.keys.includes(s.key)).map((s) => (s.key === body.keep ? { ...s, group: undefined } : s));

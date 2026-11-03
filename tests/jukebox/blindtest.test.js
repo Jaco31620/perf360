@@ -8,7 +8,7 @@ let sb;
 vi.mock("@/lib/supabaseAdmin", () => ({ getSupabaseAdmin: () => sb }));
 
 const session = { id: "s1", options: { features: { blindtest: true }, blind: { on: true, mode: "phone" } } };
-const song = (id, label, extra = {}) => ({ key: `dz:${id}:normal`, video_id: `vid${String(id).padStart(8, "0")}`, label, duration: 200, ...extra });
+const song = (id, label, extra = {}) => ({ key: `w:${id}:normal`, work_id: `w${id}`, mode: "normal", video_id: `vid${String(id).padStart(8, "0")}`, label, duration: 200, ...extra });
 
 /* Monte la mémoire (titres blind test), l'historique de la soirée, et
  * renvoie les titres insérés par topUpBlind. */
@@ -16,7 +16,7 @@ async function draw({ songs, tracks = [] }) {
   vi.resetModules(); // taggedSongs() garde la mémoire 30 s en cache : module neuf à chaque tirage
   const inserted = [];
   sb = fakeSupabase(({ table, op }) => {
-    if (table === "jukebox_songs") return { data: songs, error: null };
+    if (table === "jukebox_catalog") return { data: songs, error: null };
     if (table === "jukebox_tracks" && op("insert")) { inserted.push(...op("insert").args[0]); return { error: null }; }
     if (table === "jukebox_tracks") return { data: tracks, error: null };
     return { data: null, error: null };
@@ -55,8 +55,12 @@ describe("tirage du blind test (topUpBlind / pickIndex)", () => {
     expect(fr80).toBe(3);
   });
 
-  it("une version karaoké et normale du même titre Deezer ne comptent qu'une fois (version normale)", async () => {
-    const songs = [song(1, "Queen – Bohemian Rhapsody"), { ...song(1, "Queen – Bohemian Rhapsody"), key: "dz:1:karaoke", video_id: "karaokevid1" }];
+  it("plusieurs versions d'une chanson ne comptent qu'une fois : version paroles d'abord (on chante après la découverte)", async () => {
+    const songs = [
+      { ...song(1, "Queen – Bohemian Rhapsody"), key: "w:1:karaoke", mode: "karaoke", video_id: "karaokevid1" },
+      { ...song(1, "Queen – Bohemian Rhapsody"), key: "w:1:clip", mode: "clip", video_id: "clipvid0001" },
+      song(1, "Queen – Bohemian Rhapsody"),
+    ];
     const { inserted } = await draw({ songs });
     expect(inserted.map((r) => r.video_id)).toEqual(["vid00000001"]);
   });

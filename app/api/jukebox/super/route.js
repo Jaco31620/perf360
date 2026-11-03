@@ -53,6 +53,7 @@ import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, edit
 import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
 import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
+import { getVersion } from "@/lib/jukeboxCatalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,7 +131,7 @@ export async function POST(req) {
         return Response.json({ ok: true, key: r.key });
       }
       case "replaceSong": {
-        const { data: before } = await getSupabaseAdmin().from("jukebox_songs").select("video_id").eq("key", String(body.key || "")).maybeSingle();
+        const before = await getVersion(String(body.key || ""));
         const err = await replaceSongVideo(body.key, body.videoId);
         if (err) return Response.json({ error: err }, { status: 422 });
         if (before && before.video_id !== body.videoId)

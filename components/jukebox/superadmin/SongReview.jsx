@@ -248,7 +248,7 @@ export function SongTitleChooser({ song, call, onClose, onDone }) {
       onClose();
     } catch (err) { setError(err.message); setBusy(false); }
   };
-  const current = song.key.split(":")[1];
+  const current = String(song.deezerId || ""); // fiche Deezer principale de la chanson
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !busy && onClose())}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-5 space-y-3 shadow-2xl">
@@ -260,7 +260,7 @@ export function SongTitleChooser({ song, call, onClose, onDone }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none" aria-label="Fermer">×</button>
         </div>
         <p className="text-xs text-gray-500">
-          Choisissez la version originale : la ligne prend son artiste et son titre (réponses du blind test), la vidéo et les
+          Choisissez la version originale : la chanson (toutes ses versions) prend son artiste et son titre (réponses du blind test), les vidéos et les
           étiquettes sont conservées, l'année et la langue sont cherchées à nouveau.
         </p>
         <form onSubmit={search} className="flex gap-2">
