@@ -356,3 +356,91 @@ create table if not exists public.jukebox_events (
 create index if not exists jukebox_events_session_idx
   on public.jukebox_events (session_id, at desc);
 alter table public.jukebox_events enable row level security;
+grant all on public.jukebox_events to service_role;
+grant usage, select on sequence public.jukebox_events_id_seq to service_role;
+
+-- v28 (03/11/2026) : refonte du catalogue des titres — CHANSON / VERSIONS /
+-- FICHES DEEZER (remplace jukebox_songs, gardée en sauvegarde).
+--  - jukebox_works : la chanson (texte, ISRC, année, langue, blind test,
+--    écoutes) ;
+--  - jukebox_work_aliases : chaque fiche Deezer (album, single, best-of…)
+--    pointe vers sa chanson ;
+--  - jukebox_versions : une vidéo par chanson et par version
+--    (normal = paroles, clip, karaoke), avec sa validation.
+--  - vue jukebox_catalog : une ligne par version, aux colonnes de l'ancienne
+--    table (lecture), clé « w:<chanson>:<version> ».
+-- Remplissage : bouton « Migrer le catalogue » du super-admin.
+create table if not exists public.jukebox_works (
+  id uuid primary key default gen_random_uuid(),
+  label text,
+  artist_fix text,
+  title_fix text,
+  isrc text,
+  song_duration int,
+  year int,
+  lang text,
+  country text,
+  fr boolean,
+  enriched_at timestamptz,
+  rank int,
+  plays int not null default 0,
+  blind boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists jukebox_works_isrc_idx on public.jukebox_works (isrc) where isrc is not null and isrc <> '';
+alter table public.jukebox_works enable row level security;
+
+create table if not exists public.jukebox_work_aliases (
+  deezer_id bigint primary key,
+  work_id uuid not null references public.jukebox_works(id) on delete cascade,
+  label text,
+  song_duration int,
+  isrc text,
+  created_at timestamptz not null default now()
+);
+create index if not exists jukebox_work_aliases_work_idx on public.jukebox_work_aliases (work_id);
+alter table public.jukebox_work_aliases enable row level security;
+
+create table if not exists public.jukebox_versions (
+  work_id uuid not null references public.jukebox_works(id) on delete cascade,
+  kind text not null check (kind in ('normal', 'clip', 'karaoke')),
+  video_id text not null,
+  duration int,
+  video_title text,
+  video_channel text,
+  lyrics boolean not null default false,
+  validated boolean not null default false,
+  missing boolean not null default false,
+  confidence int,
+  source text,
+  checked_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  primary key (work_id, kind)
+);
+create index if not exists jukebox_versions_video_idx on public.jukebox_versions (video_id);
+create index if not exists jukebox_versions_checked_idx on public.jukebox_versions (checked_at);
+alter table public.jukebox_versions enable row level security;
+
+-- vue de lecture : droits de l'appelant (RLS des tables : serveur seulement)
+create or replace view public.jukebox_catalog with (security_invoker = true) as
+select
+  'w:' || w.id || ':' || v.kind as key,
+  w.id as work_id,
+  v.kind as mode,
+  (select min(a.deezer_id) from public.jukebox_work_aliases a where a.work_id = w.id) as deezer_id,
+  v.video_id, v.duration, v.video_title, v.video_channel, v.lyrics, v.validated, v.missing,
+  v.confidence, v.source, v.checked_at, v.created_at,
+  w.label, w.artist_fix, w.title_fix, w.isrc, w.song_duration, w.year, w.lang, w.country, w.fr,
+  w.enriched_at, w.rank, w.plays, w.blind,
+  null::text as merged_into
+from public.jukebox_versions v
+join public.jukebox_works w on w.id = v.work_id;
+revoke all on public.jukebox_catalog from anon, authenticated;
+-- droits du serveur (nouvelles tables depuis le 30/10/2026 : GRANT explicite),
+-- y compris le journal v27 créé sans
+grant all on public.jukebox_works to service_role;
+grant all on public.jukebox_work_aliases to service_role;
+grant all on public.jukebox_versions to service_role;
+grant select on public.jukebox_catalog to service_role;
+grant all on public.jukebox_events to service_role;
+grant usage, select on sequence public.jukebox_events_id_seq to service_role;

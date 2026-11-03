@@ -52,6 +52,7 @@ import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
+import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,7 @@ export async function GET(req) {
       await withChanges(songs); // propositions en attente, dernier changement
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }
-    const [config, sessions, searches, songs, prefill, enrich] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null)]);
+    const [config, sessions, searches, songs, prefill, enrich, catalog] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null), catalogState().catch(() => null)]);
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
     const requests = await listRequests().catch(() => null); // null : SQL v23 à appliquer
@@ -95,6 +96,7 @@ export async function GET(req) {
       songs,
       prefill,
       enrich, // titres pas encore enrichis (année, langue)
+      catalog, // nouveau catalogue (SQL v28) : null si tables absentes
       activations,
       requests,
       proposals,
@@ -152,6 +154,8 @@ export async function POST(req) {
       case "songMeta":
         await editSongMeta(body.key, body);
         return Response.json({ ok: true });
+      case "migrateCatalog": // refonte chanson / versions (relançable)
+        return Response.json({ ok: true, report: await migrateCatalog({ fresh: !!body.fresh }), catalog: await catalogState() });
       case "enrich":
         return Response.json({ ok: true, ...(await enrichSongs(45e3)), pending: await enrichPending() });
       case "validateSong":
