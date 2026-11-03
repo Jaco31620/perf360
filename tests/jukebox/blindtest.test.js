@@ -29,6 +29,14 @@ async function draw({ songs, tracks = [] }) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("tirage du blind test (topUpBlind / pickIndex)", () => {
+  it("jamais de version karaoké, même si c'est la seule version de la chanson", async () => {
+    const songs = [
+      { ...song(1, "Queen – Bohemian Rhapsody"), key: "w:1:karaoke", mode: "karaoke", video_id: "karaokevid1" },
+      { ...song(2, "ABBA – Waterloo"), key: "w:2:clip", mode: "clip", video_id: "clipvid0002" },
+    ];
+    const { inserted } = await draw({ songs });
+    expect(inserted.map((r) => r.video_id)).toEqual(["clipvid0002"]);
+  });
   it("pioche 2 titres d'avance, artiste et titre propres", async () => {
     const { n, inserted } = await draw({ songs: [song(1, "Queen – Bohemian Rhapsody (Remastered 2011)"), song(2, "ABBA – Waterloo")] });
     expect(n).toBe(2);
