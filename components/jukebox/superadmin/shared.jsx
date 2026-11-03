@@ -10,6 +10,7 @@ export const fmtDate = (ms) => new Date(ms).toLocaleString("fr-FR", { day: "nume
 export const FR_NEXT = { true: false, false: null, null: true }; // clic sur la langue : 🇫🇷 → 🌍 → ❓
 export const MODE_TAG = {
   normal: "bg-sky-100 text-sky-700",
+  clip: "bg-emerald-100 text-emerald-700",
   karaoke: "bg-fuchsia-100 text-fuchsia-700",
 };
 

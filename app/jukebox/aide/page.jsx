@@ -143,6 +143,10 @@ export default function JukeboxHelp() {
             <Faq q="Comment obtenir le Jukebox pour ma soirée ?">
               <p>Le Jukebox est proposé sur demande : sur <B>perf360.fr/jukebox</B>, <B>Organiser une soirée</B> puis <B>Pas encore de code d'activation ?</B> Vous recevez votre code par e-mail.</p>
             </Faq>
+            <Faq q="Paroles, clip ou karaoké : quelle version diffuser ?">
+              <p>Dans la régie (⚙️ Réglages, <B>Versions proposées</B>) : <B>Paroles</B> (par défaut) passe la vidéo qui affiche les paroles quand elle existe, pour que tout le monde chante ; <B>Clip</B> passe le clip officiel, plus visuel sur une grande télé ; <B>Karaoké</B> passe la version instrumentale avec les paroles.</p>
+              <p>Le blind test utilise toujours la version paroles (sinon le clip) : une fois le titre trouvé, on chante.</p>
+            </Faq>
             <Faq q="Jusqu'à quand ma soirée est-elle ouverte ?">
               <p>La date de fermeture s'affiche quand vous créez la soirée, et dans la régie (🔧 Outils) ou la télécommande (⚙️ Plus). Elle se ferme à <B>8 h le lendemain</B> du dernier jour prévu, et un bandeau vous prévient la veille. Besoin de plus de temps ? Touchez <B>demander une prolongation</B>.</p>
               <p>Après la soirée, les invités retrouvent les titres joués sur <B>« Les titres déjà passés »</B> (YouTube, Deezer, Spotify).</p>

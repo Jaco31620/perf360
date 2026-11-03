@@ -221,6 +221,11 @@ export default function Participant({ code }) {
                 ⏳ Vous avez {pending} titre{pending > 1 ? "s" : ""} en attente. Vous pourrez en proposer un autre dès qu'il{pending > 1 ? "s" : ""} passe{pending > 1 ? "nt" : ""}.
               </p>
             )}
+            {session.searchMode === "clip" && (
+              <p className="text-sm font-semibold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl px-3 py-2 mb-3">
+                🎬 Soirée clips : les titres passent avec leur clip officiel.
+              </p>
+            )}
             {session.searchMode === "karaoke" && (
               <p className="text-sm font-semibold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl px-3 py-2 mb-3">
                 🎤 Soirée karaoké : la recherche propose en priorité les versions karaoké.
