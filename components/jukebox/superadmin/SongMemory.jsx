@@ -4,7 +4,7 @@ import { getSuperToken } from "../storage";
 import { VideoPreview, PreviewThumb } from "../Controls";
 import { SEARCH_MODES, formatDuration } from "@/lib/jukebox";
 import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
-import { FR_NEXT, MODE_TAG, modeLabel, SearchInput, VersionLabel } from "./shared";
+import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
@@ -65,6 +65,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("added");
   const [editing, setEditing] = useState(null); // clé du titre dont on corrige le texte
+  const [openId, setOpenId] = useState(null); // chanson dépliée (vue compacte : une ligne par chanson)
   // tuile « Titres en mémoire » : liste complète, sans filtre
   useEffect(() => {
     if (!focus) return;
@@ -328,7 +329,38 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                         className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Ce ne sont pas des doublons</button>
                     </li>
                   )}
-                  <li className="border border-gray-200 rounded-2xl p-3 space-y-2">
+                  {status !== "dups" && openId !== g.id ? (
+                  /* ligne compacte : la chanson et l'état de ses versions ; clic → carte complète */
+                  <li>
+                    <div role="button" tabIndex={0} onClick={() => { setOpenId(g.id); setPreview(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { setOpenId(g.id); setPreview(null); } }}
+                      className={`w-full flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-2 cursor-pointer hover:border-fuchsia-300 hover:bg-fuchsia-50/30 ${g.rows.some((x) => !x.sibling && !x.validated) ? "border-gray-200" : "border-gray-100"}`}>
+                      <img src={`https://i.ytimg.com/vi/${(rowOf("normal") || head).videoId}/default.jpg`} alt="" className="w-14 h-10 object-cover rounded-lg shrink-0" />
+                      <div className="flex-1 min-w-[160px]">
+                        <p className="font-bold text-sm text-gray-900 leading-snug">{head.artist} – {head.title}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {[head.year, head.fr === true ? "🇫🇷" : head.fr === false ? "🌍" : null, head.blind ? "🕵️ blind test" : null, head.plays > 0 ? `▶ ${head.plays}×` : null].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {["normal", "clip", "karaoke"].filter((k) => k !== "karaoke" || rowOf(k)).map((k) => {
+                          const v = rowOf(k);
+                          const st = !v ? ["—", "border border-dashed border-gray-300 text-gray-400", "pas encore trouvée"]
+                            : v.missing ? ["⚠️", "bg-red-100 text-red-700", "vidéo disparue"]
+                            : v.validated ? ["✓", "bg-green-100 text-green-700", "validée"]
+                            : v.suspect?.length ? ["🧐", "bg-orange-100 text-orange-700", `à vérifier : ${v.suspect.join(", ")}`]
+                            : ["?", "bg-gray-100 text-gray-600", `à vérifier${v.confidence ? ` (${CONFIDENCE[v.confidence]?.label})` : ""}`];
+                          return <span key={k} title={`Version ${modeLabel(k)} : ${st[2]}`} className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${st[1]}`}>{MODE_ICON[k]} {modeLabel(k)} {st[0]}</span>;
+                        })}
+                      </div>
+                      <span className="text-gray-300 text-sm shrink-0">▸</span>
+                    </div>
+                  </li>
+                  ) : (
+                  <li className={`border rounded-2xl p-3 space-y-2 ${openId === g.id ? "border-fuchsia-300 shadow-sm" : "border-gray-200"}`}>
+                    {status !== "dups" && (
+                      <button onClick={() => { setOpenId(null); setPreview(null); }} className="float-right text-xs font-bold text-gray-400 hover:text-gray-700">▾ Replier</button>
+                    )}
                     {/* la chanson : texte, année, langue, blind test, écoutes (toutes ses versions) */}
                     <div className="flex flex-wrap items-start gap-2">
                       <div className="flex-1 min-w-[180px]">
@@ -437,6 +469,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                       );
                     })}
                   </li>
+                  )}
                 </Fragment>);
               })}
             </ul>
