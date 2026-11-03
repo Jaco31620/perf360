@@ -55,6 +55,7 @@ import { notify } from "@/lib/jukeboxLive";
 import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
 import { getVersion } from "@/lib/jukeboxCatalog";
 import { scanClips, scanState } from "@/lib/jukeboxScan";
+import { withSiblings, searchVersion, copyVersion } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,9 +81,10 @@ export async function GET(req) {
       const params = Object.fromEntries(url.searchParams);
       // titres précis (revue : titres sortis du filtre en cours de route)
       if (params.keys) { params.keys = params.keys.split(",").filter(Boolean).slice(0, 200); params.status = "all"; }
-      const songs = params.status === "changes" // changements de vidéo proposés en soirée
+      let songs = params.status === "changes" // changements de vidéo proposés en soirée
         ? await listSongs({ ...params, status: "all", keys: await proposedKeys() })
         : await listSongs(params);
+      if (params.status !== "dups" && !params.keys) songs = await withSiblings(songs); // vue par chanson : ses autres versions
       await withTrims(songs); // rognage de chaque vidéo (start / end)
       await withChanges(songs); // propositions en attente, dernier changement
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
@@ -158,6 +160,14 @@ export async function POST(req) {
       case "songMeta":
         await editSongMeta(body.key, body);
         return Response.json({ ok: true });
+      case "searchVersion": { // version manquante d'une chanson, cherchée tout de suite (1 recherche YouTube)
+        const err = await searchVersion(body.key, body.kind);
+        return err ? Response.json({ error: err }, { status: 422 }) : Response.json({ ok: true });
+      }
+      case "copyVersion": { // même vidéo qu'une autre version (pas de clip officiel)
+        const err = await copyVersion(body.key, body.kind);
+        return err ? Response.json({ error: err }, { status: 422 }) : Response.json({ ok: true });
+      }
       case "scanClips": { // à la main : quelques clips sur le quota du jour (1 à 20)
         const n = Math.max(1, Math.min(20, parseInt(body.max, 10) || 5));
         return Response.json({ ok: true, report: await scanClips(50e3, n), clips: await scanState() });
