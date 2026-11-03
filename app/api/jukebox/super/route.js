@@ -156,7 +156,8 @@ export async function POST(req) {
         await editSongMeta(body.key, body);
         return Response.json({ ok: true });
       case "migrateCatalog": // refonte chanson / versions (relançable)
-        return Response.json({ ok: true, report: await migrateCatalog(), // bascule faite : plus de remise à zéro (fresh) depuis l'ancien catalogue catalog: await catalogState() });
+        // bascule faite : plus de remise à zéro (fresh) depuis l'ancien catalogue
+        return Response.json({ ok: true, report: await migrateCatalog(), catalog: await catalogState() });
       case "enrich":
         return Response.json({ ok: true, ...(await enrichSongs(45e3)), pending: await enrichPending() });
       case "validateSong":
