@@ -41,7 +41,7 @@ function applySong(list, body) {
 const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
 const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
-export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, onChanged }) {
+export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -189,6 +189,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
             (deviné d'après son titre YouTube : vérifiez-le en validant).
           </p>
           {catalog && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}
+          {clips?.missing > 0 && <ClipScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
               <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube).</span>
@@ -421,6 +422,37 @@ function CatalogMigration({ catalog, call, onDone }) {
           {report.dupPairsConverted > 0 && <> {report.dupPairsConverted} paire{report.dupPairsConverted > 1 ? "s" : ""} « pas des doublons » reprise{report.dupPairsConverted > 1 ? "s" : ""}.</>}
         </p>
       )}
+    </div>
+  );
+}
+
+/* Clips manquants : cherchés chaque matin après le pré-remplissage ; à la main,
+ * quelques-uns sur le quota du jour. */
+const SCAN_STOP = { done: "liste terminée", empty: "rien à chercher", time: "temps écoulé", quota: "quota YouTube atteint", error: "erreur" };
+function ClipScan({ clips, call, onDone }) {
+  const [n, setN] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState(null);
+  const run = async () => {
+    if (!confirm(`Chercher le clip de ${n} chanson${n > 1 ? "s" : ""} maintenant ?\n\nJusqu'à ${n} recherche${n > 1 ? "s" : ""} YouTube sur le quota du jour (≈ 100 par jour, partagé avec les soirées).`)) return;
+    setBusy(true);
+    try {
+      const d = await call("POST", { action: "scanClips", max: n });
+      setReport(d.report);
+      onDone?.();
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+  const last = report || clips.last;
+  return (
+    <div className="text-xs bg-emerald-50 text-emerald-900 rounded-xl px-3 py-2 space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>🎬 <b>{clips.missing} chanson{clips.missing > 1 ? "s" : ""} sans version clip</b> : cherchées chaque matin après le pré-remplissage, avec le reste du quota.</span>
+        <select value={n} onChange={(e) => setN(Number(e.target.value))} className="border border-emerald-300 rounded-full px-2 py-0.5 bg-white">
+          {[1, 3, 5, 10, 20].map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <button onClick={run} disabled={busy} className="font-bold bg-emerald-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Recherche…" : "Chercher maintenant"}</button>
+      </div>
+      {last && <p>Dernier passage {new Date(last.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} : {last.found} trouvé{last.found > 1 ? "s" : ""}{last.failed ? `, ${last.failed} sans résultat` : ""} ({SCAN_STOP[last.stop] || last.stop}). Les trouvailles sont « À vérifier » (filtre Version Clip).</p>}
     </div>
   );
 }

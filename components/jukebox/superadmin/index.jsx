@@ -183,7 +183,7 @@ export default function SuperAdmin() {
           creationMode={cfg?.creationMode} action={action} onUseCodes={() => action({ action: "settings", creationMode: "code" })} />
       )}
 
-      {tab === "memory" && <SongMemory call={call} total={data?.songs} proposals={data?.proposals || 0} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} catalog={data?.catalog} onChanged={load} />}
+      {tab === "memory" && <SongMemory call={call} total={data?.songs} proposals={data?.proposals || 0} focus={focus?.on === "memory" ? focus.at : null} enrich={data?.enrich} catalog={data?.catalog} clips={data?.clips} onChanged={load} />}
       {tab === "queue" && <Prefill call={call} state={data?.prefill} onChanged={load} />}
 
       {tab === "reglages" && cfg && (
