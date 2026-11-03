@@ -66,6 +66,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
   const [retitling, setRetitling] = useState(null); // titre rattaché à un autre titre Deezer
   const [preview, setPreview] = useState(null); // clé du titre en aperçu
   const [review, setReview] = useState(null); // revue : clés des titres à passer, position
+  // titres de la revue sortis du filtre en cours de route (vidéo changée : plus « suspect »,
+  // validé…) : relus un par un pour que la revue continue sur eux
+  const [extra, setExtra] = useState([]);
 
   const [counts, setCounts] = useState({}); // nombre de titres par filtre (Proposés, À vérifier…)
   const countsTimer = useRef(null);
@@ -93,6 +96,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
       if (!res.ok) throw new Error(d.error || "Chargement impossible.");
       if (started < lastAct.current) return;
       setSongs(d.songs);
+      setExtra([]); // relus ci-dessous s'ils manquent (état à jour)
       setErr("");
       loadCounts();
     } catch (e) {
@@ -106,6 +110,24 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
     return () => clearTimeout(t);
   }, [open, load]);
 
+  // revue ouverte : titres de la revue absents de la liste (sortis du filtre) relus par leur clé
+  const reviewKeys = review?.keys;
+  useEffect(() => {
+    if (!reviewKeys || !songs) return;
+    const missing = reviewKeys.filter((k) => !songs.some((s) => s.key === k) && !extra.some((s) => s.key === k));
+    if (!missing.length) return;
+    let gone = false;
+    (async () => {
+      try {
+        const qs = new URLSearchParams({ songs: "1", status: "all", keys: missing.slice(0, 200).join(",") });
+        const res = await fetch(`/api/jukebox/super?${qs}`, { cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" } });
+        const d = await res.json();
+        if (!gone && res.ok) setExtra((list) => [...list.filter((x) => !d.songs.some((n) => n.key === x.key)), ...d.songs]);
+      } catch (e) { /* titre affiché comme introuvable */ }
+    })();
+    return () => { gone = true; };
+  }, [reviewKeys, songs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Effet affiché dès le clic, actions envoyées dans l'ordre ; la liste n'est
   // pas relue après chaque action (un titre validé reste visible jusqu'au
   // prochain changement de filtre, sans décaler les lignes sous la souris).
@@ -113,6 +135,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
     if (confirmText && !confirm(confirmText)) return;
     lastAct.current = Date.now();
     setSongs((list) => applySong(list, body));
+    setExtra((list) => applySong(list, body));
     const p = queue.current.then(() => call("POST", body));
     queue.current = p.catch(() => {});
     try {
@@ -246,7 +269,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, onChange
           {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
           {review && (
-            <SongReview review={review} setReview={setReview} songs={songs} run={run} changeRun={changeRun} call={call} editYear={editYear}
+            <SongReview review={review} setReview={setReview} songs={[...(songs || []), ...extra.filter((e) => !songs?.some((s) => s.key === e.key))]} run={run} changeRun={changeRun} call={call} editYear={editYear}
               busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
           )}
           {retitling && <SongTitleChooser song={retitling} call={call} onClose={() => setRetitling(null)}

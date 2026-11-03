@@ -75,6 +75,8 @@ export async function GET(req) {
       return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
       const params = Object.fromEntries(url.searchParams);
+      // titres précis (revue : titres sortis du filtre en cours de route)
+      if (params.keys) { params.keys = params.keys.split(",").filter(Boolean).slice(0, 200); params.status = "all"; }
       const songs = params.status === "changes" // changements de vidéo proposés en soirée
         ? await listSongs({ ...params, status: "all", keys: await proposedKeys() })
         : await listSongs(params);
