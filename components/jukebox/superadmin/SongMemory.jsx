@@ -213,7 +213,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
             sont trouvées automatiquement ; cliquez-les pour les corriger, comme le <b>titre</b> lui-même s'il désigne une reprise ou une compilation. <b>📝 Paroles</b> indique que la vidéo affiche les paroles
             (deviné d'après son titre YouTube : vérifiez-le en validant).
           </p>
-          {catalog && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}
+          {catalog && !catalog.works && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}{/* migration faite : encadré masqué */}
           {clips?.missing > 0 && <ClipScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
@@ -503,9 +503,6 @@ function CatalogMigration({ catalog, call, onDone }) {
     <div className="text-xs bg-indigo-50 text-indigo-900 rounded-xl px-3 py-2 space-y-1">
       <div className="flex flex-wrap items-center gap-3">
         <span>🧱 <b>Nouveau catalogue</b> (chansons / versions) : {done ? <>{catalog.works} chanson{catalog.works > 1 ? "s" : ""}, {catalog.versions} version{catalog.versions > 1 ? "s" : ""} (ancien catalogue : {catalog.oldVersions} lignes)</> : "pas encore rempli"}.</span>
-        {done && catalog.oldValidated != null && (
-          <span>Validés : <b>{catalog.validated}</b> (ancien : {catalog.oldValidated}) · avec paroles 📝 : <b>{catalog.lyrics}</b> (ancien : {catalog.oldLyrics}).</span>
-        )}
         <button onClick={() => run(false)} disabled={busy} className="font-bold bg-indigo-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Migration…" : done ? "Relancer la migration" : "Migrer le catalogue"}</button>
       </div>
       {report && (
