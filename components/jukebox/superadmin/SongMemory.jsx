@@ -239,7 +239,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
           {status === "changes" && <p className="text-xs text-gray-500">« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis <b>adoptez</b> (la vidéo proposée devient celle de toutes les soirées, validée) ou <b>gardez l'actuelle</b>.</p>}
           {(() => {
             const main = (songs || []).filter((s) => !s.sibling); // lignes du filtre (sans les autres versions ajoutées pour la vue par chanson)
-            const todo = main.filter((s) => !s.validated && !s.missing);
+            // à vérifier : trouvailles automatiques les plus sûres d'abord (🎯, 👍, 🤔), sinon l'ordre de la liste
+            const todo = main.filter((s) => !s.validated && !s.missing)
+              .map((s, k) => [s, k]).sort((x, y) => (y[0].confidence || 0) - (x[0].confidence || 0) || x[1] - y[1]).map(([s]) => s);
             const shown = main.filter((s) => !s.missing);
             if (!todo.length) return shown.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">

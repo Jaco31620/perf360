@@ -29,7 +29,8 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
   const { keys, i } = review;
   const [editing, setEditing] = useState(null); // correction du texte : champ à éditer (artist | title)
   const [artistOpen, setArtistOpen] = useState(false); // autres titres de l'interprète, sans quitter la revue
-  useEffect(() => { setEditing(null); setCompare(null); }, [i]);
+  const [peek, setPeek] = useState(null); // autre version de la chanson en aperçu : { videoId, mode }
+  useEffect(() => { setEditing(null); setCompare(null); setPeek(null); }, [i]);
   const song = i < keys.length ? (songs || []).find((s) => s.key === keys[i]) : null;
   // proposition adoptée ou refusée : l'aperçu se referme
   useEffect(() => {
@@ -103,6 +104,11 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   <p className="text-xs font-bold text-orange-700">🔄 Vidéo proposée — <button onClick={() => setCompare(null)} className="underline">revenir à l'actuelle</button></p>
                   <VideoPreview videoId={compare} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
                 </div>
+              ) : peek ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-sky-700">{MODE_ICON[peek.mode]} Version {modeLabel(peek.mode)} de cette chanson — <button onClick={() => setPeek(null)} className="underline">revenir à la vidéo en revue</button></p>
+                  <VideoPreview videoId={peek.videoId} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
+                </div>
               ) : <TrimPlayer key={song.videoId} song={song} busy={busy} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
                 onSave={(t) => run({ action: "trimVideo", ...t })}
                 suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />}
@@ -145,6 +151,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   </span>
                 </div>
                 <ChangeInfo song={song} run={changeRun} compare={compare} onPreview={(v) => setCompare(compare === v ? null : v)} />
+                <OtherVersions song={song} songs={songs} peek={peek} setPeek={setPeek} changeRun={changeRun} />
                 {artistOpen && song.artist && <div className="max-h-48 overflow-y-auto mt-2"><ArtistSongs artist={song.artist} current={song.key} /></div>}
               </div>
 
@@ -324,6 +331,45 @@ function ArtistSongs({ artist, current }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/* Revue : rappel des autres versions de la chanson (statut, aperçu au clic) ;
+ * version clip sans clip officiel : reprendre la vidéo de la version paroles. */
+function OtherVersions({ song, songs, peek, setPeek, changeRun }) {
+  if (!song.workId) return null;
+  const others = (songs || []).filter((s) => s.workId === song.workId && s.key !== song.key);
+  const normal = song.mode === "clip" ? others.find((s) => s.mode === "normal" && !s.missing) : null;
+  const clipMissing = song.mode === "normal" && !others.some((s) => s.mode === "clip");
+  if (!others.length && !clipMissing) return null;
+  const pill = "text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap";
+  return (
+    <div className="mt-2 rounded-xl bg-gray-50 px-2.5 py-2 space-y-1.5">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Autres versions de la chanson</p>
+      {others.map((o) => (
+        <div key={o.key} className="flex items-center gap-2 text-xs">
+          <button onClick={() => setPeek(peek?.videoId === o.videoId ? null : { videoId: o.videoId, mode: o.mode })} title="Voir cette version ici"
+            className={`shrink-0 rounded overflow-hidden ring-2 ${peek?.videoId === o.videoId ? "ring-sky-500" : "ring-transparent"}`}>
+            <img src={`https://i.ytimg.com/vi/${o.videoId}/default.jpg`} alt="" className="w-12 h-9 object-cover" />
+          </button>
+          <span className="font-bold">{MODE_ICON[o.mode]} {modeLabel(o.mode)}</span>
+          {o.missing ? <span className={`${pill} bg-red-100 text-red-700`}>⚠️ disparue</span>
+            : o.validated ? <span className={`${pill} bg-green-100 text-green-700`}>✓ validée</span>
+            : <span className={`${pill} bg-gray-100 text-gray-500`}>à vérifier</span>}
+          {o.videoId === song.videoId && <span className="text-gray-400">même vidéo</span>}
+        </div>
+      ))}
+      {normal && normal.videoId !== song.videoId && (
+        <button onClick={() => changeRun({ action: "copyVersion", key: normal.key, kind: "clip" }, "Pas de clip officiel : utiliser la vidéo de la version Paroles pour la version Clip ?\n\nElle sera validée pour la version Clip.")}
+          className="text-xs font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">= Prendre la vidéo de la version Paroles</button>
+      )}
+      {clipMissing && (
+        <p className="text-xs text-gray-500">🎬 Version Clip pas encore trouvée{" "}
+          <button onClick={() => changeRun({ action: "copyVersion", key: song.key, kind: "clip" }, "Utiliser cette vidéo aussi pour la version Clip (pas de clip officiel) ?\n\nElle sera validée pour la version Clip.")}
+            className="font-bold underline">= même vidéo que celle-ci</button>
+        </p>
       )}
     </div>
   );
