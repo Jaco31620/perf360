@@ -7,6 +7,7 @@ import { formatDuration } from "@/lib/jukebox";
 import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
+import { FrFlag } from "../FrFlag";
 
 export function SongVideoChooser({ song, call, onClose, onDone }) {
   return (
@@ -144,7 +145,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   </button>
                   <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
                     className={`${tag} ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
-                    {song.fr === true ? "🇫🇷 Français" : song.fr === false ? "🌍 International" : song.enriched ? "❓ langue" : "…"}
+                    {song.fr === true ? <><FrFlag /> Français</> : song.fr === false ? "🌍 International" : song.enriched ? "❓ langue" : "…"}
                   </button>
                   <span className="text-xs text-gray-400">
                     {song.plays > 0 && <b className="text-gray-500">▶ joué {song.plays}× · </b>}{formatDuration(song.duration)}

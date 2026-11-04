@@ -8,6 +8,7 @@ import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } fr
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
+import { FrFlag } from "../FrFlag";
 
 /* Mémoire des titres : effet immédiat d'une action sur la liste affichée.
  * Année et langue valent pour toutes les versions (modes) du titre. */
@@ -58,7 +59,7 @@ const CONFIDENCE = {
  * nouveau au prochain ajout). */
 const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
 const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"]];
-const LANG_FILTERS = [["", "Toutes langues"], ["fr", "🇫🇷 Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
+const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
@@ -341,7 +342,8 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                       <div className="flex-1 min-w-[160px]">
                         <p className="font-bold text-sm text-gray-900 leading-snug">{head.artist} – {head.title}</p>
                         <p className="text-[11px] text-gray-400">
-                          {[head.year, head.fr === true ? "🇫🇷" : head.fr === false ? "🌍" : null, head.blind ? "🕵️ blind test" : null, head.plays > 0 ? `▶ ${head.plays}×` : null].filter(Boolean).join(" · ")}
+                          {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? "🕵️ blind test" : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
+                            .filter(Boolean).flatMap((x, k) => (k ? [" · ", x] : [x]))}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -380,7 +382,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                           <button onClick={() => run({ action: "songMeta", key: head.key, fr: FR_NEXT[String(head.fr)] })}
                             title="Langue (cliquer : français → international → inconnue)"
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
-                            {head.fr === true ? "🇫🇷 Français" : head.fr === false ? "🌍 International" : head.enriched ? "❓ langue" : "…"}
+                            {head.fr === true ? <><FrFlag /> Français</> : head.fr === false ? "🌍 International" : head.enriched ? "❓ langue" : "…"}
                           </button>
                           <button onClick={() => run({ action: "blindSong", key: head.key, blind: !head.blind })}
                             title={head.blind ? "Retirer du blind test" : "Utiliser dans le blind test (version paroles, sinon clip)"}

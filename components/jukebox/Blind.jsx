@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { Check, X } from "lucide-react";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
+import { FrFlag } from "./FrFlag";
 
 /* `controls` : boutons lecture / pause et suivant (régie ou télécommande). */
 export function BlindPanel({ settings, blind, now, act, controls }) {
@@ -276,7 +277,7 @@ function BlindFilters({ settings, facets, onChange }) {
         {BLIND_LANGS.map((l) => (
           <button key={l.id} onClick={() => l.id !== f.lang && set({ lang: l.id })}
             className={`px-1 py-1.5 rounded-lg font-bold text-xs ${l.id === f.lang ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
-            {l.label}{badge(count({ lang: l.id }), l.id === f.lang)}
+            {l.id === "fr" && <><FrFlag /> </>}{l.label}{badge(count({ lang: l.id }), l.id === f.lang)}
           </button>
         ))}
       </div>
