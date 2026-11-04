@@ -88,6 +88,20 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
     p.playVideo();
     stopAt.current = until;
   };
+  // barre de l'app : position du pointeur → temps de la vidéo
+  const [hover, setHover] = useState(null);
+  const timeAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(duration, ((e.clientX - r.left) / r.width) * duration));
+  };
+  const seekAt = (e, done) => {
+    const p = player.current;
+    if (!p?.seekTo) return;
+    const t = timeAt(e);
+    p.seekTo(t, done); // pendant le glisser : sans recharger ; au relâcher : position définitive
+    setNow(t);
+    stopAt.current = null;
+  };
   const setStartHere = () => save(pos(), end);
   const setEndHere = () => save(start, pos());
 
@@ -116,9 +130,20 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
       </div>
       {/* frise : partie gardée en couleur, position de lecture */}
       {duration > 0 && (
-        <div className="relative h-2 bg-gray-200 rounded-full overflow-hidden" title="Partie jouée en soirée">
-          <div className="absolute inset-y-0 bg-fuchsia-400" style={{ left: `${(start / duration) * 100}%`, width: `${((keptEnd - start) / duration) * 100}%` }} />
-          <div className="absolute inset-y-0 w-0.5 bg-gray-900" style={{ left: `${Math.min(100, (now / duration) * 100)}%` }} />
+        /* cliquer ou glisser : déplace la lecture (comme la barre de YouTube) */
+        <div className="relative py-1.5 cursor-pointer touch-none select-none group"
+          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); seekAt(e, false); }}
+          onPointerMove={(e) => { setHover(timeAt(e)); if (e.buttons & 1) seekAt(e, false); }}
+          onPointerUp={(e) => seekAt(e, true)}
+          onPointerLeave={() => setHover(null)}>
+          <div className="relative h-2.5 group-hover:h-3.5 transition-all bg-gray-200 rounded-full overflow-hidden" title="Partie jouée en soirée — cliquer pour aller à ce moment">
+            <div className="absolute inset-y-0 bg-fuchsia-400" style={{ left: `${(start / duration) * 100}%`, width: `${((keptEnd - start) / duration) * 100}%` }} />
+            <div className="absolute inset-y-0 w-1 -ml-0.5 bg-gray-900 rounded" style={{ left: `${Math.min(100, (now / duration) * 100)}%` }} />
+          </div>
+          {hover != null && (
+            <span className="absolute -top-5 -translate-x-1/2 text-[10px] font-bold bg-gray-900 text-white rounded px-1 py-0.5 tabular-nums pointer-events-none"
+              style={{ left: `${(hover / duration) * 100}%` }}>{fmt(r1(hover))}</span>
+          )}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1">
