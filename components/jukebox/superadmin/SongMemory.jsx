@@ -35,6 +35,8 @@ function applySong(list, body) {
   }
 }
 
+const ACTIVE = "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-800"; // menu de filtre actif : bien visible
+
 /* Vue par chanson : lignes consécutives d'une même chanson (versions) regroupées. */
 function groupByWork(list) {
   const out = [];
@@ -100,6 +102,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   const [extra, setExtra] = useState([]);
 
   const [counts, setCounts] = useState({}); // nombre de titres par filtre (Proposés, À vérifier…)
+  const [facets, setFacets] = useState(null); // total des titres correspondant aux filtres
   const countsTimer = useRef(null);
   const loadCounts = useCallback(() => {
     clearTimeout(countsTimer.current);
@@ -126,6 +129,10 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
       if (started < lastAct.current) return;
       setSongs(d.songs);
       setExtra([]); // relus ci-dessous s'ils manquent (état à jour)
+      if (status !== "dups") fetch(`/api/jukebox/super?${new URLSearchParams({ facets: "1", q, status, mode, lang, decade })}`, {
+        cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
+      }).then((r) => (r.ok ? r.json() : null)).then((f) => f && setFacets(f)).catch(() => {});
+      else setFacets(null);
       setErr("");
       loadCounts();
     } catch (e) {
@@ -295,14 +302,14 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                 );
               })}
             </div>
-            <select value={mode} onChange={(e) => setMode(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+            <select value={mode} onChange={(e) => setMode(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${mode ? ACTIVE : "border-gray-200"}`}>
               <option value="">Tous les modes</option>
               {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+            <select value={lang} onChange={(e) => setLang(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${lang ? ACTIVE : "border-gray-200"}`}>
               {LANG_FILTERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
             </select>
-            <select value={decade} onChange={(e) => setDecade(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
+            <select value={decade} onChange={(e) => setDecade(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${decade ? ACTIVE : "border-gray-200"}`}>
               <option value="">Toutes décennies</option>
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
               <option value="unknown">❓ Année inconnue</option>
@@ -319,6 +326,11 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               </div>
             )}
             <SearchInput value={q} onChange={setQ} placeholder="Rechercher un artiste, un titre…" className="flex-1 min-w-[180px]" />
+            {facets?.total && status !== "dups" && (
+              <span className="text-sm font-bold text-gray-500 whitespace-nowrap" title="Titres correspondant aux filtres choisis">
+                {facets.total.songs} chanson{facets.total.songs > 1 ? "s" : ""} · {facets.total.versions} version{facets.total.versions > 1 ? "s" : ""}
+              </span>
+            )}
           </div>
           {status === "suspect" && <p className="text-xs text-gray-500">Titres non validés dont la vidéo semble ne pas correspondre : durée très différente du titre, titre absent de la vidéo, version live, reprise… Vérifiez-les puis validez ou changez la vidéo.</p>}
           {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}

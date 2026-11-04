@@ -55,7 +55,7 @@ import { notify } from "@/lib/jukeboxLive";
 import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
 import { getVersion } from "@/lib/jukeboxCatalog";
 import { scanClips, scanState } from "@/lib/jukeboxScan";
-import { withSiblings, searchVersion, copyVersion } from "@/lib/jukeboxServer";
+import { withSiblings, searchVersion, copyVersion, songFacets } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +74,11 @@ export async function GET(req) {
       const sess = await loadSession(url.searchParams.get("events"), { any: true });
       if (!sess) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
       return Response.json({ events: await listEvents(sess.id) }, { headers: { "cache-control": "no-store" } });
+    }
+    if (url.searchParams.get("facets")) { // nombre de titres par option des menus + total des filtres
+      const params = Object.fromEntries(url.searchParams);
+      const keys = params.status === "changes" ? await proposedKeys() : undefined;
+      return Response.json(await songFacets({ ...params, status: params.status === "changes" ? "all" : params.status, keys }), { headers: { "cache-control": "no-store" } });
     }
     if (url.searchParams.get("songCounts"))
       return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length }, { headers: { "cache-control": "no-store" } });
