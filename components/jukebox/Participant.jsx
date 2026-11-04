@@ -5,7 +5,7 @@
  * direct et retrait de ses propres titres. Sur l'appareil de la régie (jeton
  * présent), les ajouts ne sont pas limités.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken } from "./storage";
@@ -287,8 +287,16 @@ export default function Participant({ code }) {
                     <p>Essayez seulement l'artiste ou seulement le titre, vérifiez l'orthographe, ou collez un lien YouTube.</p>
                   </li>
                 )}
-                {results.map((v) => (
-                  <li key={v.id} className="flex items-center gap-3 py-2.5">
+                {results.map((v, k) => (
+                  <Fragment key={v.id}>
+                  {/* titres vérifiés (en tête) : intitulé, puis séparation avec les autres */}
+                  {!admin && k === 0 && v.known === 2 && results.some((x) => x.known !== 2) && (
+                    <li className="pt-1 pb-1.5 text-xs font-semibold text-green-700">✓ Versions vérifiées : la bonne vidéo, prête à passer</li>
+                  )}
+                  {!admin && k > 0 && v.known !== 2 && results[k - 1].known === 2 && (
+                    <li className="pt-3 pb-1.5 text-xs font-semibold text-gray-400 border-t-2 border-gray-200">Autres versions</li>
+                  )}
+                  <li className="flex items-center gap-3 py-2.5">
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
@@ -312,6 +320,7 @@ export default function Participant({ code }) {
                       </button>
                     )}
                   </li>
+                  </Fragment>
                 ))}
               </ul>
             )}
