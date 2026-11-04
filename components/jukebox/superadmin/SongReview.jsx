@@ -45,17 +45,18 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
     draft.current = null;
   };
   const go = (d) => { commitDraft(); setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) })); };
+  const runR = (body, confirmText) => { if (body.action !== "songText") commitDraft(); return run(body, confirmText); }; // autre action : correction en cours enregistrée d'abord
   const act = {
-    validate: () => { if (song && !song.missing) run({ action: "validateSong", key: song.key, validated: true }); go(1); },
-    lyrics: () => song && run({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
-    blind: () => song && run({ action: "blindSong", key: song.key, blind: !song.blind }),
+    validate: () => { if (song && !song.missing) runR({ action: "validateSong", key: song.key, validated: true }); go(1); },
+    lyrics: () => song && runR({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
+    blind: () => song && runR({ action: "blindSong", key: song.key, blind: !song.blind }),
     fix: () => song && onFix(song),
     text: () => song && setEditing("title"),
     artist: () => setArtistOpen((v) => !v),
     retitle: () => song && onRetitle(song),
     forget: () => {
       if (!song || !confirm(`Oublier « ${song.label || song.key} » (${modeLabel(song.mode)}) ?\nLe titre sera recherché à nouveau au prochain ajout.`)) return;
-      run({ action: "forgetSong", key: song.key });
+      runR({ action: "forgetSong", key: song.key });
       go(1);
     },
     next: () => go(1),
