@@ -147,7 +147,8 @@ export default function Regie({ code }) {
 
       <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1fr_380px]">
         <main className="min-w-0">
-          <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
+          {/* taille réglée sur la hauteur de l'écran : vidéo, titre en cours et boutons visibles sans faire défiler */}
+          <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden mx-auto" style={{ maxWidth: "max(420px, calc((100vh - 290px) * 16 / 9))" }}>
             {[0, 1].map((i) => (
               <div key={i} ref={playerEls[i]}
                 className={`absolute inset-0 transition-opacity duration-1000 ${i === activeIdx ? "opacity-100 z-10" : "opacity-0 pointer-events-none"}`} />
