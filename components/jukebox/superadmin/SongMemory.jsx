@@ -58,7 +58,7 @@ const CONFIDENCE = {
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
 const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
-const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"]];
+const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"], ["alphaDesc", "Z → A"]];
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
