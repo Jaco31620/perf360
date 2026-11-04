@@ -69,7 +69,6 @@ const SORT_DIR = {
   year: ["↑ Plus anciens d'abord", "↓ Plus récents d'abord"],
   alpha: ["A → Z", "Z → A"],
 };
-const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
@@ -306,9 +305,15 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               <option value="">Tous les modes</option>
               {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${lang ? ACTIVE : "border-gray-200"}`}>
-              {LANG_FILTERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-            </select>
+            {/* langue : boutons (le drapeau dessiné ne peut pas aller dans un menu déroulant) */}
+            <div className={`flex items-center border-2 rounded-full overflow-hidden text-sm font-semibold ${lang ? "border-fuchsia-500" : "border-gray-200"}`}>
+              {[["", "Toutes langues", "Toutes"], ["fr", "Français", <FrFlag key="f" />], ["intl", "International", "🌍"], ["unknown", "Langue inconnue", "❓"]].map(([id, hint, label], k) => (
+                <button key={id} onClick={() => setLang(id)} title={hint}
+                  className={`px-2.5 py-1 ${k ? "border-l border-gray-200" : ""} ${lang === id ? (id ? "bg-fuchsia-100 text-fuchsia-800" : "bg-gray-100 text-gray-800") : "text-gray-500 hover:bg-gray-50"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <select value={decade} onChange={(e) => setDecade(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${decade ? ACTIVE : "border-gray-200"}`}>
               <option value="">Toutes décennies</option>
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
