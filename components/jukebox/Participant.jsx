@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
-import { participantId, getName, setName, authHeaders, formatCode } from "./storage";
+import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken } from "./storage";
 import { useLive } from "./useLive";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
 import { MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
@@ -36,7 +36,12 @@ export default function Participant({ code }) {
   const pid = useRef(null);
   useWakeLock(!!data?.blind?.on); // blind test : le téléphone reste allumé pour répondre
 
-  const headers = () => ({ "Content-Type": "application/json", ...authHeaders(code) });
+  // appareil de la régie : peut participer comme un invité (accès régie non envoyés)
+  const [guestMode, setGuestModeState] = useState(false);
+  const guestRef = useRef(false);
+  useEffect(() => { guestRef.current = getGuestMode(code); setGuestModeState(guestRef.current); }, [code]);
+  const access = () => (guestRef.current ? {} : authHeaders(code));
+  const headers = () => ({ "Content-Type": "application/json", ...access() });
 
   const lastAct = useRef(0); // réponse partie avant une action : périmée
   const blindRef = useRef(null); // dernier état du blind test (fin de partie, cadence)
@@ -83,7 +88,7 @@ export default function Participant({ code }) {
     setSearching(true);
     setError("");
     try {
-      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store", headers: authHeaders(code) });
+      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store", headers: access() });
       const d = await res.json();
       setResults(d.results || []);
       if (d.error) setError(d.error);
@@ -256,6 +261,23 @@ export default function Participant({ code }) {
             <p className="text-xs text-gray-400 mt-2 px-1">
               {admin ? "Régie : ajouts illimités." : `Bonjour ${name} · ${session.maxPerParticipant ? `${limit - pending} titre${limit - pending > 1 ? "s" : ""} possible${limit - pending > 1 ? "s" : ""}` : "titres illimités"}`}
             </p>
+            {admin && hasRegieAccess(code) && (
+              <div className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600 space-y-1.5">
+                <p>📱 Ce téléphone est connecté à la <b>régie</b> : pas de prénom ni de limite d'ajouts.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => { setGuestMode(code, true); guestRef.current = true; setGuestModeState(true); refresh(); }}
+                    className="font-bold text-white bg-[var(--jb-accent)] px-3 py-1.5 rounded-full">Participer comme invité</button>
+                  {getAdminToken(code) && <button onClick={() => {
+                    if (!confirm("Déconnecter ce téléphone de la régie ?\n\nPour la retrouver, il faudra le code régie. Les autres appareils ne sont pas touchés.")) return;
+                    forgetParty(code); setGuestMode(code, false); guestRef.current = false; setGuestModeState(false); refresh();
+                  }} className="font-bold text-gray-600 bg-white border border-gray-200 px-3 py-1.5 rounded-full">Se déconnecter de la régie</button>}
+                </div>
+              </div>
+            )}
+            {!admin && guestMode && hasRegieAccess(code) && (
+              <button onClick={() => { setGuestMode(code, false); guestRef.current = false; setGuestModeState(false); refresh(); }}
+                className="mt-1 text-xs text-gray-400 underline">↩ Revenir en mode régie sur ce téléphone</button>
+            )}
 
             {results && (
               <ul className="mt-4 divide-y divide-gray-100">

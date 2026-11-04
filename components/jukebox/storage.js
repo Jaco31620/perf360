@@ -50,6 +50,14 @@ export function authHeaders(code) {
   return h;
 }
 
+/* Page invité sur un appareil de la régie : « participer comme invité » (la
+ * page n'envoie plus les accès régie / super-admin ; la régie reste accessible). */
+export const getGuestMode = (code) => get(`jukebox_guest_${code}`) === "1";
+export function setGuestMode(code, on) {
+  try { on ? localStorage.setItem(`jukebox_guest_${code}`, "1") : localStorage.removeItem(`jukebox_guest_${code}`); } catch (e) { /* ignoré */ }
+}
+export const hasRegieAccess = (code) => !!(getAdminToken(code) || getSuperToken());
+
 export function myParties() {
   try { return JSON.parse(get("jukebox_mine") || "[]"); } catch (e) { return []; }
 }
