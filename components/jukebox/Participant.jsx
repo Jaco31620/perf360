@@ -312,23 +312,29 @@ export default function Participant({ code }) {
                   <p className="text-sm font-bold text-gray-800">📚 Catalogue · titres vérifiés</p>
                   <button onClick={() => { setBrowse(null); setResults(null); }} className="text-sm text-gray-500 underline">Fermer</button>
                 </div>
-                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-                  {["", ...DECADES.map(String)].map((d) => (
-                    <button key={d || "all"} onClick={() => loadCatalog({ ...browse, decade: d })}
-                      className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full ${browse.decade === d ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
-                      {d ? decadeLabel(Number(d)) : "Toutes années"}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[["", "Toutes langues"], ["fr", <><FrFlag /> Français</>], ["intl", "🌍 International"]].map(([l, label]) => (
-                    <button key={l || "all"} onClick={() => loadCatalog({ ...browse, lang: l })}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-full ${browse.lang === l ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>{label}</button>
-                  ))}
-                  <button onClick={() => loadCatalog({ ...browse, sort: browse.sort === "alpha" ? "plays" : "alpha" })}
-                    className="ml-auto text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600">
-                    {browse.sort === "alpha" ? "A → Z" : "🔥 Les plus demandés"}
-                  </button>
+                {/* filtres : toutes les options visibles, l'option active en couleur */}
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex gap-2">
+                    <span className="w-14 shrink-0 pt-1.5 font-semibold text-gray-400">Années</span>
+                    <div className="flex flex-wrap gap-1">
+                      {["", ...DECADES.map(String)].map((d) => (
+                        <button key={d || "all"} onClick={() => loadCatalog({ ...browse, decade: d })}
+                          className={`font-bold px-2.5 py-1 rounded-full ${browse.decade === d ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
+                          {d ? decadeLabel(Number(d)) : "Toutes"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-14 shrink-0 font-semibold text-gray-400">Langue</span>
+                    <Segmented value={browse.lang} onChange={(l) => loadCatalog({ ...browse, lang: l })}
+                      options={[["", "Toutes"], ["fr", <><FrFlag /> Français</>], ["intl", "🌍 Intern."]]} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-14 shrink-0 font-semibold text-gray-400">Ordre</span>
+                    <Segmented value={browse.sort} onChange={(o) => loadCatalog({ ...browse, sort: o })}
+                      options={[["plays", "🔥 Populaires"], ["alpha", "A → Z"]]} />
+                  </div>
                 </div>
                 <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
                   <input name="cq" defaultValue={browse.q} placeholder="Filtrer : artiste, titre…" autoComplete="off" enterKeyHint="search"
@@ -557,6 +563,20 @@ function Shell({ theme, children }) {
   return (
     <div className="min-h-screen px-4 py-8" style={{ ...themeVars(theme), background: "var(--jb-guest-bg)" }}>
       <div className="max-w-md mx-auto">{children}</div>
+    </div>
+  );
+}
+
+/* Choix exclusif en boutons côte à côte (filtres du catalogue invités). */
+function Segmented({ value, onChange, options }) {
+  return (
+    <div className="inline-flex rounded-full bg-gray-100 p-0.5">
+      {options.map(([v, label]) => (
+        <button key={v || "all"} onClick={() => v !== value && onChange(v)}
+          className={`font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${v === value ? "bg-[var(--jb-accent)] text-white shadow-sm" : "text-gray-600"}`}>
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
