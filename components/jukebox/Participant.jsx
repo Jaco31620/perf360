@@ -292,12 +292,15 @@ export default function Participant({ code }) {
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {v.channel} · {formatDuration(v.duration)}
-                        {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
-                          : v.known === 2 ? <span className="text-green-700 font-semibold" title="Version vérifiée : bonne vidéo, passe tout de suite"> · ✓ vérifié</span> : null}
-                        {v.playedAt && !isQueued(v) ? <span className="text-amber-700 font-semibold"> · 🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
-                      </p>
+                      <p className="text-xs text-gray-500 truncate">{v.channel} · {formatDuration(v.duration)}</p>
+                      {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
+                      {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
+                        <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
+                          {admin && v.known ? <span className="text-gray-500" title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)">⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
+                            : v.known === 2 ? <span className="text-green-700" title="Version vérifiée : bonne vidéo, passe tout de suite">✓ vérifié</span> : null}
+                          {v.playedAt && !isQueued(v) ? <span className="text-amber-700">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
+                        </p>
+                      )}
                     </div>
                     {isQueued(v) ? (
                       <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
