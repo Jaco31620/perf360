@@ -104,7 +104,7 @@ export function SoireeFields({ value, features, onChange }) {
           {AUTHOR_REVEAL_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.label}</option>)}
         </select>
       </label>
-      {[["dedications", "Dédicaces"], ["fairQueue", "File équitable"], ["screenQueue", "File à suivre sur l'écran"], ["guestQueue", "Invités : voir toute la file"]].map(([k, label]) => (
+      {[["dedications", "Dédicaces"], ["fairQueue", "File équitable"], ["screenQueue", "File à suivre sur l'écran"], ["guestQueue", "Invités : voir toute la file"], ["catalog", "Invités : parcourir le catalogue"]].map(([k, label]) => (
         <label key={k} className={check}><span>{label}</span>
           <input type="checkbox" checked={!!v[k]} onChange={(e) => onChange({ [k]: e.target.checked })} className="w-5 h-5 accent-fuchsia-600" />
         </label>

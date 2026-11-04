@@ -11,7 +11,8 @@ import { Play } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken } from "./storage";
 import { useLive } from "./useLive";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
-import { MAX_ANSWER_LEN, MAX_ATTEMPTS } from "@/lib/jukeboxBlind";
+import { MAX_ANSWER_LEN, MAX_ATTEMPTS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
+import { FrFlag } from "./FrFlag";
 import { Leaderboard } from "./Blind";
 import { useWakeLock } from "./useWakeLock";
 import { backdropClose } from "@/lib/backdrop";
@@ -24,6 +25,24 @@ export default function Participant({ code }) {
   const [nameDraft, setNameDraft] = useState("");
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
+  // catalogue des titres vérifiés (option de la soirée) : filtres en cours, page suivante disponible
+  const [browse, setBrowse] = useState(null); // null : recherche normale ; { decade, lang, sort, q }
+  const [browseMore, setBrowseMore] = useState(false);
+  const loadCatalog = async (f, append = false) => {
+    setBrowse(f);
+    setSearching(true);
+    setError("");
+    try {
+      const qs = new URLSearchParams({ decade: f.decade, lang: f.lang, sort: f.sort, q: f.q, offset: append ? String(results?.length || 0) : "0" });
+      const res = await fetch(`/api/jukebox/${code}/catalog?${qs}`, { cache: "no-store" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
+      setResults((cur) => (append ? [...(cur || []), ...d.results] : d.results));
+      setBrowseMore(!!d.more);
+    } catch (err) {
+      setError(err.message);
+    } finally { setSearching(false); }
+  };
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState("");
   const [error, setError] = useState("");
@@ -84,6 +103,7 @@ export default function Participant({ code }) {
 
   const search = async (e) => {
     e.preventDefault();
+    setBrowse(null); // recherche libre : on quitte le catalogue
     if (q.trim().length < 2 || searching) return;
     setSearching(true);
     setError("");
@@ -112,6 +132,7 @@ export default function Participant({ code }) {
       setFlash(v.title);
       setTimeout(() => setFlash(""), 2500);
       setResults(null);
+      setBrowse(null);
       setDedication("");
       setPicked(null);
       setQ("");
@@ -279,13 +300,54 @@ export default function Participant({ code }) {
                 className="mt-1 text-xs text-gray-400 underline">↩ Revenir en mode régie sur ce téléphone</button>
             )}
 
+            {session.catalog && !browse && (
+              <button onClick={() => { setResults(null); loadCatalog({ decade: "", lang: "", sort: "plays", q: "" }); }}
+                className="mt-3 w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-2.5">
+                📚 Pas d'idée ? Parcourir le catalogue des titres vérifiés
+              </button>
+            )}
+            {browse && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-gray-800">📚 Catalogue · titres vérifiés</p>
+                  <button onClick={() => { setBrowse(null); setResults(null); }} className="text-sm text-gray-500 underline">Fermer</button>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                  {["", ...DECADES.map(String)].map((d) => (
+                    <button key={d || "all"} onClick={() => loadCatalog({ ...browse, decade: d })}
+                      className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-full ${browse.decade === d ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
+                      {d ? decadeLabel(Number(d)) : "Toutes années"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[["", "Toutes langues"], ["fr", <><FrFlag /> Français</>], ["intl", "🌍 International"]].map(([l, label]) => (
+                    <button key={l || "all"} onClick={() => loadCatalog({ ...browse, lang: l })}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-full ${browse.lang === l ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>{label}</button>
+                  ))}
+                  <button onClick={() => loadCatalog({ ...browse, sort: browse.sort === "alpha" ? "plays" : "alpha" })}
+                    className="ml-auto text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600">
+                    {browse.sort === "alpha" ? "A → Z" : "🔥 Les plus demandés"}
+                  </button>
+                </div>
+                <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
+                  <input name="cq" defaultValue={browse.q} placeholder="Filtrer : artiste, titre…" autoComplete="off" enterKeyHint="search"
+                    className="flex-1 min-w-0 text-sm border-2 border-gray-200 rounded-xl px-3 py-1.5 focus:border-[var(--jb-accent)] outline-none" />
+                  <button className="text-sm font-bold bg-gray-100 px-3 rounded-xl">OK</button>
+                </form>
+              </div>
+            )}
             {results && (
               <ul className="mt-4 divide-y divide-gray-100">
                 {results.length === 0 && !error && (
+                  browse ? (
+                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue."}</li>
+                  ) : (
                   <li className="py-4 text-center text-gray-500 text-sm space-y-1">
                     <p className="font-semibold text-gray-700">Aucun résultat.</p>
                     <p>Essayez seulement l'artiste ou seulement le titre, vérifiez l'orthographe, ou collez un lien YouTube.</p>
                   </li>
+                  )
                 )}
                 {results.map((v, k) => (
                   <Fragment key={v.id}>
@@ -300,7 +362,7 @@ export default function Participant({ code }) {
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
-                      <p className="text-xs text-gray-500 truncate">{v.channel} · {formatDuration(v.duration)}</p>
+                      <p className="text-xs text-gray-500 truncate">{v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}</p>
                       {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
                       {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
                         <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
@@ -323,6 +385,10 @@ export default function Participant({ code }) {
                   </Fragment>
                 ))}
               </ul>
+            )}
+            {browse && browseMore && results?.length > 0 && (
+              <button onClick={() => loadCatalog(browse, true)} disabled={searching}
+                className="mt-2 w-full text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl py-2.5 disabled:opacity-50">{searching ? "…" : "Voir plus"}</button>
             )}
           </>
         )}

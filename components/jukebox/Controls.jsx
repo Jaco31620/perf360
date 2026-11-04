@@ -34,6 +34,8 @@ export function Settings({ session, act }) {
           ))}
         </div>
       </div>
+      <Toggle label="📚 Catalogue pour les invités" on={session.catalog} onClick={() => act("options", { catalog: !session.catalog })}
+        hint={session.catalog ? "Les invités peuvent parcourir les titres vérifiés (par décennie, langue…)." : "Les invités cherchent eux-mêmes leurs titres."} />
       <Toggle label="💌 Dédicaces" on={session.dedications} onClick={() => act("options", { dedications: !session.dedications })}
         hint={session.dedications ? "Les invités peuvent ajouter un petit mot à leur titre." : null} />
       <label className="flex items-center justify-between gap-3">
