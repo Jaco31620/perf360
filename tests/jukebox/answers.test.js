@@ -36,3 +36,18 @@ describe("réponses entre parenthèses", () => {
     expect(checkAnswer("omd", "Orchestral Manoeuvres in the Dark", "Enola Gay").artist).toBe(false);
   });
 });
+
+import { sameArtist } from "@/lib/jukeboxBlind";
+describe("sameArtist (autres titres de l'interprète, revue)", () => {
+  it("mêmes interprètes", () => {
+    expect(sameArtist("Queen", "queen")).toBe(true);
+    expect(sameArtist("Queen", "Queen & David Bowie")).toBe(true);
+    expect(sameArtist("Johnny Halliday", "Johnny Hallyday")).toBe(true);
+    expect(sameArtist("The Beatles", "Beatles")).toBe(true);
+  });
+  it("pas un mot pris au milieu d'un autre, ni un titre", () => {
+    expect(sameArtist("Sia", "Enrique Iglesias")).toBe(false);
+    expect(sameArtist("Queen", "ABBA")).toBe(false);
+    expect(sameArtist("Muse", "Museum")).toBe(false);
+  });
+});

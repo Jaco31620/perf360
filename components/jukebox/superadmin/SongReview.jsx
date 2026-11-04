@@ -8,6 +8,7 @@ import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
 import { VideoTitle, SongName, SongTextForm } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
 import { FrFlag } from "../FrFlag";
+import { sameArtist } from "@/lib/jukeboxBlind";
 
 export function SongVideoChooser({ song, call, onClose, onDone }) {
   return (
@@ -153,7 +154,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                 </div>
                 <ChangeInfo song={song} run={changeRun} compare={compare} onPreview={(v) => setCompare(compare === v ? null : v)} />
                 <OtherVersions song={song} songs={songs} peek={peek} setPeek={setPeek} changeRun={changeRun} />
-                {artistOpen && song.artist && <div className="max-h-48 overflow-y-auto mt-2"><ArtistSongs artist={song.artist} current={song.key} /></div>}
+                {artistOpen && song.artist && <div className="max-h-48 overflow-y-auto mt-2"><ArtistSongs artist={song.artist} current={song.key} workId={song.workId} /></div>}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -306,7 +307,7 @@ export function SongTitleChooser({ song, call, onClose, onDone }) {
 
 /* Revue : autres titres de l'interprète en mémoire (tous modes), pour
  * comparer l'orthographe, repérer un doublon ou une version différente. */
-function ArtistSongs({ artist, current }) {
+function ArtistSongs({ artist, current, workId }) {
   const [list, setList] = useState(null);
   useEffect(() => {
     let off = false;
@@ -316,7 +317,8 @@ function ArtistSongs({ artist, current }) {
       .then((r) => r.json()).then((d) => !off && setList(d.songs || [])).catch(() => !off && setList([]));
     return () => { off = true; };
   }, [artist]);
-  const others = (list || []).filter((s) => s.key !== current);
+  // autres chansons du même interprète (pas les autres versions de celle-ci)
+  const others = (list || []).filter((s) => s.key !== current && (!workId || s.workId !== workId) && sameArtist(s.artist, artist));
   const norm = (x) => String(x || "").toLowerCase();
   return (
     <div className="mt-2 rounded-xl bg-fuchsia-50/60 border border-fuchsia-100 px-3 py-2 text-xs">
