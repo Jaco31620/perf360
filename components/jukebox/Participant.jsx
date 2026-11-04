@@ -26,14 +26,14 @@ export default function Participant({ code }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
   // catalogue des titres vérifiés (option de la soirée) : filtres en cours, page suivante disponible
-  const [browse, setBrowse] = useState(null); // null : recherche normale ; { decade, lang, sort, q }
+  const [browse, setBrowse] = useState(null); // null : recherche normale ; { decades: [], lang, sort, q }
   const [browseMore, setBrowseMore] = useState(false);
   const loadCatalog = async (f, append = false) => {
     setBrowse(f);
     setSearching(true);
     setError("");
     try {
-      const qs = new URLSearchParams({ decade: f.decade, lang: f.lang, sort: f.sort, q: f.q, offset: append ? String(results?.length || 0) : "0" });
+      const qs = new URLSearchParams({ decade: f.decades.join(","), lang: f.lang, sort: f.sort, q: f.q, offset: append ? String(results?.length || 0) : "0" });
       const res = await fetch(`/api/jukebox/${code}/catalog?${qs}`, { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
@@ -301,7 +301,7 @@ export default function Participant({ code }) {
             )}
 
             {session.catalog && !browse && (
-              <button onClick={() => { setResults(null); loadCatalog({ decade: "", lang: "", sort: "plays", q: "" }); }}
+              <button onClick={() => { setResults(null); loadCatalog({ decades: [], lang: "", sort: "plays", q: "" }); }}
                 className="mt-3 w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-2.5">
                 📚 Pas d'idée ? Parcourir le catalogue des titres vérifiés
               </button>
@@ -317,12 +317,17 @@ export default function Participant({ code }) {
                   <div className="flex gap-2">
                     <span className="w-14 shrink-0 pt-1.5 font-semibold text-gray-400">Années</span>
                     <div className="flex flex-wrap gap-1">
-                      {["", ...DECADES.map(String)].map((d) => (
-                        <button key={d || "all"} onClick={() => loadCatalog({ ...browse, decade: d })}
-                          className={`font-bold px-2.5 py-1 rounded-full ${browse.decade === d ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
-                          {d ? decadeLabel(Number(d)) : "Toutes"}
-                        </button>
-                      ))}
+                      {/* plusieurs décennies possibles ; « Toutes » remet à zéro */}
+                      {["", ...DECADES.map(String)].map((d) => {
+                        const on = d ? browse.decades.includes(d) : !browse.decades.length;
+                        const next = !d ? [] : on ? browse.decades.filter((x) => x !== d) : [...browse.decades, d];
+                        return (
+                          <button key={d || "all"} onClick={() => loadCatalog({ ...browse, decades: next })} aria-pressed={on}
+                            className={`font-bold px-2.5 py-1 rounded-full ${on ? "bg-[var(--jb-accent)] text-white" : "bg-gray-100 text-gray-600"}`}>
+                            {d ? `${on ? "✓ " : ""}${decadeLabel(Number(d))}` : "Toutes"}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

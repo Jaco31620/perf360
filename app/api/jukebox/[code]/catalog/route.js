@@ -1,7 +1,7 @@
 /*
  * Catalogue pour les invités : titres VÉRIFIÉS (version validée de la soirée :
  * paroles, clip ou karaoké), à parcourir quand on n'a pas d'idée.
- * ?decade=1980|unknown &lang=fr|intl &sort=plays|alpha &q=<texte> &offset=<n>
+ * ?decade=1980,1990 (une ou plusieurs décennies) &lang=fr|intl &sort=plays|alpha &q=<texte> &offset=<n>
  * → { results: [...], more } (30 par page ; format des résultats de recherche :
  * l'ajout passe par la fiche Deezer, sans recherche YouTube). Option de la
  * soirée « catalogue » (oui par défaut).
@@ -31,8 +31,9 @@ export async function GET(req, { params }) {
 
     let q = catalog("key,work_id,deezer_id,video_id,label,artist_fix,title_fix,duration,year,fr,plays")
       .eq("mode", pub.searchMode).eq("validated", true).eq("missing", false).not("deezer_id", "is", null);
-    const dec = parseInt(p("decade"), 10);
-    if (dec >= 1900 && dec <= 2100) q = q.gte("year", dec).lte("year", dec + 9);
+    // une ou plusieurs décennies (« 1980,1990 ») : l'une OU l'autre
+    const decs = [...new Set(p("decade").split(",").map((d) => parseInt(d, 10)).filter((d) => d >= 1900 && d <= 2100))].slice(0, 10);
+    if (decs.length) q = q.or(decs.map((d) => `and(year.gte.${d},year.lte.${d + 9})`).join(","));
     if (p("lang") === "fr") q = q.eq("fr", true);
     if (p("lang") === "intl") q = q.eq("fr", false);
     const term = p("q").trim().slice(0, 80).replace(/[%_,()*.:"\\]/g, " ").replace(/\s+/g, " ");
