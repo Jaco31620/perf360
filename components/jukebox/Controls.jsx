@@ -226,11 +226,14 @@ export function AddTrack({ code, queue, now, onAdded }) {
                 {v.thumb && <img src={v.thumb} alt="" className="w-10 h-10 object-cover rounded shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{v.title}</p>
-                  <p className="text-xs text-white/50 truncate">
-                    {v.channel} · {formatDuration(v.duration)}{v.known ? ` · ⚡ ${v.known === 2 ? "validé" : "en mémoire"}` : ""}
-                    {isNow(v) ? <span className="text-fuchsia-300 font-semibold"> · ▶ en cours</span>
-                      : v.playedAt ? <span className="text-amber-300 font-semibold"> · 🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
-                  </p>
+                  <p className="text-xs text-white/50 truncate">{v.channel} · {formatDuration(v.duration)}</p>
+                  {(v.known || isNow(v) || v.playedAt) && ( /* repères sur leur propre ligne : jamais coupés */
+                    <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
+                      {v.known ? <span className={v.known === 2 ? "text-green-300" : "text-white/50"}>⚡ {v.known === 2 ? "validé" : "en mémoire"}</span> : null}
+                      {isNow(v) ? <span className="text-fuchsia-300">▶ en cours</span>
+                        : v.playedAt ? <span className="text-amber-300">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
+                    </p>
+                  )}
                 </div>
                 {inQueue.has(v.id) ? (
                   <span className="text-xs text-white/40 shrink-0">Dans la file</span>
