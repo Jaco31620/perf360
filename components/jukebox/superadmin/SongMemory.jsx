@@ -269,7 +269,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                   ▶ Revue des titres à vérifier ({todo.length})
                 </button>
                 <span className="text-xs text-fuchsia-900/70">
-                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. Titres non validés de la liste affichée, dans son ordre (tri « Plus joués » : les plus utiles d'abord).
+                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. Titres non validés de la liste affichée, les trouvailles automatiques les plus sûres d'abord, puis dans l'ordre de la liste (tri « Écoutes » : les plus utiles d'abord).
                 </span>
               </div>
             );
