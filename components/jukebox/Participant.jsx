@@ -20,6 +20,7 @@ export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
   const [closed, setClosed] = useState(false); // soirée fermée (durée d'utilisation passée)
   const [name, setNameState] = useState("");
+  const [prevName, setPrevName] = useState(""); // prénom en cours de changement (bouton Annuler)
   const [nameDraft, setNameDraft] = useState("");
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
@@ -73,6 +74,7 @@ export default function Participant({ code }) {
     if (!n) return;
     setName(n);
     setNameState(n);
+    setPrevName("");
   };
 
   const search = async (e) => {
@@ -185,7 +187,15 @@ export default function Participant({ code }) {
     <Shell theme={theme}>
       <div className="bg-white rounded-3xl p-6 shadow-xl">
         {theme?.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="" className="max-h-24 max-w-[70%] object-contain mx-auto mb-4" />}
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Jukebox · {formatCode(code)}</p>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Jukebox · {formatCode(code)}</p>
+          {name && !admin && (
+            <button onClick={() => { setPrevName(name); setNameDraft(name); setNameState(""); }} title="Changer de prénom"
+              className="flex items-center gap-1 text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-full pl-2.5 pr-2 py-1 max-w-[55%]">
+              <span aria-hidden>👤</span><span className="truncate">{name}</span><span aria-hidden className="opacity-70">✎</span>
+            </button>
+          )}
+        </div>
         <h1 className={`text-2xl font-extrabold text-gray-900 leading-tight ${theme?.message ? "mb-1" : "mb-5"}`}>{theme?.title || session.name}</h1>
         {theme?.message && <p className="text-gray-600 whitespace-pre-line mb-5">{theme.message}</p>}
 
@@ -207,8 +217,11 @@ export default function Participant({ code }) {
               className="w-full text-lg border-2 border-gray-200 rounded-2xl px-4 py-3 focus:border-[var(--jb-accent)] outline-none" />
             <button disabled={!nameDraft.trim()}
               className="w-full bg-[var(--jb-accent)] hover:brightness-110 disabled:opacity-40 text-white font-bold py-3 rounded-full">
-              C'est parti
+              {prevName ? "Enregistrer" : "C'est parti"}
             </button>
+            {prevName && (
+              <button type="button" onClick={() => { setNameState(prevName); setPrevName(""); }} className="w-full text-sm text-gray-500 underline">Annuler</button>
+            )}
           </form>
         ) : data.blind?.on && !admin ? (
           <BlindGuest blind={data.blind} now={now} name={name} answer={answer} setAnswer={setAnswer}
@@ -242,7 +255,6 @@ export default function Participant({ code }) {
             </form>
             <p className="text-xs text-gray-400 mt-2 px-1">
               {admin ? "Régie : ajouts illimités." : `Bonjour ${name} · ${session.maxPerParticipant ? `${limit - pending} titre${limit - pending > 1 ? "s" : ""} possible${limit - pending > 1 ? "s" : ""}` : "titres illimités"}`}
-              {!admin && <button onClick={() => { setNameState(""); setNameDraft(name); }} className="ml-2 underline">changer de prénom</button>}
             </p>
 
             {results && (
