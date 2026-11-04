@@ -47,7 +47,7 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRe
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button className="font-bold text-white bg-fuchsia-600 px-3 py-1 rounded-full">Enregistrer</button>
-        {changed && draftRef && <span className="font-bold text-fuchsia-700">● modifié — enregistré aussi en validant ou en passant au suivant</span>}
+        {changed && draftRef && <span className="font-bold text-fuchsia-700">● modifié — enregistré aussi dès que vous faites autre chose</span>}
         <button type="button" onClick={onCancel} className="font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Annuler</button>
         {song.fixed && <button type="button" onClick={() => onSave("", "")} className="text-gray-500 underline">Revenir au texte automatique</button>}
         <span className="text-gray-400">Libellé Deezer : {song.label}</span>

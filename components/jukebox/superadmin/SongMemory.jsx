@@ -160,7 +160,16 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   // Effet affiché dès le clic, actions envoyées dans l'ordre ; la liste n'est
   // pas relue après chaque action (un titre validé reste visible jusqu'au
   // prochain changement de filtre, sans décaler les lignes sous la souris).
+  // correction du texte en cours dans une carte (non enregistrée) : enregistrée d'office
+  // dès qu'on fait autre chose (valider, changer de vidéo, replier, ouvrir une autre carte, revue…)
+  const draft = useRef(null);
+  const commitDraft = () => {
+    const d = draft.current;
+    draft.current = null;
+    if (d && editing) { setEditing(null); run({ action: "songText", key: editing, artist: d.artist, title: d.title }); }
+  };
   const run = async (body, confirmText) => {
+    if (body.action !== "songText") commitDraft();
     if (confirmText && !confirm(confirmText)) return;
     lastAct.current = Date.now();
     setSongs((list) => applySong(list, body));
@@ -335,6 +344,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                 const rowOf = (kind) => g.rows.find((x) => x.mode === kind);
                 const prevGroup = all[gi - 1]?.rows[0]?.group;
                 const reviewFrom = (key) => {
+                  commitDraft();
                   const keys = songs.filter((x) => !x.missing).map((x) => x.key);
                   setPreview(null);
                   setReview({ keys, i: Math.max(0, keys.indexOf(key)) });
@@ -350,8 +360,8 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                   {status !== "dups" && openId !== g.id ? (
                   /* ligne compacte : la chanson et l'état de ses versions ; clic → carte complète */
                   <li>
-                    <div role="button" tabIndex={0} onClick={() => { setOpenId(g.id); setPreview(null); }}
-                      onKeyDown={(e) => { if (e.key === "Enter") { setOpenId(g.id); setPreview(null); } }}
+                    <div role="button" tabIndex={0} onClick={() => { commitDraft(); setOpenId(g.id); setPreview(null); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") { commitDraft(); setOpenId(g.id); setPreview(null); } }}
                       className={`w-full flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-2 cursor-pointer hover:border-fuchsia-300 hover:bg-fuchsia-50/30 ${g.rows.some((x) => !x.sibling && !x.validated) ? "border-gray-200" : "border-gray-100"}`}>
                       <img src={`https://i.ytimg.com/vi/${(rowOf("normal") || head).videoId}/default.jpg`} alt="" className="w-14 h-10 object-cover rounded-lg shrink-0" />
                       <div className="flex-1 min-w-[160px]">
@@ -378,13 +388,13 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                   ) : (
                   <li className={`border rounded-2xl p-3 space-y-2 ${openId === g.id ? "border-fuchsia-300 shadow-sm" : "border-gray-200"}`}>
                     {status !== "dups" && (
-                      <button onClick={() => { setOpenId(null); setPreview(null); }} className="float-right text-xs font-bold text-gray-400 hover:text-gray-700">▾ Replier</button>
+                      <button onClick={() => { commitDraft(); setOpenId(null); setPreview(null); }} className="float-right text-xs font-bold text-gray-400 hover:text-gray-700">▾ Replier</button>
                     )}
                     {/* la chanson : texte, année, langue, blind test, écoutes (toutes ses versions) */}
                     <div className="flex flex-wrap items-start gap-2">
                       <div className="flex-1 min-w-[180px]">
                         {editing === head.key ? (
-                          <SongTextForm song={head} onCancel={() => setEditing(null)}
+                          <SongTextForm song={head} draftRef={draft} onCancel={() => { draft.current = null; setEditing(null); }}
                             onSave={(artist, title) => { setEditing(null); run({ action: "songText", key: head.key, artist, title }); }} />
                         ) : (
                           <SongName song={head} onArtist={(a) => { setQ(a); setStatus("all"); }} onTitle={() => setRetitling(head)} onEdit={() => setEditing(head.key)} />
@@ -460,7 +470,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                             <button onClick={() => run({ action: "validateSong", key: s.key, validated: true })}
                               className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">✓ Valider</button>
                           )}
-                          <button onClick={() => setFixing(s)} className={`text-xs font-bold px-3 py-1.5 rounded-full ${s.missing ? "bg-red-600 text-white" : "bg-gray-100"}`}>
+                          <button onClick={() => { commitDraft(); setFixing(s); }} className={`text-xs font-bold px-3 py-1.5 rounded-full ${s.missing ? "bg-red-600 text-white" : "bg-gray-100"}`}>
                             {s.missing ? "Remplacer la vidéo" : "Changer la vidéo"}
                           </button>
                           <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier la version ${modeLabel(s.mode)} de « ${s.label || s.key} » ?\nElle sera recherchée à nouveau au prochain ajout.`)}
