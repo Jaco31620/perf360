@@ -38,7 +38,13 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
   useEffect(() => {
     if (compare && !(song?.proposals || []).some((c) => c.newVideo === compare)) setCompare(null);
   }, [song?.proposals, compare]);
-  const go = (d) => setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) }));
+  // correction du texte en cours (non enregistrée) : enregistrée d'office en quittant le titre
+  const draft = useRef(null);
+  const commitDraft = () => {
+    if (song && editing && draft.current) run({ action: "songText", key: song.key, artist: draft.current.artist, title: draft.current.title });
+    draft.current = null;
+  };
+  const go = (d) => { commitDraft(); setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) })); };
   const act = {
     validate: () => { if (song && !song.missing) run({ action: "validateSong", key: song.key, validated: true }); go(1); },
     lyrics: () => song && run({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
@@ -123,7 +129,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
             <div className="space-y-3 min-w-0">
               <div>
                 {editing ? (
-                  <SongTextForm song={song} focus={editing} onCancel={() => setEditing(null)}
+                  <SongTextForm song={song} focus={editing} draftRef={draft} onCancel={() => { draft.current = null; setEditing(null); }}
                     onSave={(artist, title) => { setEditing(null); run({ action: "songText", key: song.key, artist, title }); }} />
                 ) : (
                   <SongName song={song} wrap className="text-lg font-bold leading-snug" artistActive={artistOpen}

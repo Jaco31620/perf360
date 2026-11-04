@@ -29,9 +29,13 @@ export function SongName({ song, onArtist, onTitle, onEdit, wrap = false, artist
   );
 }
 
-export function SongTextForm({ song, onSave, onCancel, focus = "artist" }) {
+/* draftRef (facultatif) : saisie en cours, lue par la revue pour l'enregistrer
+ * d'office quand on passe au titre suivant (Valider et suivant, Passer, flèches). */
+export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRef }) {
   const [artist, setArtist] = useState(song.artist || "");
   const [title, setTitle] = useState(song.title || "");
+  const changed = artist.trim() !== (song.artist || "") || title.trim() !== (song.title || "");
+  if (draftRef) draftRef.current = changed ? { artist, title } : null;
   const submit = (e) => { e.preventDefault(); onSave(artist, title); };
   return (
     <form onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && onCancel()} className="space-y-1.5">
@@ -43,6 +47,7 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist" }) {
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button className="font-bold text-white bg-fuchsia-600 px-3 py-1 rounded-full">Enregistrer</button>
+        {changed && draftRef && <span className="font-bold text-fuchsia-700">● modifié — enregistré aussi en validant ou en passant au suivant</span>}
         <button type="button" onClick={onCancel} className="font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">Annuler</button>
         {song.fixed && <button type="button" onClick={() => onSave("", "")} className="text-gray-500 underline">Revenir au texte automatique</button>}
         <span className="text-gray-400">Libellé Deezer : {song.label}</span>
