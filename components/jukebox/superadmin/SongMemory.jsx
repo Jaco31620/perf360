@@ -24,7 +24,7 @@ function applySong(list, body) {
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
-    case "trimVideo": return list.map((s) => (s.videoId === body.videoId ? { ...s, start: body.start || 0, end: body.end ?? null } : s));
+    case "trimVideo": return list.map((s) => (s.videoId === body.videoId && (!body.kind || s.mode === body.kind) ? { ...s, start: body.start || 0, end: body.end ?? null, trimKind: body.kind || null } : s)); // rognage propre à la version
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
       ...s, enriched: true,
       ...("year" in body ? { year: parseInt(body.year, 10) || null } : {}),

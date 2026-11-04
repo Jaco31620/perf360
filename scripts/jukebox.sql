@@ -444,3 +444,11 @@ grant all on public.jukebox_versions to service_role;
 grant select on public.jukebox_catalog to service_role;
 grant all on public.jukebox_events to service_role;
 grant usage, select on sequence public.jukebox_events_id_seq to service_role;
+
+-- v29 (04/11/2026) : rognage par usage — une même vidéo peut être rognée pour
+-- la version paroles (blind test) et gardée entière pour la version clip.
+-- kind '' = commun à toutes les versions (réglages existants), sinon
+-- normal / clip / karaoke (réglage propre, prioritaire).
+alter table public.jukebox_trims add column if not exists kind text not null default '';
+alter table public.jukebox_trims drop constraint if exists jukebox_trims_pkey;
+alter table public.jukebox_trims add primary key (video_id, kind);

@@ -27,7 +27,7 @@ import { withTrims } from "@/lib/jukeboxTrim";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, closedReason } from "@/lib/jukebox";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
-import { sessionBlind, blindView, blindFacets } from "@/lib/jukeboxBlindServer";
+import { sessionBlind, blindView, blindFacets, AUTO_PID } from "@/lib/jukeboxBlindServer";
 import { logEvent, actorOf } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
 
@@ -96,8 +96,12 @@ export async function GET(req, { params }) {
       command: s.command || null,
     };
     // rognage (début / fin d'habillage) : pour les lecteurs et la télécommande
-    if (admin) await withTrims([out.now, ...out.queue]);
-    if (engine) await withTrims([out.engine.now, ...out.engine.queue]);
+    // rognage selon l'usage : version de la soirée ; titres piochés par le blind test : version paroles, sinon clip
+    const autoIds = new Set(rows.filter((r) => r.participant_id === AUTO_PID).map((r) => r.id));
+    const mode = publicSession(s).searchMode;
+    const kinds = (t) => (autoIds.has(t.id) ? ["normal", "clip"] : [mode]);
+    if (admin) await withTrims([out.now, ...out.queue], kinds);
+    if (engine) await withTrims([out.engine.now, ...out.engine.queue], kinds);
     if (admin) {
       out.admin = true;
       out.command = s.command || null; // dernier ordre de la télécommande

@@ -9,7 +9,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { loadYouTubeApi, createPlayer } from "./youtube";
-import { formatDuration } from "@/lib/jukebox";
+import { formatDuration, SEARCH_MODES } from "@/lib/jukebox";
 
 const fmt = (x) => {
   if (x == null) return "fin";
@@ -143,6 +143,7 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
         <div className="flex flex-wrap items-center gap-1.5">
           <button onClick={() => save(0, null)} className="text-xs text-gray-400 hover:text-red-600 underline">sans rognage</button>
           <span className="text-xs text-fuchsia-700 font-semibold">✂️ {formatDuration(Math.round(keptEnd - start))} gardées</span>
+          {song.mode && <span className="text-xs text-gray-400">· version {SEARCH_MODES.find((m) => m.id === song.mode)?.label || song.mode}{song.trimKind ? "" : " (réglage commun à toutes les versions de cette vidéo)"}</span>}
         </div>
       )}
       {hint === undefined ? (

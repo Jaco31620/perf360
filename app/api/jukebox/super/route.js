@@ -85,7 +85,7 @@ export async function GET(req) {
         ? await listSongs({ ...params, status: "all", keys: await proposedKeys() })
         : await listSongs(params);
       if (params.status !== "dups" && !params.keys) songs = await withSiblings(songs); // vue par chanson : ses autres versions
-      await withTrims(songs); // rognage de chaque vidéo (start / end)
+      await withTrims(songs, (t) => [t.mode]); // rognage de chaque version (propre à la version, sinon commun)
       await withChanges(songs); // propositions en attente, dernier changement
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }

@@ -110,7 +110,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   <VideoPreview videoId={peek.videoId} start={song.duration > REVIEW_START + 20 ? REVIEW_START : 0} />
                 </div>
               ) : <TrimPlayer key={song.videoId} song={song} busy={busy} previewStart={song.duration > REVIEW_START + 20 ? REVIEW_START : 0}
-                onSave={(t) => run({ action: "trimVideo", ...t })}
+                onSave={(t) => run({ action: "trimVideo", ...t, kind: song.mode })}
                 suggest={async (videoId, duration) => (await call("POST", { action: "trimSuggest", videoId, duration })).hint} />}
               <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
                 <div className="flex-1 min-w-0"><VideoTitle song={song} className="truncate" /></div>
