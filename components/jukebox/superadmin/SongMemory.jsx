@@ -580,10 +580,14 @@ function ClipScan({ clips, call, onDone }) {
     <div className="text-xs bg-emerald-50 text-emerald-900 rounded-xl px-3 py-2 space-y-1">
       <div className="flex flex-wrap items-center gap-2">
         <span>🎬 <b>{clips.missing} chanson{clips.missing > 1 ? "s" : ""} sans version clip</b> : cherchées chaque matin après le pré-remplissage, avec le reste du quota.</span>
-        <select value={n} onChange={(e) => setN(Number(e.target.value))} className="border border-emerald-300 rounded-full px-2 py-0.5 bg-white">
-          {[1, 3, 5, 10, 20].map((x) => <option key={x} value={x}>{x}</option>)}
-        </select>
-        <button onClick={run} disabled={busy} className="font-bold bg-emerald-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Recherche…" : "Chercher maintenant"}</button>
+        <span className="flex items-center gap-1.5">
+          Sans attendre : chercher le clip de
+          <select value={n} onChange={(e) => setN(Number(e.target.value))} className="border border-emerald-300 rounded-full px-2 py-0.5 bg-white font-bold">
+            {[1, 3, 5, 10, 20].map((x) => <option key={x} value={x}>{x} chanson{x > 1 ? "s" : ""}</option>)}
+          </select>
+          <span className="text-emerald-700/70">({n} recherche{n > 1 ? "s" : ""} YouTube sur le quota du jour)</span>
+        </span>
+        <button onClick={run} disabled={busy} className="font-bold bg-emerald-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Recherche…" : "Lancer"}</button>
       </div>
       {last && <p>Dernier passage {new Date(last.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} : {last.found} trouvé{last.found > 1 ? "s" : ""}{last.failed ? `, ${last.failed} sans résultat` : ""} ({SCAN_STOP[last.stop] || last.stop}). Les trouvailles sont « À vérifier » (filtre Version Clip).</p>}
     </div>
