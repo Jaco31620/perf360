@@ -294,7 +294,8 @@ export default function Participant({ code }) {
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
                       <p className="text-xs text-gray-500 truncate">
                         {v.channel} · {formatDuration(v.duration)}
-                        {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span> : null}
+                        {admin && v.known ? <span title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)"> · ⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
+                          : v.known === 2 ? <span className="text-green-700 font-semibold" title="Version vérifiée : bonne vidéo, passe tout de suite"> · ✓ vérifié</span> : null}
                         {v.playedAt && !isQueued(v) ? <span className="text-amber-700 font-semibold"> · 🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
                       </p>
                     </div>
