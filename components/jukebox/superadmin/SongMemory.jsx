@@ -58,13 +58,22 @@ const CONFIDENCE = {
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
 const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
-const SORTS = [["added", "Derniers ajoutés"], ["plays", "Plus joués"], ["rank", "Plus connus"], ["year", "Année"], ["alpha", "A → Z"], ["alphaDesc", "Z → A"]];
+/* Tri : critère + sens (bouton à côté) ; libellés du sens selon le critère : [normal, inversé]. */
+const SORTS = [["added", "Date d'ajout"], ["plays", "Écoutes"], ["rank", "Popularité"], ["year", "Année"], ["alpha", "Alphabétique"]];
+const SORT_DIR = {
+  added: ["↓ Récents d'abord", "↑ Anciens d'abord"],
+  plays: ["↓ Plus joués d'abord", "↑ Moins joués d'abord"],
+  rank: ["↓ Plus connus d'abord", "↑ Moins connus d'abord"],
+  year: ["↑ Plus anciens d'abord", "↓ Plus récents d'abord"],
+  alpha: ["A → Z", "Z → A"],
+};
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
 export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("added");
+  const [sortRev, setSortRev] = useState(false); // sens inversé (bouton à côté du tri)
   const [editing, setEditing] = useState(null); // clé du titre dont on corrige le texte
   const [openId, setOpenId] = useState(null); // chanson dépliée (vue compacte : une ligne par chanson)
   // tuile « Titres en mémoire » : liste complète, sans filtre
@@ -108,7 +117,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   const load = useCallback(async () => {
     const started = Date.now();
     try {
-      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort });
+      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort, ...(sortRev ? { rev: "1" } : {}) });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
@@ -122,7 +131,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, mode, lang, decade, sort, loadCounts]);
+  }, [q, status, mode, lang, decade, sort, sortRev, loadCounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -290,9 +299,15 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               <option value="unknown">❓ Année inconnue</option>
             </select>
             {status !== "dups" && (
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="border-2 border-gray-200 rounded-full px-3 py-1 text-sm font-semibold">
-                {SORTS.map(([id, label]) => <option key={id} value={id}>↕ {label}</option>)}
-              </select>
+              <div className="flex items-center border-2 border-gray-200 rounded-full overflow-hidden text-sm font-semibold">
+                <select value={sort} onChange={(e) => { setSort(e.target.value); setSortRev(false); }} className="pl-3 pr-1 py-1 bg-transparent outline-none" title="Trier par">
+                  {SORTS.map(([id, label]) => <option key={id} value={id}>Tri : {label}</option>)}
+                </select>
+                <button onClick={() => setSortRev((v) => !v)} title="Inverser l'ordre"
+                  className={`px-3 py-1 border-l-2 border-gray-200 whitespace-nowrap hover:bg-fuchsia-50 ${sortRev ? "text-fuchsia-700 bg-fuchsia-50" : "text-gray-600"}`}>
+                  {(SORT_DIR[sort] || SORT_DIR.added)[sortRev ? 1 : 0]}
+                </button>
+              </div>
             )}
             <SearchInput value={q} onChange={setQ} placeholder="Rechercher un artiste, un titre…" className="flex-1 min-w-[180px]" />
           </div>
