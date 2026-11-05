@@ -49,7 +49,7 @@ import { loadSession, songsCount, songStatusCounts, listSongs, withBlindStats, b
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
-import { enrichSongs, enrichPending, editSongMeta } from "@/lib/jukeboxEnrich";
+import { enrichSongs, enrichPending, editSongMeta, checkYears, yearsToCheck, answerYear } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
@@ -98,6 +98,7 @@ export async function GET(req) {
     }
     const [config, sessions, searches, songs, prefill, enrich, catalog] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null), catalogState().catch(() => null)]);
     const clips = await scanState().catch(() => null); // chansons sans version clip, dernier passage
+    const years = await yearsToCheck().catch(() => null); // chansons dont l'année n'est pas encore vérifiée
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
     const requests = await listRequests().catch(() => null); // null : SQL v23 à appliquer
@@ -110,6 +111,7 @@ export async function GET(req) {
       enrich, // titres pas encore enrichis (année, langue)
       catalog, // nouveau catalogue (SQL v28) : null si tables absentes
       clips,
+      years,
       activations,
       requests,
       proposals,
@@ -160,6 +162,12 @@ export async function POST(req) {
       }
       case "blindSong":
         await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
+      case "checkYears": // années à vérifier, à la main (≈ 45 s par appel ; relancé par le client jusqu'au bout)
+        try { return Response.json({ ok: true, ...(await checkYears(45e3)), left: await yearsToCheck() }); }
+        catch (e) { return Response.json({ error: /year_/.test(e.message || "") ? "Appliquez d'abord le SQL v32 (années à vérifier)." : e.message }, { status: 422 }); }
+      case "answerYear":
+        await answerYear(body.key, !!body.accept);
         return Response.json({ ok: true });
       case "blindDecide":
         try { await blindDecide(body.key, body.level); }

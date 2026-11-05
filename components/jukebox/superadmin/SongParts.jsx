@@ -128,3 +128,21 @@ export function BlindStat({ song, run }) {
     </span>
   );
 }
+
+/* Année plus ancienne proposée par la vérification (MusicBrainz) : à
+ * accepter ou refuser (plus reproposée). Une autre année : clic sur l'année. */
+export function YearSuggest({ song, run, className = "" }) {
+  if (!song.yearSuggest) return null;
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-1 text-[11px] ${className}`} onClick={(e) => e.stopPropagation()}>
+      <span className="font-bold text-orange-700" title={`Proposée par ${song.yearSuggestSrc || "la vérification"}`}>
+        📅 {song.year ? <><s className="font-normal opacity-60">{song.year}</s> → </> : null}{song.yearSuggest} ?
+      </span>
+      <button onClick={stop(() => run({ action: "answerYear", key: song.key, accept: true }))}
+        className="font-bold bg-green-600 text-white px-2 py-0.5 rounded-full">✓ {song.yearSuggest}</button>
+      <button onClick={stop(() => run({ action: "answerYear", key: song.key, accept: false }))}
+        className="font-bold bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">✕ {song.year ? `garder ${song.year}` : "ignorer"}</button>
+    </span>
+  );
+}

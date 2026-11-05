@@ -5,7 +5,7 @@ import { VideoPreview, PreviewThumb } from "../Controls";
 import { SEARCH_MODES, formatDuration } from "@/lib/jukebox";
 import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } from "./shared";
-import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat } from "./SongParts";
+import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat, YearSuggest } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
 import { BlindReview } from "./BlindReview";
@@ -25,12 +25,13 @@ function applySong(list, body) {
     }));
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
+    case "answerYear": return list.map((s) => (s.key.split(":")[1] !== id ? s : { ...s, year: body.accept && s.yearSuggest ? s.yearSuggest : s.year, yearSuggest: null }));
     case "blindDecide": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: body.level > 0, difficulty: body.level === 2 ? 2 : 0, blindDecided: true, rerank: null } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
     case "trimVideo": return list.map((s) => (s.videoId === body.videoId && (!body.kind || s.mode === body.kind) ? { ...s, start: body.start || 0, end: body.end ?? null, trimKind: body.kind || null } : s)); // rognage propre à la version
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
       ...s, enriched: true,
-      ...("year" in body ? { year: parseInt(body.year, 10) || null } : {}),
+      ...("year" in body ? { year: parseInt(body.year, 10) || null, yearSuggest: null } : {}),
       ...("fr" in body ? { fr: body.fr } : {}),
     }));
     default: return list;
@@ -70,6 +71,7 @@ const QUEUES = [
   { id: "dups", label: "👯 Doublons", list: true, help: "Chansons qui se ressemblent (même vidéo, même ISRC, ou interprète et titre proches). « Garder celui-ci » fusionne le groupe : écoutes, étiquettes, versions et fiches Deezer sont regroupées sur la chanson gardée." },
   { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui très difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
   { id: "rerank", label: "📊 Blind à reclasser", blind: true, help: "D'après les réponses des invités reçues depuis votre décision (au moins 8) : difficulté normale mais trouvé par moins d'1 joueur sur 4, ou très difficile mais trouvé par 7 sur 10 ou plus. Reclassez, ou gardez : seules les réponses suivantes compteront." },
+  { id: "yearq", label: "📅 Années à vérifier", list: true, help: "L'année trouvée vient parfois d'une réédition (remaster, compilation) : la vérification a trouvé une sortie plus ancienne. Acceptez-la (✓), gardez l'année actuelle (✕, plus reproposée), ou cliquez l'année pour en taper une autre." },
   { id: "meta", label: "📅 Année ou langue manquante", help: "Chansons enrichies sans année ou sans langue trouvée (filtres du blind test et du catalogue invités) : cliquez l'année ou la langue pour la renseigner." },
 ];
 const VERSION_FILTERS = [["all", "Toutes les vidéos"], ["todo", "Vidéos à vérifier"], ["ok", "Vidéos validées"], ["lyrics", "📝 Avec paroles"], ["missing", "⚠️ Vidéos disparues"]];
@@ -84,7 +86,7 @@ const SORT_DIR = {
   alpha: ["A → Z", "Z → A"],
 };
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
-export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
+export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, years, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [view, setView] = useState("todo"); // todo : files à vider ; catalog : exploration
@@ -249,6 +251,24 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   };
   // compteurs des files dès l'ouverture
   useEffect(() => { loadCounts(); }, [loadCounts]);
+  // vérification des années, à la main : appels successifs (~45 s chacun) jusqu'au bout
+  const [checking, setChecking] = useState(false);
+  const stopCheck = useRef(false);
+  const checkNow = async () => {
+    stopCheck.current = false;
+    setChecking({ done: 0, suggested: 0 });
+    try {
+      for (let done = 0, suggested = 0; !stopCheck.current;) {
+        const d = await call("POST", { action: "checkYears" });
+        done += d.done || 0;
+        suggested += d.suggested || 0;
+        setChecking({ done, suggested, left: d.left });
+        load();
+        if (!d.left || !d.done) break;
+      }
+      onChanged?.();
+    } catch (e) { alert(e.message); } finally { setChecking(false); }
+  };
   const editYear = (s) => {
     const v = prompt(`Année de sortie de « ${s.label} » (vide : inconnue)`, s.year || "");
     if (v !== null) run({ action: "songMeta", key: s.key, year: v.trim() });
@@ -308,6 +328,19 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
             </div>
           )}
           {view === "todo" && qdef && <p className="text-xs text-gray-500">{qdef.help}</p>}
+          {view === "todo" && status === "yearq" && (years > 0 || checking) && (
+            <div className="flex flex-wrap items-center gap-3 text-xs bg-orange-50 text-orange-900 rounded-xl px-3 py-2">
+              <span>📅 {checking ? checking.left ?? years : years} chanson{years > 1 ? "s" : ""} pas encore vérifiée{years > 1 ? "s" : ""} : vérifiées chaque nuit (MusicBrainz, sans quota YouTube, ≈ 2 s par chanson).</span>
+              {checking ? (
+                <span className="flex items-center gap-2 font-bold">
+                  ⏳ {checking.done} vérifiée{checking.done > 1 ? "s" : ""}, {checking.suggested} proposition{checking.suggested > 1 ? "s" : ""}…
+                  <button onClick={() => { stopCheck.current = true; }} className="underline font-normal">arrêter</button>
+                </span>
+              ) : (
+                <button onClick={checkNow} className="font-bold bg-orange-500 text-white px-3 py-1 rounded-full">Vérifier maintenant</button>
+              )}
+            </div>
+          )}
           {(() => {
             const main = (songs || []).filter((s) => !s.sibling); // lignes du filtre (sans les autres versions ajoutées pour la vue par chanson)
             if (view === "todo") {
@@ -430,6 +463,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                           {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? `🕵️ blind test${head.difficulty >= 2 ? " 🎓" : ""}${head.blindStat ? ` (trouvé ${head.blindStat.found}/${head.blindStat.n})` : ""}` : null, head.rerank ? <b key="rr" className="text-orange-600">📊 à reclasser</b> : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
                             .filter(Boolean).flatMap((x, k) => (k ? [" · ", x] : [x]))}
                         </p>
+                        <YearSuggest song={head} run={run} className="mt-0.5" />
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {["normal", "clip", "karaoke"].filter((k) => k !== "karaoke" || rowOf(k)).map((k) => {
@@ -464,6 +498,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
                             {head.year || (head.enriched ? "année ?" : "…")}
                           </button>
+                          <YearSuggest song={head} run={run} />
                           <button onClick={() => run({ action: "songMeta", key: head.key, fr: FR_NEXT[String(head.fr)] })}
                             title="Langue (cliquer : français → international → inconnue)"
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>

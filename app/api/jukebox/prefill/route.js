@@ -8,7 +8,7 @@
  */
 import { tooMany } from "@/lib/jukeboxRate";
 import { runPrefill } from "@/lib/jukeboxPrefill";
-import { enrichSongs } from "@/lib/jukeboxEnrich";
+import { enrichSongs, checkYears } from "@/lib/jukeboxEnrich";
 import { scanClips } from "@/lib/jukeboxScan";
 
 export const runtime = "nodejs";
@@ -32,7 +32,9 @@ export async function GET(request) {
     const clips = prefill.stop === "quota" ? { stop: "quota", skipped: true }
       : await scanClips(Math.max(0, 230e3 - (Date.now() - start))).catch((e) => ({ error: String(e?.message || e) }));
     const enrich = await enrichSongs(Math.max(0, 280e3 - (Date.now() - start))).catch((e) => ({ error: String(e?.message || e) }));
-    return Response.json({ status: "ok", ...prefill, clips, enrich });
+    // années à vérifier (propositions, jamais appliquées d'office) avec le temps restant
+    const years = await checkYears(Math.max(0, 285e3 - (Date.now() - start))).catch((e) => ({ error: String(e?.message || e) }));
+    return Response.json({ status: "ok", ...prefill, clips, enrich, years });
   } catch (e) {
     console.error("jukebox prefill:", e);
     return Response.json({ status: "error", reason: String(e?.message || e) }, { status: 500 });

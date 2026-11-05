@@ -5,7 +5,7 @@ import { VideoChooser, VideoPreview, PreviewThumb } from "../Controls";
 import TrimPlayer from "../TrimPlayer";
 import { formatDuration } from "@/lib/jukebox";
 import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
-import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat } from "./SongParts";
+import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat, YearSuggest } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
 import { FrFlag } from "../FrFlag";
 import { sameArtist } from "@/lib/jukeboxBlind";
@@ -142,6 +142,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     className={`${tag} ${song.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
                     {song.year || (song.enriched ? "année ?" : "…")}
                   </button>
+                  <YearSuggest song={song} run={runR} />
                   <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
                     className={`${tag} ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                     {song.fr === true ? <><FrFlag /> Français</> : song.fr === false ? "🌍 International" : song.enriched ? "❓ langue" : "…"}

@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { VideoPreview } from "../Controls";
 import { formatDuration } from "@/lib/jukebox";
 import { FR_NEXT, modeLabel, MODE_ICON } from "./shared";
-import { SongName, SongTextForm, blindLevel } from "./SongParts";
+import { SongName, SongTextForm, blindLevel, YearSuggest } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
 import { FrFlag } from "../FrFlag";
 
@@ -88,6 +88,7 @@ export function BlindReview({ review, setReview, songs, run, editYear, onClose, 
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                   <button onClick={() => editYear(song)} title="Année de sortie (cliquer pour corriger)"
                     className={`${tag} ${song.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>{song.year || "année ?"}</button>
+                  <YearSuggest song={song} run={run} />
                   <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
                     className={`${tag} ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                     {song.fr === true ? <><FrFlag /> Français</> : song.fr === false ? "🌍 International" : "❓ langue"}
