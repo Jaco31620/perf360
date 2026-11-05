@@ -530,3 +530,11 @@ from public.jukebox_versions v
 join public.jukebox_works w on w.id = v.work_id;
 revoke all on public.jukebox_catalog from anon, authenticated;
 grant select on public.jukebox_catalog to service_role;
+
+-- v33 (05/11/2026) : vérification des années refaite avec Wikidata (dates de
+-- Wikipédia) en source principale. Pas de changement de structure : on remet
+-- à vérifier les chansons déjà vérifiées, sauf les années décidées à la main
+-- (year_suggest_src = 'manual', posé à partir de maintenant).
+update public.jukebox_works
+  set year_checked_at = null, year_suggest = null, year_suggest_src = null
+  where year_suggest_src is distinct from 'manual';
