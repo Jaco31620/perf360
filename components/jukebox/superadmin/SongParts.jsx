@@ -73,12 +73,14 @@ export function BlindTag({ song, onLevel, big = false, sub = null }) {
     : "Difficulté normale. Cliquer si ce titre est trop dur pour une soirée grand public";
   const label = song.blind ? "Blind test" : pending ? (big ? "Blind test : à décider" : "Blind test ?") : "Pas au blind";
   const off = pending ? "bg-white text-gray-500 border border-dashed border-gray-300 hover:text-gray-900" : "bg-gray-100 text-gray-400 hover:text-gray-700";
-  const blindTitle = song.blind ? "Retirer du blind test (pour la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)";
+  // clic : « oui » d'avant à confirmer → confirmé (niveau gardé) ; oui décidé → retiré ; sinon → oui
+  const next = song.blind ? (pending ? lv : 0) : 1;
+  const blindTitle = song.blind && pending ? "Confirmer : garder au blind test (cliquer encore pour le retirer)" : song.blind ? "Retirer du blind test (pour la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)";
   const wait = pending && song.blind && <span className={`font-semibold opacity-80 ${big ? "text-xs" : "text-[10px]"}`}> · à confirmer</span>;
   if (big) { // revue : 🕵️ en haut, 🎓 en bandeau dessous (tient dans la case)
     return (
       <div className={`flex flex-col min-w-0 rounded-xl overflow-hidden ${song.blind ? "bg-violet-600 text-white" : off}`}>
-        <button onClick={() => onLevel(song.blind ? 0 : 1)} title={blindTitle} className="flex-1 text-sm font-bold px-3 py-2 text-left min-w-0">
+        <button onClick={() => onLevel(next)} title={blindTitle} className="flex-1 text-sm font-bold px-3 py-2 text-left min-w-0">
           🕵️ {label}{wait}
           {sub && <span className="block text-[10px] font-semibold opacity-80">{sub}</span>}
         </button>
@@ -92,7 +94,7 @@ export function BlindTag({ song, onLevel, big = false, sub = null }) {
   }
   return (
     <span className="inline-flex items-stretch">
-      <button onClick={() => onLevel(song.blind ? 0 : 1)} title={blindTitle}
+      <button onClick={() => onLevel(next)} title={blindTitle}
         className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap ${song.blind ? "bg-violet-600 text-white rounded-l-full" : `${off} rounded-full`}`}>
         🕵️ {label}{wait}
       </button>
