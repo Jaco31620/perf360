@@ -159,8 +159,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                 <button onClick={act.lyrics} className={`text-sm font-bold px-3 py-2 rounded-xl text-left ${song.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-500 hover:text-gray-900"}`}>
                   📝 {song.lyrics ? "Avec paroles" : "Sans paroles"}
                 </button>
-                <BlindTag song={song} big onLevel={(level) => runR({ action: "blindDecide", key: song.key, level })}
-                  sub={<>pour la chanson · joue {song.mode === "clip" && (songs || []).some((x) => x.workId === song.workId && x.mode === "normal" && !x.missing) ? "la version Paroles" : song.mode === "karaoke" ? "Paroles ou Clip" : `cette version`}</>} />
+                <BlindTag song={song} big onLevel={(level) => runR({ action: "blindDecide", key: song.key, level })} />
                 {song.blindStat && <div className="col-span-2 -mt-1"><BlindStat song={song} run={runR} /></div>}
                 <button onClick={act.fix} className={tool}>🎬 {song.missing ? "Remplacer vidéo" : "Changer vidéo"}</button>
                 <button onClick={act.text} className={tool} title="Corriger l'interprète ou le titre affichés (faute, majuscules, mention en trop), sans changer de titre ni de vidéo">✎ Texte</button>
