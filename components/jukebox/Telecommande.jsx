@@ -17,7 +17,7 @@ import { setAdminToken, authHeaders, formatCode, setScreen } from "./storage";
 import { useLive } from "./useLive";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
-import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
+import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker, ReportDialog } from "./Controls";
 import { QRCodeSVG } from "qrcode.react";
 import { formatDuration, playSpan, HANDOFF_MS } from "@/lib/jukebox";
 import History from "./History";
@@ -36,6 +36,7 @@ export default function Telecommande({ code }) {
   const [guestQr, setGuestQr] = useState(false);
   const [pcHelp, setPcHelp] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
+  const [reporting, setReporting] = useState(null); // titre signalé (🚩)
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [pending, setPending] = useState(null); // ordre envoyé, pas encore appliqué : "play" | "pause"
@@ -173,7 +174,7 @@ export default function Telecommande({ code }) {
                         className="not-italic ml-2 text-white/40" aria-label="Effacer la dédicace">✕</button>
                     </p>
                   )}
-                  <div className="mt-1"><FixVideoButton onClick={() => setFixing(now)} /></div>
+                  <div className="mt-1"><FixVideoButton onClick={() => setReporting(now)} /></div>
                 </div>
                 </div>
                 <div>
@@ -216,7 +217,7 @@ export default function Telecommande({ code }) {
             </div>
 
             <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
-            <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+            <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
           </section>
         )}
 
@@ -258,6 +259,7 @@ export default function Telecommande({ code }) {
       {tvOpen && <TvLink code={code} beat={tvBeat(data?.playback)} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} />}
+      {reporting && <ReportDialog code={code} track={reporting} onClose={() => setReporting(null)} onFix={(t) => { setReporting(null); setFixing(t); }} />}
       {guestQr && (
         <div onClick={() => setGuestQr(false)} className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-5 p-6 text-center">
           <div className="bg-white p-4 rounded-3xl"><QRCodeSVG value={joinUrl} size={260} /></div>

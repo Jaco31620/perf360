@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getSuperToken } from "../storage";
 import { VideoChooser, VideoPreview, PreviewThumb } from "../Controls";
 import TrimPlayer from "../TrimPlayer";
-import { formatDuration } from "@/lib/jukebox";
+import { formatDuration, REPORT_REASONS } from "@/lib/jukebox";
 import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
 import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat, YearSuggest } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
@@ -128,6 +128,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     artistHint="Autres titres de cet interprète" titleHint="Corriger le texte"
                     onArtist={() => setArtistOpen((v) => !v)} onTitle={() => setEditing("title")} onEdit={() => setEditing("artist")} />
                 )}
+                <ReportInfo song={song} run={runR} />
                 {song.suspect?.length > 0 && (
                   <p className="mt-1.5 text-xs font-bold text-orange-700 bg-orange-50 rounded-lg px-2 py-1">🧐 À vérifier de près : {song.suspect.join(" · ")}</p>
                 )}
@@ -372,6 +373,48 @@ function OtherVersions({ song, songs, peek, setPeek, changeRun }) {
             className="font-bold underline">= même vidéo que celle-ci</button>
         </p>
       )}
+    </div>
+  );
+}
+
+/* Signalements de la régie (🚩) sur cette version : problèmes cochés,
+ * moment de la lecture, soirée ; raccourcis selon le problème (couper avant /
+ * après la seconde signalée), puis ✓ Traité ou ✕ Pas d'accord. */
+const REASON_LABEL = Object.fromEntries(REPORT_REASONS.map((r) => [r.id, r.label]));
+const mmss = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+export function ReportInfo({ song, run, compact = false }) {
+  const reps = song.reports || [];
+  if (!reps.length) return null;
+  const trim = (start, end) => run({ action: "trimVideo", videoId: song.videoId, start, end, kind: song.mode });
+  return (
+    <div className="mt-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-900 space-y-1.5">
+      {reps.map((r) => {
+        const here = r.videoId === song.videoId && r.position != null; // seconde signalée sur la vidéo actuelle
+        return (
+          <div key={r.id} className="space-y-1">
+            <p>
+              🚩 <b>{r.reasons.map((x) => REASON_LABEL[x] || x).join(" · ")}</b>
+              {r.position != null && <> · à {mmss(r.position)}{r.videoId !== song.videoId && " (autre vidéo, changée depuis)"}</>}
+              <span className="text-red-900/60"> · {r.sessionName ? `soirée « ${r.sessionName} », ` : ""}le {new Date(r.at).toLocaleDateString("fr-FR")}</span>
+            </p>
+            {r.comment && <p className="italic">« {r.comment} »</p>}
+            {!compact && here && (r.reasons.includes("start") || r.reasons.includes("end")) && (
+              <div className="flex flex-wrap gap-1.5">
+                {r.reasons.includes("start") && r.position > 1 && (
+                  <button onClick={() => trim(r.position, song.end ?? null)} className="font-bold bg-white border border-red-200 px-2.5 py-1 rounded-lg">✂️ Démarrer à {mmss(r.position)}</button>
+                )}
+                {r.reasons.includes("end") && r.position > (song.start || 0) + 20 && (
+                  <button onClick={() => trim(song.start || 0, r.position)} className="font-bold bg-white border border-red-200 px-2.5 py-1 rounded-lg">✂️ Arrêter à {mmss(r.position)}</button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap gap-1.5 pt-0.5">
+        <button onClick={() => run({ action: "closeReports", key: song.key, status: "done" })} className="font-bold bg-green-600 text-white px-2.5 py-1 rounded-lg">✓ Traité</button>
+        <button onClick={() => run({ action: "closeReports", key: song.key, status: "rejected" })} className="font-bold bg-white border border-gray-200 text-gray-700 px-2.5 py-1 rounded-lg">✕ Pas d'accord</button>
+      </div>
     </div>
   );
 }

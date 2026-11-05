@@ -7,7 +7,7 @@ import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } from "./shared";
 import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat, YearSuggest } from "./SongParts";
 import { Backup } from "./Backup";
-import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
+import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser, ReportInfo } from "./SongReview";
 import { BlindReview } from "./BlindReview";
 import { FrFlag } from "../FrFlag";
 
@@ -26,6 +26,7 @@ function applySong(list, body) {
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
     case "answerYear": return list.map((s) => (s.key.split(":")[1] !== id ? s : { ...s, year: body.accept && s.yearSuggest ? s.yearSuggest : s.year, yearSuggest: null }));
+    case "closeReports": return list.map((s) => (s.key === body.key ? { ...s, reports: undefined } : s));
     case "blindDecide": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: body.level > 0, difficulty: body.level === 2 ? 2 : 0, blindDecided: true, rerank: null } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
     case "trimVideo": return list.map((s) => (s.videoId === body.videoId && (!body.kind || s.mode === body.kind) ? { ...s, start: body.start || 0, end: body.end ?? null, trimKind: body.kind || null } : s)); // rognage propre à la version
@@ -65,6 +66,7 @@ const CONFIDENCE = {
 /* Files « À traiter », de la plus urgente à la moins urgente. blind : revue
  * blind test (une décision par chanson) ; list : traitée dans la liste. */
 const QUEUES = [
+  { id: "reports", label: "🚩 Signalements", help: "Problèmes signalés par la régie pendant une soirée (pas la bonne chanson, mauvaise version, temps mort…). La revue montre ce qui a été signalé et à quel moment ; pour un temps mort, « Démarrer à » / « Arrêter à » coupe à la seconde signalée. Puis ✓ Traité ou ✕ Pas d'accord." },
   { id: "missing", label: "⚠️ Vidéos disparues", help: "Vidéos qui n'existent plus ou ne sont plus lisibles : choisissez-en une autre (Remplacer la vidéo) avant la prochaine soirée." },
   { id: "changes", label: "🔄 Proposés en soirée", help: "« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis adoptez la vidéo proposée (pour toutes les soirées) ou gardez l'actuelle." },
   { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
@@ -460,7 +462,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                       <div className="flex-1 min-w-[160px]">
                         <p className="font-bold text-sm text-gray-900 leading-snug select-text">{head.artist} – {head.title}</p>
                         <p className="text-[11px] text-gray-400">
-                          {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? `🕵️ blind test${head.difficulty >= 2 ? " 🎓" : ""}${head.blindStat ? ` (trouvé ${head.blindStat.found}/${head.blindStat.n})` : ""}` : null, head.rerank ? <b key="rr" className="text-orange-600">📊 à reclasser</b> : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
+                          {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? `🕵️ blind test${head.difficulty >= 2 ? " 🎓" : ""}${head.blindStat ? ` (trouvé ${head.blindStat.found}/${head.blindStat.n})` : ""}` : null, head.rerank ? <b key="rr" className="text-orange-600">📊 à reclasser</b> : null, g.rows.some((x) => x.reports?.length) ? <b key="rp" className="text-red-600">🚩 signalé</b> : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
                             .filter(Boolean).flatMap((x, k) => (k ? [" · ", x] : [x]))}
                         </p>
                         <YearSuggest song={head} run={run} className="mt-0.5" />
@@ -549,6 +551,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                           </div>
                           <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                           <ChangeInfo song={s} run={changeRun} onCompare={() => reviewFrom(s.key)} />
+                          <ReportInfo song={s} run={run} compact />
                         </div>
                         <div className="flex flex-wrap gap-1.5 shrink-0">
                           {!s.missing && (

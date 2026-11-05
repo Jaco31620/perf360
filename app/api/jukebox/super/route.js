@@ -40,6 +40,7 @@
  */
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
+import { withReports, reportedKeys, closeReports } from "@/lib/jukeboxReports";
 import { withChanges, proposedKeys, acceptChange, rejectChange, revertChange, logChange } from "@/lib/jukeboxChanges";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
 import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
@@ -78,21 +79,24 @@ export async function GET(req) {
     }
     if (url.searchParams.get("facets")) { // nombre de titres par option des menus + total des filtres
       const params = Object.fromEntries(url.searchParams);
-      const keys = params.status === "changes" ? await proposedKeys() : undefined;
-      return Response.json(await songFacets({ ...params, status: params.status === "changes" ? "all" : params.status, keys }), { headers: { "cache-control": "no-store" } });
+      const keys = params.status === "changes" ? await proposedKeys() : params.status === "reports" ? await reportedKeys() : undefined;
+      return Response.json(await songFacets({ ...params, status: keys ? "all" : params.status, keys }), { headers: { "cache-control": "no-store" } });
     }
     if (url.searchParams.get("songCounts"))
-      return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length, reports: (await reportedKeys()).length }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
       const params = Object.fromEntries(url.searchParams);
       // titres précis (revue : titres sortis du filtre en cours de route)
       if (params.keys) { params.keys = params.keys.split(",").filter(Boolean).slice(0, 200); params.status = "all"; }
       let songs = params.status === "changes" // changements de vidéo proposés en soirée
         ? await listSongs({ ...params, status: "all", keys: await proposedKeys() })
+        : params.status === "reports" // signalés par la régie
+        ? await listSongs({ ...params, status: "all", keys: await reportedKeys() })
         : await listSongs(params);
       if (params.status !== "dups" && !params.keys) songs = await withSiblings(songs); // vue par chanson : ses autres versions
       await withTrims(songs, (t) => [t.mode]); // rognage de chaque version (propre à la version, sinon commun)
       await withChanges(songs); // propositions en attente, dernier changement
+      await withReports(songs); // signalements de la régie en attente
       await withBlindStats(songs); // blind test : réponses des invités (trouvé par X sur Y)
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }
@@ -162,6 +166,9 @@ export async function POST(req) {
       }
       case "blindSong":
         await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
+      case "closeReports": // signalements d'une version : traités ou refusés
+        await closeReports(body.key, body.status);
         return Response.json({ ok: true });
       case "checkYears": // années à vérifier, à la main (≈ 45 s par appel ; relancé par le client jusqu'au bout)
         try { return Response.json({ ok: true, ...(await checkYears(45e3)), left: await yearsToCheck() }); }

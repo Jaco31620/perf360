@@ -18,7 +18,7 @@ import { setAdminToken, authHeaders, rememberParty, forgetParty, formatCode, set
 import { useLive } from "./useLive";
 import { useAdminActions } from "./optimistic";
 import { useWakeLock } from "./useWakeLock";
-import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker } from "./Controls";
+import { Settings, QueueList, GuestsSwitch, AddTrack, PlayPauseButton, SkipButton, VolumeSlider, FixVideoButton, VideoPicker, ReportDialog } from "./Controls";
 import { Play } from "lucide-react";
 import History from "./History";
 import TvLink, { tvBeat } from "./TvLink";
@@ -33,6 +33,7 @@ export default function Regie({ code }) {
   const [origin, setOrigin] = useState("");
   const [bigQr, setBigQr] = useState(false);
   const [fixing, setFixing] = useState(null); // titre dont on corrige la vidéo
+  const [reporting, setReporting] = useState(null); // titre signalé (🚩)
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tvOpen, setTvOpen] = useState(false); // « Connecter une télé »
   const [tab, setTab] = useState("queue"); // onglet de la colonne de droite (retenu par appareil)
@@ -192,7 +193,7 @@ export default function Regie({ code }) {
                 <>
                   <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-400 uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment{now.author ? ` · proposé par ${now.author}` : ""}</p>
                   <p className="text-xl font-bold truncate">{now.title}</p>
-                  <p className="text-sm text-white/50">{now.channel} <span className="ml-2"><FixVideoButton onClick={() => setFixing(now)} /></span></p>
+                  <p className="text-sm text-white/50">{now.channel} <span className="ml-2"><FixVideoButton onClick={() => setReporting(now)} /></span></p>
                   {now.dedication && (
                     <p className="text-sm text-fuchsia-300 italic mt-1">
                       💌 « {now.dedication} »
@@ -257,7 +258,7 @@ export default function Regie({ code }) {
           {shown === "queue" && (
             <>
               <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
-              <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setFixing} />
+              <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
               {session.features.history && (
                 <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">
                   🕘 Historique de la soirée
@@ -298,6 +299,7 @@ export default function Regie({ code }) {
       </div>
 
       {fixing && <VideoPicker code={code} track={fixing} onClose={() => setFixing(null)} onDone={refresh} mute />}
+      {reporting && <ReportDialog code={code} track={reporting} onClose={() => setReporting(null)} onFix={(t) => { setReporting(null); setFixing(t); }} />}
       {tvOpen && <TvLink code={code} defaultSound={false} beat={tvBeat(data?.playback)} onClose={() => setTvOpen(false)} />}
       {historyOpen && <History code={code} name={session.name} onClose={() => setHistoryOpen(false)} onChanged={refresh} />}
 

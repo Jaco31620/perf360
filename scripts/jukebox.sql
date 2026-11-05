@@ -538,3 +538,25 @@ grant select on public.jukebox_catalog to service_role;
 update public.jukebox_works
   set year_checked_at = null, year_suggest = null, year_suggest_src = null
   where year_suggest_src is distinct from 'manual';
+
+-- v34 (05/11/2026) : signalements de la régie (🚩 Signaler) : problèmes vus en
+-- soirée sur une vidéo, traités plus tard dans le super-admin (file
+-- « 🚩 Signalements »). song_key : version du catalogue (null : titre ajouté
+-- par lien, hors mémoire). position : seconde de lecture au moment du clic.
+create table if not exists public.jukebox_reports (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid references public.jukebox_sessions(id) on delete set null,
+  session_name text,
+  track_title text,
+  video_id text not null,
+  song_key text,
+  reasons text[] not null default '{}',
+  comment text,
+  position real,
+  status text not null default 'open' check (status in ('open', 'done', 'rejected')),
+  created_at timestamptz not null default now(),
+  decided_at timestamptz
+);
+create index if not exists jukebox_reports_open_idx on public.jukebox_reports (status, song_key);
+alter table public.jukebox_reports enable row level security;
+grant all on public.jukebox_reports to service_role;

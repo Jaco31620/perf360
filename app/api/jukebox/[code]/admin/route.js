@@ -21,6 +21,8 @@
  *   videos { id }          → autres vidéos possibles pour ce titre (« Mauvaise vidéo ? »)
  *   replaceVideo { id, videoId } → changer la vidéo d'un titre (en attente ou en
  *                            cours) et corriger la mémoire des titres
+ *   reportInfo { id }      → version du catalogue de ce titre (libellés de 🚩 Signaler)
+ *   report { id, reasons, comment } → signaler un problème sur la vidéo (super-admin, plus tard)
  *   remove { id }          → retirer un titre en attente
  *   reset                  → vider la file (titre en cours compris ; l'historique reste)
  *   theme { palette?, title?, message? } → thème de la soirée (fonction « thème »)
@@ -46,6 +48,7 @@ import { logEvent, actorOf } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { soireeVideoChange } from "@/lib/jukeboxChanges";
+import { createReport, versionOfTrack } from "@/lib/jukeboxReports";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
 import { adminAccess, ensureRegieCode, listDevices, createJoinPass, revokeDevice, resetRegieCode } from "@/lib/jukeboxAccess";
 import { loadSession, publicSession, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
@@ -280,6 +283,26 @@ export async function POST(req, { params }) {
         ev = { kind: "video_changed", data: { title: `${t.channel} – ${t.title}`, video: video.id } };
         await after();
         return Response.json({ ok: true, memory });
+      }
+      case "reportInfo":
+      case "report": {
+        const { data: t, error } = await tracks().select("*").eq("session_id", s.id).eq("id", String(body.id || "")).maybeSingle();
+        if (error) throw error;
+        if (!t) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+        const mode = publicSession(s).searchMode;
+        if (body.action === "reportInfo") {
+          const v = await versionOfTrack(t, mode).catch(() => null);
+          return Response.json({ ok: true, known: !!v, validated: !!v?.validated, lyrics: !!v?.lyrics });
+        }
+        // titre en cours : seconde de lecture au moment du signalement (temps mort, coupure…)
+        const position = t.status === "playing" ? playPos(s, t) : null;
+        let err;
+        try { err = await createReport(s, t, mode, { reasons: body.reasons, comment: body.comment, position }); }
+        catch (e) { return Response.json({ error: /jukebox_reports/.test(e.message || "") ? "Signalements pas encore activés (SQL v34)." : e.message }, { status: 500 }); }
+        if (err) return Response.json({ error: err }, { status: 422 });
+        ev = { kind: "reported", data: { title: `${t.channel} – ${t.title}`, reasons: (body.reasons || []).join(", ") } }; live = null;
+        await after();
+        return Response.json({ ok: true });
       }
       case "access":
         return Response.json({ ok: true, regieCode: await ensureRegieCode(s), devices: await listDevices(s, access.deviceId) });

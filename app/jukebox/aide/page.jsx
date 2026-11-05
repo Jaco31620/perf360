@@ -123,7 +123,7 @@ export default function JukeboxHelp() {
           <ul className="space-y-2 list-disc pl-5">
             <li><B>Lecture</B> : pause, titre suivant, volume, « jouer maintenant », réordonner la file.</li>
             <li><B>Ajouts des invités</B> : l'interrupteur en haut ouvre ou bloque les propositions (pratique pour un discours ou le gâteau).</li>
-            <li><B>Mauvaise vidéo ?</B> Touchez le titre pour choisir une autre version (live, clip, paroles…).</li>
+            <li><B>🚩 Signaler un problème</B> Touchez le titre (ou « Signaler un problème » sous le titre en cours) : pas la bonne chanson, mauvaise version, temps mort au début ou à la fin… Rien ne change pendant la soirée, l'administrateur corrige pour les suivantes. En dépannage, la même fenêtre permet de choisir tout de suite une autre vidéo.</li>
             <li><B>Un deuxième téléphone</B> pour piloter : régie, <B>🔧 Outils</B> → <B>📱 Ajouter un téléphone (QR code)</B>, ou tapez le <B>code régie</B> sur ce téléphone.</li>
           </ul>
           <Tip>Le code régie donne accès aux commandes : ne le donnez pas aux invités.</Tip>

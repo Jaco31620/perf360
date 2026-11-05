@@ -50,6 +50,9 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
     return () => { gone = true; try { player.current?.destroy(); } catch (e) { /* déjà détruit */ } player.current = null; };
   }, [song.videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // rognage changé ailleurs (raccourci d'un signalement…) : affiché sans recharger la vidéo
+  useEffect(() => { setStart(song.start || 0); setEnd(song.end ?? null); }, [song.start, song.end]);
+
   // suggestion SponsorBlock pour cette vidéo
   useEffect(() => {
     let gone = false;

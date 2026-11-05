@@ -6,9 +6,9 @@
  * /api/jukebox/<code>/admin.
  */
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check } from "lucide-react";
+import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check, Flag } from "lucide-react";
 import { authHeaders, participantId } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan } from "@/lib/jukebox";
+import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan, REPORT_REASONS } from "@/lib/jukebox";
 import { backdropClose } from "@/lib/backdrop";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
@@ -255,7 +255,7 @@ export function AddTrack({ code, queue, now, onAdded }) {
 }
 
 /* File d'attente : glisser-déposer (poignée ⠿, souris ou doigt), en tête,
- * jouer maintenant, retirer ; clic sur le titre : « Mauvaise vidéo ? ». */
+ * jouer maintenant, retirer ; clic sur le titre : 🚩 signaler un problème. */
 export function QueueList({ queue, act, playNow, onFixVideo }) {
   const [drag, setDrag] = useState(null); // { id, from, over }
   const dragRef = useRef(null);
@@ -303,9 +303,9 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
               {t.thumb && <img src={t.thumb} alt="" className="w-14 h-8 object-cover rounded shrink-0" />}
               <div className="flex-1 min-w-0">
                 {onFixVideo ? (
-                  <button onClick={() => onFixVideo(t)} title="Mauvaise vidéo ? Cliquer pour en choisir une autre"
+                  <button onClick={() => onFixVideo(t)} title="Un problème avec cette vidéo ? Cliquer pour le signaler"
                     className="group block max-w-full text-left text-sm font-semibold truncate hover:text-fuchsia-300">
-                    {t.title} <RefreshCw size={11} className="inline opacity-0 group-hover:opacity-60" />
+                    {t.title} <Flag size={11} className="inline opacity-0 group-hover:opacity-60" />
                   </button>
                 ) : <p className="text-sm font-semibold truncate">{t.title}</p>}
                 <p className="text-xs text-white/50 truncate">{[t.channel, t.author, formatDuration(Math.round(playSpan(t).length) || t.duration)].filter(Boolean).join(" · ")}</p>
@@ -407,8 +407,78 @@ export function VolumeSlider({ value, onChange, className = "" }) {
 export function FixVideoButton({ onClick }) {
   return (
     <button onClick={onClick} className="inline-flex items-center gap-1 text-xs text-white/50 hover:text-white underline">
-      <RefreshCw size={12} /> Mauvaise vidéo ?
+      <Flag size={12} /> Signaler un problème
     </button>
+  );
+}
+
+/* 🚩 Signaler : la régie coche ce qui ne va pas (plusieurs choix, commentaire
+ * libre) ; rien ne change en soirée, l'administrateur le traitera. Titre en
+ * cours : la seconde de lecture est notée (temps mort au début, à la fin…).
+ * onFix : changer la vidéo tout de suite (rare, en dépannage). */
+export function ReportDialog({ code, track, onClose, onFix }) {
+  const [info, setInfo] = useState(null);
+  const [picked, setPicked] = useState([]);
+  const [comment, setComment] = useState("");
+  const [state, setState] = useState(null); // null | "sending" | "sent" | message d'erreur
+  const post = async (body) => {
+    const res = await fetch(`/api/jukebox/${code}/admin`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(code) }, body: JSON.stringify(body),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || "Action impossible.");
+    return d;
+  };
+  useEffect(() => { post({ action: "reportInfo", id: track.id }).then(setInfo).catch(() => setInfo({})); }, [track.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // « paroles absentes » : pas pour une vidéo vérifiée comme sans paroles
+  const reasons = REPORT_REASONS.filter((r) => !r.lyricsOnly || !(info?.validated && !info?.lyrics));
+  const toggle = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const send = async () => {
+    setState("sending");
+    try { await post({ action: "report", id: track.id, reasons: picked, comment }); setState("sent"); setTimeout(onClose, 1200); }
+    catch (e) { setState(e.message); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-3" {...backdropClose(onClose)}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md max-h-[92vh] overflow-y-auto bg-gray-900 text-white rounded-3xl p-5 space-y-3 shadow-2xl border border-white/10">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">🚩 Signaler un problème</p>
+            <p className="font-bold leading-snug truncate">{track.title}</p>
+            <p className="text-xs text-white/50 truncate">{track.channel}</p>
+          </div>
+          <button onClick={onClose} className="text-white/40 hover:text-white text-2xl leading-none" aria-label="Fermer">×</button>
+        </div>
+        {state === "sent" ? (
+          <p className="text-center py-6 font-bold text-emerald-300">✓ Merci, c'est noté : l'administrateur s'en occupera.</p>
+        ) : (
+          <>
+            <div className="grid gap-1.5">
+              {reasons.map((r) => {
+                const on = picked.includes(r.id);
+                return (
+                  <button key={r.id} onClick={() => toggle(r.id)}
+                    className={`text-left text-sm rounded-xl px-3 py-2 border ${on ? "bg-fuchsia-600 border-fuchsia-400 font-bold" : "bg-white/5 border-white/10 hover:bg-white/10"}`}>
+                    {r.label}{r.hint && <span className={`text-xs ${on ? "text-white/80" : "text-white/40"}`}> · {r.hint}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={500} rows={2}
+              placeholder="Précision (facultatif) : « blabla jusqu'à 0:20 », « c'est la version live »…"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm placeholder-white/30 outline-none focus:border-fuchsia-400" />
+            {state && state !== "sending" && <p className="text-sm text-red-300">{state}</p>}
+            <button onClick={send} disabled={state === "sending" || (!picked.length && !comment.trim())}
+              className="w-full font-bold bg-fuchsia-600 hover:bg-fuchsia-500 rounded-full py-2.5 disabled:opacity-40">
+              {state === "sending" ? "Envoi…" : "Signaler"}
+            </button>
+            <p className="text-[11px] text-white/40 text-center">
+              Rien ne change pendant la soirée.{onFix && <> Besoin de changer la vidéo tout de suite ? <button onClick={() => onFix(track)} className="underline hover:text-white">Choisir une autre vidéo</button></>}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
