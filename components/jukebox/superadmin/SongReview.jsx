@@ -5,7 +5,7 @@ import { VideoChooser, VideoPreview, PreviewThumb } from "../Controls";
 import TrimPlayer from "../TrimPlayer";
 import { formatDuration } from "@/lib/jukebox";
 import { fmtDate, FR_NEXT, MODE_TAG, modeLabel, MODE_ICON } from "./shared";
-import { VideoTitle, SongName, SongTextForm } from "./SongParts";
+import { VideoTitle, SongName, SongTextForm, BlindLevel } from "./SongParts";
 import { backdropClose } from "@/lib/backdrop";
 import { FrFlag } from "../FrFlag";
 import { sameArtist } from "@/lib/jukeboxBlind";
@@ -50,6 +50,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
     validate: () => { if (song && !song.missing) runR({ action: "validateSong", key: song.key, validated: true }); go(1); },
     lyrics: () => song && runR({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
     blind: () => song && runR({ action: "blindSong", key: song.key, blind: !song.blind }),
+    hard: () => song?.blind && runR({ action: "difficultySong", key: song.key, hard: !(song.difficulty >= 2) }),
     fix: () => song && onFix(song),
     text: () => song && setEditing("title"),
     artist: () => setArtistOpen((v) => !v),
@@ -69,7 +70,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
       if (busy || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
       const a = actRef.current;
       const k = e.key.toLowerCase();
-      const fn = { v: a.validate, p: a.lyrics, b: a.blind, c: a.fix, o: a.forget, t: a.text, r: a.retitle, a: a.artist, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
+      const fn = { v: a.validate, p: a.lyrics, b: a.blind, e: a.hard, c: a.fix, o: a.forget, t: a.text, r: a.retitle, a: a.artist, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
       if (fn) { e.preventDefault(); fn(); }
     };
     window.addEventListener("keydown", onKey);
@@ -173,6 +174,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   🕵️ {song.blind ? "Blind test" : "Pas au blind"}<Key k="B" />
                   <span className="block text-[10px] font-semibold opacity-80">pour la chanson · joue {song.mode === "clip" && (songs || []).some((x) => x.workId === song.workId && x.mode === "normal" && !x.missing) ? "la version Paroles" : song.mode === "karaoke" ? "Paroles ou Clip" : `cette version`}</span>
                 </button>
+                {song.blind && <div className="col-span-2"><BlindLevel song={song} run={runR} big /></div>}
                 <button onClick={act.fix} className={tool}>🎬 {song.missing ? "Remplacer vidéo" : "Changer vidéo"}<Key k="C" /></button>
                 <button onClick={act.text} className={tool} title="Corriger l'interprète ou le titre affichés (faute, majuscules, mention en trop), sans changer de titre ni de vidéo">✎ Texte<Key k="T" /></button>
                 <button onClick={act.artist} className={`${tool} ${artistOpen ? "!bg-fuchsia-100 text-fuchsia-800" : ""}`} title="Autres titres de cet interprète en mémoire, pour comparer (orthographe, doublons)">👤 Interprète<Key k="A" /></button>

@@ -452,3 +452,26 @@ grant usage, select on sequence public.jukebox_events_id_seq to service_role;
 alter table public.jukebox_trims add column if not exists kind text not null default '';
 alter table public.jukebox_trims drop constraint if exists jukebox_trims_pkey;
 alter table public.jukebox_trims add primary key (video_id, kind);
+
+-- v30 (05/11/2026) : difficulté au blind test (étiquette de la CHANSON).
+-- 0 = normal (par défaut), 2 = très difficile (🎓) : exclu de la pioche, sauf
+-- si la soirée l'inclut (au plus 1 titre sur N). difficulty_checked : niveau
+-- décidé dans le super-admin (le titre ne revient plus dans « À reclasser »).
+alter table public.jukebox_works add column if not exists difficulty smallint not null default 0;
+alter table public.jukebox_works add column if not exists difficulty_checked boolean not null default false;
+create or replace view public.jukebox_catalog with (security_invoker = true) as
+select
+  'w:' || w.id || ':' || v.kind as key,
+  w.id as work_id,
+  v.kind as mode,
+  (select min(a.deezer_id) from public.jukebox_work_aliases a where a.work_id = w.id) as deezer_id,
+  v.video_id, v.duration, v.video_title, v.video_channel, v.lyrics, v.validated, v.missing,
+  v.confidence, v.source, v.checked_at, v.created_at,
+  w.label, w.artist_fix, w.title_fix, w.isrc, w.song_duration, w.year, w.lang, w.country, w.fr,
+  w.enriched_at, w.rank, w.plays, w.blind,
+  null::text as merged_into,
+  w.difficulty, w.difficulty_checked
+from public.jukebox_versions v
+join public.jukebox_works w on w.id = v.work_id;
+revoke all on public.jukebox_catalog from anon, authenticated;
+grant select on public.jukebox_catalog to service_role;

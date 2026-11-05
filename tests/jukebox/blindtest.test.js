@@ -12,7 +12,7 @@ const song = (id, label, extra = {}) => ({ key: `w:${id}:normal`, work_id: `w${i
 
 /* Monte la mémoire (titres blind test), l'historique de la soirée, et
  * renvoie les titres insérés par topUpBlind. */
-async function draw({ songs, tracks = [] }) {
+async function draw({ songs, tracks = [], blind = {} }) {
   vi.resetModules(); // taggedSongs() garde la mémoire 30 s en cache : module neuf à chaque tirage
   const inserted = [];
   sb = fakeSupabase(({ table, op }) => {
@@ -22,7 +22,7 @@ async function draw({ songs, tracks = [] }) {
     return { data: null, error: null };
   });
   const { topUpBlind } = await import("@/lib/jukeboxBlindServer");
-  const n = await topUpBlind(session);
+  const n = await topUpBlind({ ...session, options: { ...session.options, blind: { ...session.options.blind, ...blind } } });
   return { n, inserted };
 }
 
@@ -108,6 +108,53 @@ describe("tirage du blind test (topUpBlind / pickIndex)", () => {
     const tracks = [{ video_id: "vid00000001", channel: "Queen", status: "played", participant_id: "x", created_at: "2026-01-01T20:00:00Z", played_at: "2026-01-01T20:00:00Z", position: 1 }];
     const { inserted } = await draw({ songs, tracks });
     expect(inserted.map((r) => r.video_id)).toEqual(["vid00000002"]);
+  });
+});
+
+describe("titres très difficiles (🎓)", () => {
+  const played = (video, min) => ({ video_id: video, channel: "X", status: "played", participant_id: "blind-auto", created_at: `2026-01-01T20:${min}:00Z`, played_at: `2026-01-01T20:${min}:00Z`, position: 1 });
+  it("exclus par défaut", async () => {
+    const songs = [song(1, "Queen – Bohemian Rhapsody"), song(2, "Obscur – Face B", { difficulty: 2 }), song(3, "ABBA – Waterloo")];
+    const { inserted } = await draw({ songs });
+    expect(inserted.map((r) => r.video_id).sort()).toEqual(["vid00000001", "vid00000003"]);
+  });
+  it("inclus au plus 1 sur 5 : pas de très difficile si l'un des 4 derniers l'était", async () => {
+    const songs = [song(1, "Queen – Bohemian Rhapsody"), song(2, "Obscur – Face B", { difficulty: 2 }), song(3, "ABBA – Waterloo"), song(4, "Muse – Uprising")];
+    const tracks = [played("vid00000099", "01"), played("hardvideo01", "02"), played("vid00000098", "03")];
+    const songs2 = [...songs, { ...song(9, "Rare – Titre", { difficulty: 2 }), video_id: "hardvideo01" }];
+    for (const r of [0, 0.4, 0.999]) {
+      vi.spyOn(Math, "random").mockReturnValue(r);
+      const { inserted } = await draw({ songs: songs2, tracks, blind: { hard: 5 } });
+      vi.restoreAllMocks();
+      expect(inserted.map((x) => x.video_id)).not.toContain("vid00000002");
+    }
+  });
+  it("inclus : pioché quand aucun des derniers ne l'était, jamais deux d'affilée", async () => {
+    const songs = [song(1, "Obscur – Face B", { difficulty: 2 }), song(2, "Rare – Autre", { difficulty: 2 }), song(3, "ABBA – Waterloo")];
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const { inserted } = await draw({ songs, blind: { hard: 3 } });
+    expect(inserted.map((x) => x.video_id)).toEqual(["vid00000001", "vid00000003"]);
+  });
+  it("plus que des très difficiles : la pioche continue quand même", async () => {
+    const songs = [song(1, "Obscur – Face B", { difficulty: 2 }), song(2, "Rare – Autre", { difficulty: 2 })];
+    const { n } = await draw({ songs, blind: { hard: 10 } });
+    expect(n).toBe(2);
+  });
+  it("helpers : hardAllowed, rerankReason, réglage normalisé", async () => {
+    const { hardAllowed, rerankReason, normalizeBlind } = await import("@/lib/jukeboxBlind");
+    expect(hardAllowed([], 0)).toBe(false);
+    expect(hardAllowed([], 5)).toBe(true);
+    expect(hardAllowed([true, false, false, false, false], 5)).toBe(true); // 4 derniers sans
+    expect(hardAllowed([true, false, false, false], 5)).toBe(false); // 2 sur 5 sinon
+    expect(hardAllowed([false, true, false, false], 5)).toBe(false);
+    expect(normalizeBlind({ hard: 5 }).hard).toBe(5);
+    expect(normalizeBlind({ hard: 7 }).hard).toBe(0);
+    expect(normalizeBlind({}).hard).toBe(0);
+    expect(rerankReason({ n: 7, found: 0 }, 0)).toBe(null); // pas assez de réponses
+    expect(rerankReason({ n: 10, found: 2 }, 0)).toBe("hard");
+    expect(rerankReason({ n: 10, found: 3 }, 0)).toBe(null);
+    expect(rerankReason({ n: 10, found: 7 }, 2)).toBe("easy");
+    expect(rerankReason({ n: 10, found: 2 }, 2)).toBe(null);
   });
 });
 

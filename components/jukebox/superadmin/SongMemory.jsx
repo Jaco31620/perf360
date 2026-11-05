@@ -5,7 +5,7 @@ import { VideoPreview, PreviewThumb } from "../Controls";
 import { SEARCH_MODES, formatDuration } from "@/lib/jukebox";
 import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } from "./shared";
-import { VideoTitle, SongName, SongTextForm } from "./SongParts";
+import { VideoTitle, SongName, SongTextForm, BlindLevel } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
 import { FrFlag } from "../FrFlag";
@@ -24,6 +24,7 @@ function applySong(list, body) {
     }));
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
+    case "difficultySong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, difficulty: body.hard ? 2 : 0, difficultyChecked: true, rerank: null } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
     case "trimVideo": return list.map((s) => (s.videoId === body.videoId && (!body.kind || s.mode === body.kind) ? { ...s, start: body.start || 0, end: body.end ?? null, trimKind: body.kind || null } : s)); // rognage propre à la version
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
@@ -59,7 +60,7 @@ const CONFIDENCE = {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["lyrics", "📝 Avec paroles"]];
+const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["rerank", "📊 À reclasser"], ["lyrics", "📝 Avec paroles"]];
 /* Tri : critère + sens (bouton à côté) ; libellés du sens selon le critère : [normal, inversé]. */
 const SORTS = [["added", "Date d'ajout"], ["plays", "Écoutes"], ["rank", "Popularité"], ["year", "Année"], ["alpha", "Alphabétique"]];
 const SORT_DIR = {
@@ -332,6 +333,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               </span>
             )}
           </div>
+          {status === "rerank" && <p className="text-xs text-gray-500">Titres du blind test d'après les réponses des invités (au moins 8) : <b>normaux trouvés par moins d'1 joueur sur 4</b> — à passer 🎓 très difficile ? — et <b>très difficiles trouvés par 7 joueurs sur 10</b> ou plus — à repasser normal ? Choisissez, ou « Garder ainsi » : le titre ne revient plus ici.</p>}
           {status === "suspect" && <p className="text-xs text-gray-500">Titres non validés dont la vidéo semble ne pas correspondre : durée très différente du titre, titre absent de la vidéo, version live, reprise… Vérifiez-les puis validez ou changez la vidéo.</p>}
           {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
@@ -348,7 +350,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : status === "changes" ? "Aucun changement de vidéo proposé 👍" : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : status === "changes" ? "Aucun changement de vidéo proposé 👍" : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test, ou tout est déjà vu 👍" : "Aucun titre."}</p>
           ) : (
             <ul className="space-y-3">
               {groupByWork(songs).map((g, gi, all) => {
@@ -379,7 +381,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                       <div className="flex-1 min-w-[160px]">
                         <p className="font-bold text-sm text-gray-900 leading-snug">{head.artist} – {head.title}</p>
                         <p className="text-[11px] text-gray-400">
-                          {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? "🕵️ blind test" : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
+                          {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? `🕵️ blind test${head.difficulty >= 2 ? " 🎓" : ""}${head.blindStat ? ` (trouvé ${head.blindStat.found}/${head.blindStat.n})` : ""}` : null, head.rerank ? <b key="rr" className="text-orange-600">📊 à reclasser</b> : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
                             .filter(Boolean).flatMap((x, k) => (k ? [" · ", x] : [x]))}
                         </p>
                       </div>
@@ -426,6 +428,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
                             🕵️ Blind test{head.blind ? "" : " ?"}
                           </button>
+                          <BlindLevel song={head} run={run} />
                           {head.plays > 0 && <span className="text-[11px] font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {head.plays}×</span>}
                         </div>
                       </div>

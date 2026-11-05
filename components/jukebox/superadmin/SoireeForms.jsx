@@ -4,7 +4,7 @@ import { useState } from "react";
 import { inviteText } from "@/lib/jukeboxMessages";
 import ShareActions from "../ShareActions";
 import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel } from "@/lib/jukebox";
-import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS } from "@/lib/jukeboxBlind";
+import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, BLIND_HARD_CHOICES } from "@/lib/jukeboxBlind";
 
 /* Création d'une soirée déjà configurée : fonctions activées et réglages de
  * la régie (modifiables ensuite par la régie, sauf les fonctions). */
@@ -140,6 +140,11 @@ export function SoireeFields({ value, features, onChange }) {
           </label>
           <label className={check}><span className="pl-6">Vidéos validées seulement</span>
             <input type="checkbox" checked={!!v.blind.validated} onChange={(e) => blind("validated", e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
+          </label>
+          <label className={check}><span className="pl-6">🎓 Titres très difficiles</span>
+            <select value={v.blind.hard || 0} onChange={(e) => blind("hard", Number(e.target.value))} className={select}>
+              {BLIND_HARD_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.v ? `Inclus, au plus ${c.label}` : "Exclus"}</option>)}
+            </select>
           </label>
         </>
       )}

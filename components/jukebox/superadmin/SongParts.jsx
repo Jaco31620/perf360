@@ -55,3 +55,34 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRe
     </form>
   );
 }
+
+/* Blind test : étiquette 🎓 très difficile (chanson), réponses des invités
+ * (« trouvé par 2 sur 11 ») et, si les stats le suggèrent, reclassement ou
+ * « Garder ainsi » (le titre ne revient plus dans 📊 À reclasser). */
+export function BlindLevel({ song, run, big = false }) {
+  if (!song.blind) return null;
+  const hard = song.difficulty >= 2;
+  const st = song.blindStat;
+  const pill = big ? "text-sm px-3 py-2 rounded-xl" : "text-[11px] px-2 py-0.5 rounded-full";
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <button onClick={() => run({ action: "difficultySong", key: song.key, hard: !hard })}
+        title={hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : titre normal" : "Cliquer si ce titre est trop dur pour une soirée grand public"}
+        className={`font-bold whitespace-nowrap ${pill} ${hard ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
+        🎓 {hard ? "Très difficile" : "Normal"}{big && <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">E</kbd>}
+      </button>
+      {st && (
+        <span className={`text-[11px] font-bold ${song.rerank ? "text-orange-600" : "text-gray-500"}`} title="Réponses des invités au blind test : artiste ou titre trouvé">
+          trouvé par {st.found} sur {st.n}
+        </span>
+      )}
+      {song.rerank && (
+        <>
+          <span className="text-[11px] text-orange-600">· {song.rerank === "hard" ? "peu trouvé : très difficile ?" : "souvent trouvé : normal ?"}</span>
+          <button onClick={() => run({ action: "difficultySong", key: song.key, hard })} title="Garder ce niveau : le titre ne reviendra plus dans « À reclasser »"
+            className="text-[11px] font-bold text-gray-500 underline hover:text-gray-900">Garder ainsi</button>
+        </>
+      )}
+    </span>
+  );
+}

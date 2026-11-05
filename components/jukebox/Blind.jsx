@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import { Check, X } from "lucide-react";
-import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
+import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, BLIND_HARD_CHOICES, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { FrFlag } from "./FrFlag";
 
 /* `controls` : boutons lecture / pause et suivant (régie ou télécommande). */
@@ -26,15 +26,17 @@ function newGame(act) {
   act("blindNewGame", { scores: confirm("Remettre aussi les scores à zéro ?") });
 }
 const playedCount = (settings, facets) => Array.isArray(facets)
-  ? sumWhere(facets, { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated }, true) : 0;
+  ? sumWhere(facets, filtersOf(settings), true) : 0;
+const filtersOf = (settings) => ({ lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated, hard: settings.hard || 0 });
 
 /* Résumé de la pioche : « 42 titres · 🇫🇷 · 80's, 90's · validées ». */
 function pickSummary(settings, facets) {
-  const f = { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated };
+  const f = filtersOf(settings);
   const parts = [];
   if (f.lang !== "all") parts.push(BLIND_LANGS.find((l) => l.id === f.lang)?.label);
   parts.push(f.decades.length ? f.decades.map(decadeLabel).join(", ") : "toutes décennies");
   if (f.validated) parts.push("validées");
+  if (f.hard) parts.push(`🎓 au plus ${BLIND_HARD_CHOICES.find((c) => c.v === f.hard)?.label}`);
   return { available: Array.isArray(facets) ? sumWhere(facets, f) : null, text: parts.join(" · ") };
 }
 
@@ -237,14 +239,15 @@ function BlindLive({ settings, blind, now, act, controls }) {
 /* Filtres de la pioche (langue, décennies, vidéos validées) avec le nombre
  * de titres correspondant à chaque choix. Les nombres sont calculés ici à
  * partir des comptes du serveur (`facets`) : ils changent dès le clic. */
-const sumWhere = (facets, f, played = false) => (facets || []).reduce((n, [decade, fr, validated, used, count]) =>
+const sumWhere = (facets, f, played = false) => (facets || []).reduce((n, [decade, fr, validated, used, count, hard]) =>
   ((f.lang === "all" || (f.lang === "fr" ? fr === true : fr === false))
     && (!f.decades.length || f.decades.includes(decade))
     && (!f.validated || validated)
+    && (f.hard > 0 || !hard)
     && used === played ? n + count : n), 0);
 
 function BlindFilters({ settings, facets, onChange }) {
-  const f = { lang: settings.lang, decades: settings.decades || [], validated: !!settings.validated };
+  const f = filtersOf(settings);
   const set = onChange; // affiché tout de suite (useAdminActions), enregistré dans l'ordre des clics
   const toggleDecade = (d) => set({ decades: f.decades.includes(d) ? f.decades.filter((x) => x !== d) : [...f.decades, d].sort() });
 
@@ -254,6 +257,7 @@ function BlindFilters({ settings, facets, onChange }) {
   const tagged = (facets || []).reduce((n, c) => n + c[4], 0);
   const noYear = f.decades.length ? sumWhere(facets, { ...f, decades: [null] }) + sumWhere(facets, { ...f, decades: [null] }, true) : 0;
   const count = (patch) => (ready ? sumWhere(facets, { ...f, ...patch }) : null);
+  const hardCount = (facets || []).reduce((n, c) => n + (c[5] ? c[4] : 0), 0); // très difficiles, tous filtres confondus
   const badge = (n, active) => n == null ? null : (
     <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-white/40"}`}>{n}</span>
   );
@@ -307,6 +311,19 @@ function BlindFilters({ settings, facets, onChange }) {
         <span className="text-white/70">Vidéos validées seulement{badge(count({ validated: true }), f.validated)}</span>
         <span className={`font-bold px-3 py-1 rounded-full text-xs ${f.validated ? "bg-fuchsia-600" : "bg-white/10"}`}>{f.validated ? "Oui" : "Non"}</span>
       </button>
+
+      <div>
+        <p className="text-xs text-white/50 mb-1">🎓 Titres très difficiles{hardCount > 0 && <span className="text-white/30"> ({hardCount} en mémoire)</span>}</p>
+        <div className="grid grid-cols-4 gap-1 bg-white/10 rounded-xl p-0.5">
+          {BLIND_HARD_CHOICES.map((c) => (
+            <button key={c.v} onClick={() => c.v !== f.hard && set({ hard: c.v })}
+              title={c.v ? `Inclus : au plus ${c.label} titres piochés` : "Jamais piochés"}
+              className={`px-1 py-1.5 rounded-lg font-bold text-xs ${c.v === f.hard ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
+              {c.v ? c.label : "Exclus"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {ready && available === 0 && (
         <p className="text-xs text-red-300">Aucun titre ne correspond : élargissez les filtres, ou marquez d'autres titres 🕵️ dans le super-admin.</p>

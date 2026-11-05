@@ -44,7 +44,7 @@ import { listActivations, createActivation, updateActivation, deleteActivation, 
 import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
-import { loadSession, songsCount, songStatusCounts, listSongs, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, songsCount, songStatusCounts, listSongs, withBlindStats, difficultySong, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
@@ -92,6 +92,7 @@ export async function GET(req) {
       if (params.status !== "dups" && !params.keys) songs = await withSiblings(songs); // vue par chanson : ses autres versions
       await withTrims(songs, (t) => [t.mode]); // rognage de chaque version (propre à la version, sinon commun)
       await withChanges(songs); // propositions en attente, dernier changement
+      await withBlindStats(songs); // blind test : réponses des invités (trouvé par X sur Y)
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }
     const [config, sessions, searches, songs, prefill, enrich, catalog] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null), catalogState().catch(() => null)]);
@@ -158,6 +159,10 @@ export async function POST(req) {
       }
       case "blindSong":
         await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
+      case "difficultySong":
+        try { await difficultySong(body.key, !!body.hard); }
+        catch (e) { return Response.json({ error: /difficulty/.test(e.message || "") ? "Appliquez d'abord le SQL v30 (difficulté au blind test)." : e.message }, { status: 422 }); }
         return Response.json({ ok: true });
       case "lyricsSong":
         await lyricsSong(body.key, body.lyrics);

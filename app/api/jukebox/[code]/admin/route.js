@@ -381,11 +381,11 @@ export async function POST(req, { params }) {
         }
         const next = body.action === "blindReveal"
           ? { ...blind, revealedId: cur?.id || null, revealedPos: cur ? playPos(s, cur) : null }
-          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "reveal", "after", "lang", "decades", "validated", "holdId"].filter((k) => k in body).map((k) => [k, body[k]])) });
+          : normalizeBlind({ ...blind, ...Object.fromEntries(["on", "mode", "reveal", "after", "lang", "decades", "validated", "hard", "holdId"].filter((k) => k in body).map((k) => [k, body[k]])) });
         res = await update({ options: { ...(s.options || {}), blind: next } });
         if (!res.error && body.action === "blind") {
           // arrêt ou filtres changés : titres piochés pas encore joués retirés, puis nouvelle pioche
-          if (["on", "lang", "decades", "validated"].some((k) => k in body)) await dropBlindPicks(s);
+          if (["on", "lang", "decades", "validated", "hard"].some((k) => k in body)) await dropBlindPicks(s);
           await topUpBlind({ ...s, options: { ...(s.options || {}), blind: next } });
         }
         break;
