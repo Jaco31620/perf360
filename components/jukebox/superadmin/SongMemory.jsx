@@ -453,12 +453,12 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                   {status !== "dups" && openId !== g.id ? (
                   /* ligne compacte : la chanson et l'état de ses versions ; clic → carte complète */
                   <li>
-                    <div role="button" tabIndex={0} onClick={() => { commitDraft(); setOpenId(g.id); setPreview(null); }}
+                    <div role="button" tabIndex={0} onClick={() => { if (window.getSelection()?.toString()) return; /* texte sélectionné (copier) : on n'ouvre pas */ commitDraft(); setOpenId(g.id); setPreview(null); }}
                       onKeyDown={(e) => { if (e.key === "Enter") { commitDraft(); setOpenId(g.id); setPreview(null); } }}
                       className={`w-full flex flex-wrap items-center gap-3 rounded-2xl border px-3 py-2 cursor-pointer hover:border-fuchsia-300 hover:bg-fuchsia-50/30 ${g.rows.some((x) => !x.sibling && !x.validated) ? "border-gray-200" : "border-gray-100"}`}>
                       <img src={`https://i.ytimg.com/vi/${(rowOf("normal") || head).videoId}/default.jpg`} alt="" className="w-14 h-10 object-cover rounded-lg shrink-0" />
                       <div className="flex-1 min-w-[160px]">
-                        <p className="font-bold text-sm text-gray-900 leading-snug">{head.artist} – {head.title}</p>
+                        <p className="font-bold text-sm text-gray-900 leading-snug select-text">{head.artist} – {head.title}</p>
                         <p className="text-[11px] text-gray-400">
                           {[head.year, head.fr === true ? <FrFlag key="fr" /> : head.fr === false ? "🌍" : null, head.blind ? `🕵️ blind test${head.difficulty >= 2 ? " 🎓" : ""}${head.blindStat ? ` (trouvé ${head.blindStat.found}/${head.blindStat.n})` : ""}` : null, head.rerank ? <b key="rr" className="text-orange-600">📊 à reclasser</b> : null, head.plays > 0 ? `▶ ${head.plays}×` : null]
                             .filter(Boolean).flatMap((x, k) => (k ? [" · ", x] : [x]))}
