@@ -56,31 +56,49 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRe
   );
 }
 
-/* Blind test : étiquette 🎓 très difficile (chanson), réponses des invités
- * (« trouvé par 2 sur 11 ») et, si les stats le suggèrent, reclassement ou
- * « Garder ainsi » (le titre ne revient plus dans 📊 À reclasser). */
-export function BlindLevel({ song, run, big = false }) {
-  if (!song.blind) return null;
+/* Étiquette blind test de la chanson, d'un seul tenant : 🕵️ (utilisée ou non)
+ * et, collé à droite quand elle l'est, 🎓 très difficile (au plus 1 titre sur
+ * N, si la soirée les inclut). `sub` : précision sous 🕵️ (revue). */
+export function BlindTag({ song, onBlind, onHard, big = false, sub = null, blindKey, hardKey }) {
   const hard = song.difficulty >= 2;
-  const st = song.blindStat;
-  const pill = big ? "text-sm px-3 py-2 rounded-xl" : "text-[11px] px-2 py-0.5 rounded-full";
+  const k = (x) => x && <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{x}</kbd>;
+  const size = big ? "text-sm px-3 py-2" : "text-[11px] px-2 py-0.5";
+  const r = big ? "rounded-xl" : "rounded-full";
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      <button onClick={() => run({ action: "difficultySong", key: song.key, hard: !hard })}
-        title={hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : titre normal" : "Cliquer si ce titre est trop dur pour une soirée grand public"}
-        className={`font-bold whitespace-nowrap ${pill} ${hard ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
-        🎓 {hard ? "Très difficile" : "Normal"}{big && <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">E</kbd>}
+    <span className={`inline-flex items-stretch ${big ? "w-full" : ""}`}>
+      <button onClick={onBlind} title={song.blind ? "Retirer du blind test (étiquette de la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)"}
+        className={`font-bold whitespace-nowrap text-left ${size} ${song.blind ? `bg-violet-600 text-white ${big ? "rounded-l-xl flex-1" : "rounded-l-full"}` : `bg-gray-100 text-gray-400 hover:text-gray-700 ${r} ${big ? "flex-1" : ""}`}`}>
+        🕵️ {song.blind ? "Blind test" : big ? "Pas au blind" : "Blind test ?"}{k(blindKey)}
+        {sub && <span className="block text-[10px] font-semibold opacity-80">{sub}</span>}
       </button>
-      {st && (
-        <span className={`text-[11px] font-bold ${song.rerank ? "text-orange-600" : "text-gray-500"}`} title="Réponses des invités au blind test : artiste ou titre trouvé">
-          trouvé par {st.found} sur {st.n}
-        </span>
+      {song.blind && (
+        <button onClick={onHard}
+          title={hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : difficulté normale" : "Difficulté normale. Cliquer si ce titre est trop dur pour une soirée grand public"}
+          className={`font-bold whitespace-nowrap border-l ${size} ${big ? "rounded-r-xl" : "rounded-r-full"} ${hard ? "bg-violet-900 text-white border-violet-400" : "bg-violet-100 text-violet-500 hover:text-violet-800 border-violet-300"}`}>
+          🎓{hard ? " Très difficile" : big ? " Difficile ?" : " ?"}{k(hardKey)}
+        </button>
       )}
+    </span>
+  );
+}
+
+/* Réponses des invités au blind test (« trouvé par 2 sur 11 ») et, si les
+ * stats le suggèrent, reclassement ou « Garder ainsi » (le titre ne revient
+ * plus dans 📊 À reclasser). */
+export function BlindStat({ song, run }) {
+  const st = song.blindStat;
+  if (!song.blind || !st) return null;
+  const hard = song.difficulty >= 2;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1 text-[11px]">
+      <span className={`font-bold ${song.rerank ? "text-orange-600" : "text-violet-700/70"}`} title="Réponses des invités au blind test : artiste ou titre trouvé">
+        trouvé par {st.found} sur {st.n}
+      </span>
       {song.rerank && (
         <>
-          <span className="text-[11px] text-orange-600">· {song.rerank === "hard" ? "peu trouvé : très difficile ?" : "souvent trouvé : normal ?"}</span>
+          <span className="text-orange-600">· {song.rerank === "hard" ? "peu trouvé : très difficile ?" : "souvent trouvé : normal ?"}</span>
           <button onClick={() => run({ action: "difficultySong", key: song.key, hard })} title="Garder ce niveau : le titre ne reviendra plus dans « À reclasser »"
-            className="text-[11px] font-bold text-gray-500 underline hover:text-gray-900">Garder ainsi</button>
+            className="font-bold text-gray-500 underline hover:text-gray-900">Garder ainsi</button>
         </>
       )}
     </span>

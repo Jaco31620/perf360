@@ -5,7 +5,7 @@ import { VideoPreview, PreviewThumb } from "../Controls";
 import { SEARCH_MODES, formatDuration } from "@/lib/jukebox";
 import { DECADES, decadeLabel } from "@/lib/jukeboxBlind";
 import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } from "./shared";
-import { VideoTitle, SongName, SongTextForm, BlindLevel } from "./SongParts";
+import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
 import { FrFlag } from "../FrFlag";
@@ -423,12 +423,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                             {head.fr === true ? <><FrFlag /> Français</> : head.fr === false ? "🌍 International" : head.enriched ? "❓ langue" : "…"}
                           </button>
-                          <button onClick={() => run({ action: "blindSong", key: head.key, blind: !head.blind })}
-                            title={head.blind ? "Retirer du blind test" : "Utiliser dans le blind test (version paroles, sinon clip)"}
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-400 hover:text-gray-700"}`}>
-                            🕵️ Blind test{head.blind ? "" : " ?"}
-                          </button>
-                          <BlindLevel song={head} run={run} />
+                          <BlindTag song={head} onBlind={() => run({ action: "blindSong", key: head.key, blind: !head.blind })}
+                            onHard={() => run({ action: "difficultySong", key: head.key, hard: !(head.difficulty >= 2) })} />
+                          <BlindStat song={head} run={run} />
                           {head.plays > 0 && <span className="text-[11px] font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {head.plays}×</span>}
                         </div>
                       </div>
