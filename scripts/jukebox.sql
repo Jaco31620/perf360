@@ -560,3 +560,13 @@ create table if not exists public.jukebox_reports (
 create index if not exists jukebox_reports_open_idx on public.jukebox_reports (status, song_key);
 alter table public.jukebox_reports enable row level security;
 grant all on public.jukebox_reports to service_role;
+
+-- v35 (05/11/2026) : vidéos ajoutées par lien YouTube en soirée (hors mémoire
+-- des titres) que le super-admin a choisi d'ignorer (pas une chanson, sans
+-- intérêt) : elles ne reviennent plus dans « 🔗 Ajoutés par lien ».
+create table if not exists public.jukebox_link_ignore (
+  video_id text primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.jukebox_link_ignore enable row level security;
+grant all on public.jukebox_link_ignore to service_role;

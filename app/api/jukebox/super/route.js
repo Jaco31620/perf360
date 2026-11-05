@@ -41,6 +41,7 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims, saveTrim, sponsorBlockTrim } from "@/lib/jukeboxTrim";
 import { withReports, reportedKeys, closeReports } from "@/lib/jukeboxReports";
+import { linkedVideos, linkedCount, addLink, ignoreLink } from "@/lib/jukeboxLinks";
 import { withChanges, proposedKeys, acceptChange, rejectChange, revertChange, logChange } from "@/lib/jukeboxChanges";
 import { listActivations, createActivation, updateActivation, deleteActivation, ActivationError } from "@/lib/jukeboxActivation";
 import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
@@ -82,8 +83,10 @@ export async function GET(req) {
       const keys = params.status === "changes" ? await proposedKeys() : params.status === "reports" ? await reportedKeys() : undefined;
       return Response.json(await songFacets({ ...params, status: keys ? "all" : params.status, keys }), { headers: { "cache-control": "no-store" } });
     }
+    if (url.searchParams.get("links")) // vidéos ajoutées par lien, hors mémoire
+      return Response.json(await linkedVideos(), { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songCounts"))
-      return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length, reports: (await reportedKeys()).length }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ ...(await songStatusCounts()), changes: (await proposedKeys()).length, reports: (await reportedKeys()).length, links: await linkedCount() }, { headers: { "cache-control": "no-store" } });
     if (url.searchParams.get("songs")) {
       const params = Object.fromEntries(url.searchParams);
       // titres précis (revue : titres sortis du filtre en cours de route)
@@ -166,6 +169,15 @@ export async function POST(req) {
       }
       case "blindSong":
         await blindSong(body.key, body.blind);
+        return Response.json({ ok: true });
+      case "addLink": { // vidéo ajoutée par lien → version d'une chanson de la mémoire
+        const r = await addLink(body);
+        if (r.error) return Response.json({ error: r.error }, { status: 422 });
+        return Response.json({ ok: true, ...r });
+      }
+      case "ignoreLink":
+        try { await ignoreLink(body.videoId); }
+        catch (e) { return Response.json({ error: /jukebox_link_ignore/.test(e.message || "") ? "Appliquez d'abord le SQL v35." : e.message }, { status: 422 }); }
         return Response.json({ ok: true });
       case "closeReports": // signalements d'une version : traités ou refusés
         await closeReports(body.key, body.status);

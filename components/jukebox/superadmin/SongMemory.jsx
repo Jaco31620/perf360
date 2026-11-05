@@ -9,6 +9,7 @@ import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat, YearSuggest } 
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser, ReportInfo } from "./SongReview";
 import { BlindReview } from "./BlindReview";
+import { LinkQueue } from "./LinkQueue";
 import { FrFlag } from "../FrFlag";
 
 /* Mémoire des titres : effet immédiat d'une action sur la liste affichée.
@@ -70,6 +71,7 @@ const QUEUES = [
   { id: "missing", label: "⚠️ Vidéos disparues", help: "Vidéos qui n'existent plus ou ne sont plus lisibles : choisissez-en une autre (Remplacer la vidéo) avant la prochaine soirée." },
   { id: "changes", label: "🔄 Proposés en soirée", help: "« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis adoptez la vidéo proposée (pour toutes les soirées) ou gardez l'actuelle." },
   { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
+  { id: "links", label: "🔗 Ajoutés par lien", list: true, help: "Vidéos ajoutées par lien YouTube en soirée : hors mémoire (pas de fiche Deezer), elles ne profitent ni de la validation, ni du rognage, ni du blind test. Ajoutez-les à la mémoire en choisissant la chanson, ou ignorez-les (pas une chanson, sans intérêt)." },
   { id: "dups", label: "👯 Doublons", list: true, help: "Chansons qui se ressemblent (même vidéo, même ISRC, ou interprète et titre proches). « Garder celui-ci » fusionne le groupe : écoutes, étiquettes, versions et fiches Deezer sont regroupées sur la chanson gardée." },
   { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui très difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
   { id: "rerank", label: "📊 Blind à reclasser", blind: true, help: "D'après les réponses des invités reçues depuis votre décision (au moins 8) : difficulté normale mais trouvé par moins d'1 joueur sur 4, ou très difficile mais trouvé par 7 sur 10 ou plus. Reclassez, ou gardez : seules les réponses suivantes compteront." },
@@ -343,7 +345,8 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               )}
             </div>
           )}
-          {(() => {
+          {view === "todo" && status === "links" && <LinkQueue call={call} onChanged={() => { loadCounts(); onChanged?.(); }} />}
+          {!(view === "todo" && status === "links") && (() => {
             const main = (songs || []).filter((s) => !s.sibling); // lignes du filtre (sans les autres versions ajoutées pour la vue par chanson)
             if (view === "todo") {
               if (!qdef || qdef.list || !main.length) return null; // doublons : directement dans la liste
@@ -372,7 +375,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               </div>
             );
           })()}
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className={`flex flex-wrap gap-2 items-center ${view === "todo" && status === "links" ? "hidden" : ""}`}>
             {view === "catalog" && (
               <>
                 <select value={status} onChange={(e) => setStatus(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${status !== "all" ? ACTIVE : "border-gray-200"}`}>
@@ -430,7 +433,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
             }} />}
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
-          {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
+          {view === "todo" && status === "links" ? null : songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
             <p className="text-sm text-gray-400">{view === "todo" ? (q || mode || lang || decade ? "Rien dans cette file avec ces filtres." : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test 👍" : "File vide 🎉") : "Aucun titre."}</p>
           ) : (
             <ul className="space-y-3">
