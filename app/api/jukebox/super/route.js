@@ -205,6 +205,7 @@ export async function POST(req) {
         return Response.json({ ok: true, ...(await enrichSongs(45e3)), pending: await enrichPending() });
       case "validateSong":
         await validateSong(body.key, body.validated);
+        if (body.validated) await closeReports(body.key, "done").catch(() => {}); // vérifiée : ses signalements sont traités
         return Response.json({ ok: true });
       case "prefill": {
         if (body.playlist) {

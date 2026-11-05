@@ -23,7 +23,7 @@ function applySong(list, body) {
     case "songText": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
       ...s, fixed: true, ...(body.artist.trim() ? { artist: body.artist.trim() } : {}), ...(body.title.trim() ? { title: body.title.trim() } : {}),
     }));
-    case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
+    case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated, ...(body.validated ? { reports: undefined } : {}) } : s)); // validée : signalements traités
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
     case "answerYear": return list.map((s) => (s.key.split(":")[1] !== id ? s : { ...s, year: body.accept && s.yearSuggest ? s.yearSuggest : s.year, yearSuggest: null }));
     case "closeReports": return list.map((s) => (s.key === body.key ? { ...s, reports: undefined } : s));
@@ -66,7 +66,7 @@ const CONFIDENCE = {
 /* Files « À traiter », de la plus urgente à la moins urgente. blind : revue
  * blind test (une décision par chanson) ; list : traitée dans la liste. */
 const QUEUES = [
-  { id: "reports", label: "🚩 Signalements", help: "Problèmes signalés par la régie pendant une soirée (pas la bonne chanson, mauvaise version, temps mort…). La revue montre ce qui a été signalé et à quel moment ; pour un temps mort, « Démarrer à » / « Arrêter à » coupe à la seconde signalée. Puis ✓ Traité ou ✕ Pas d'accord." },
+  { id: "reports", label: "🚩 Signalements", help: "Problèmes signalés par la régie pendant une soirée (pas la bonne chanson, mauvaise version, temps mort…). Seulement les vidéos déjà validées : celles pas encore vérifiées restent dans « Versions à valider », avec le signalement affiché dans la revue. Corrigez (vidéo, rognage, texte…) puis ✓ Traité ou ✕ Pas d'accord." },
   { id: "missing", label: "⚠️ Vidéos disparues", help: "Vidéos qui n'existent plus ou ne sont plus lisibles : choisissez-en une autre (Remplacer la vidéo) avant la prochaine soirée." },
   { id: "changes", label: "🔄 Proposés en soirée", help: "« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis adoptez la vidéo proposée (pour toutes les soirées) ou gardez l'actuelle." },
   { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
@@ -551,7 +551,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                           </div>
                           <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                           <ChangeInfo song={s} run={changeRun} onCompare={() => reviewFrom(s.key)} />
-                          <ReportInfo song={s} run={run} compact />
+                          <ReportInfo song={s} run={run} />
                         </div>
                         <div className="flex flex-wrap gap-1.5 shrink-0">
                           {!s.missing && (

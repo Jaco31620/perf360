@@ -413,8 +413,7 @@ export function FixVideoButton({ onClick }) {
 }
 
 /* 🚩 Signaler : la régie coche ce qui ne va pas (plusieurs choix, commentaire
- * libre) ; rien ne change en soirée, l'administrateur le traitera. Titre en
- * cours : la seconde de lecture est notée (temps mort au début, à la fin…).
+ * libre) ; rien ne change en soirée, l'administrateur le traitera.
  * onFix : changer la vidéo tout de suite (rare, en dépannage). */
 export function ReportDialog({ code, track, onClose, onFix }) {
   const [info, setInfo] = useState(null);

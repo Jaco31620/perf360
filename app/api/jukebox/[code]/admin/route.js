@@ -294,10 +294,8 @@ export async function POST(req, { params }) {
           const v = await versionOfTrack(t, mode).catch(() => null);
           return Response.json({ ok: true, known: !!v, validated: !!v?.validated, lyrics: !!v?.lyrics });
         }
-        // titre en cours : seconde de lecture au moment du signalement (temps mort, coupure…)
-        const position = t.status === "playing" ? playPos(s, t) : null;
         let err;
-        try { err = await createReport(s, t, mode, { reasons: body.reasons, comment: body.comment, position }); }
+        try { err = await createReport(s, t, mode, { reasons: body.reasons, comment: body.comment }); }
         catch (e) { return Response.json({ error: /jukebox_reports/.test(e.message || "") ? "Signalements pas encore activés (SQL v34)." : e.message }, { status: 500 }); }
         if (err) return Response.json({ error: err }, { status: 422 });
         ev = { kind: "reported", data: { title: `${t.channel} – ${t.title}`, reasons: (body.reasons || []).join(", ") } }; live = null;
