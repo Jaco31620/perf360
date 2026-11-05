@@ -62,20 +62,35 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRe
 export function BlindTag({ song, onBlind, onHard, big = false, sub = null, blindKey, hardKey }) {
   const hard = song.difficulty >= 2;
   const k = (x) => x && <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{x}</kbd>;
-  const size = big ? "text-sm px-3 py-2" : "text-[11px] px-2 py-0.5";
-  const r = big ? "rounded-xl" : "rounded-full";
+  // 🎓 : ambre quand très difficile (l'émoji, sombre, reste lisible), violet pâle sinon
+  const hardCls = hard ? "bg-amber-300 text-amber-950 hover:bg-amber-200" : "bg-violet-100 text-violet-600 hover:text-violet-900";
+  const hardTitle = hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : difficulté normale"
+    : "Difficulté normale. Cliquer si ce titre est trop dur pour une soirée grand public";
+  if (big) { // revue : 🕵️ en haut, 🎓 en bandeau dessous (tient dans la case)
+    return (
+      <div className={`flex flex-col min-w-0 rounded-xl overflow-hidden ${song.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-500"}`}>
+        <button onClick={onBlind} title={song.blind ? "Retirer du blind test (étiquette de la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)"}
+          className={`flex-1 text-sm font-bold px-3 py-2 text-left min-w-0 ${song.blind ? "" : "hover:text-gray-900"}`}>
+          🕵️ {song.blind ? "Blind test" : "Pas au blind"}{k(blindKey)}
+          {sub && <span className="block text-[10px] font-semibold opacity-80">{sub}</span>}
+        </button>
+        {song.blind && (
+          <button onClick={onHard} title={hardTitle} className={`text-xs font-bold px-3 py-1 text-left ${hardCls}`}>
+            🎓 {hard ? "Très difficile" : "Difficulté normale"}{k(hardKey)}
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
-    <span className={`inline-flex items-stretch ${big ? "w-full" : ""}`}>
+    <span className="inline-flex items-stretch">
       <button onClick={onBlind} title={song.blind ? "Retirer du blind test (étiquette de la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)"}
-        className={`font-bold whitespace-nowrap text-left ${size} ${song.blind ? `bg-violet-600 text-white ${big ? "rounded-l-xl flex-1" : "rounded-l-full"}` : `bg-gray-100 text-gray-400 hover:text-gray-700 ${r} ${big ? "flex-1" : ""}`}`}>
-        🕵️ {song.blind ? "Blind test" : big ? "Pas au blind" : "Blind test ?"}{k(blindKey)}
-        {sub && <span className="block text-[10px] font-semibold opacity-80">{sub}</span>}
+        className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap ${song.blind ? "bg-violet-600 text-white rounded-l-full" : "bg-gray-100 text-gray-400 hover:text-gray-700 rounded-full"}`}>
+        🕵️ {song.blind ? "Blind test" : "Blind test ?"}
       </button>
       {song.blind && (
-        <button onClick={onHard}
-          title={hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : difficulté normale" : "Difficulté normale. Cliquer si ce titre est trop dur pour une soirée grand public"}
-          className={`font-bold whitespace-nowrap border-l ${size} ${big ? "rounded-r-xl" : "rounded-r-full"} ${hard ? "bg-violet-900 text-white border-violet-400" : "bg-violet-100 text-violet-500 hover:text-violet-800 border-violet-300"}`}>
-          🎓{hard ? " Très difficile" : big ? " Difficile ?" : " ?"}{k(hardKey)}
+        <button onClick={onHard} title={hardTitle} className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap rounded-r-full ${hardCls}`}>
+          🎓{hard ? " Très difficile" : " ?"}
         </button>
       )}
     </span>
