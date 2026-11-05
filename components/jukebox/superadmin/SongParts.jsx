@@ -143,6 +143,10 @@ export function YearSuggest({ song, run, className = "" }) {
         className="font-bold bg-green-600 text-white px-2 py-0.5 rounded-full">✓ {song.yearSuggest}</button>
       <button onClick={stop(() => run({ action: "answerYear", key: song.key, accept: false }))}
         className="font-bold bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">✕ {song.year ? `garder ${song.year}` : "ignorer"}</button>
+      <button onClick={stop(() => {
+        const v = prompt(`Année de sortie de « ${song.artist} – ${song.title} »`, "");
+        if (v && v.trim()) run({ action: "songMeta", key: song.key, year: v.trim() }); // la proposition disparaît
+      })} title="Ni l'une ni l'autre : taper l'année" className="font-bold bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">✎ autre</button>
       <a href={`https://www.google.com/search?q=${encodeURIComponent(`${song.artist} ${song.title} année de sortie`)}`} target="_blank" rel="noreferrer"
         onClick={(e) => e.stopPropagation()} title="Chercher l'année sur le web (nouvel onglet)" className="font-bold text-gray-500 hover:text-gray-900 underline">🔎 chercher</a>
     </span>
