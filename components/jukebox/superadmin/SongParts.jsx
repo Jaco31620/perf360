@@ -56,27 +56,35 @@ export function SongTextForm({ song, onSave, onCancel, focus = "artist", draftRe
   );
 }
 
-/* Étiquette blind test de la chanson, d'un seul tenant : 🕵️ (utilisée ou non)
- * et, collé à droite quand elle l'est, 🎓 très difficile (au plus 1 titre sur
- * N, si la soirée les inclut). `sub` : précision sous 🕵️ (revue). */
-export function BlindTag({ song, onBlind, onHard, big = false, sub = null, blindKey, hardKey }) {
-  const hard = song.difficulty >= 2;
-  const k = (x) => x && <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{x}</kbd>;
+/* Décision blind test d'une chanson : 0 non, 1 oui, 2 oui très difficile. */
+export const blindLevel = (song) => (!song.blind ? 0 : song.difficulty >= 2 ? 2 : 1);
+
+/* Étiquette blind test de la chanson, d'un seul tenant : 🕵️ (oui / non / à
+ * décider) et, collé à droite quand c'est oui, 🎓 très difficile (pioché au
+ * plus 1 fois sur N, si la soirée les inclut). « Oui » d'avant la décision
+ * datée : joué, mais « à confirmer ». `sub` : précision sous 🕵️ (revue). */
+export function BlindTag({ song, onLevel, big = false, sub = null }) {
+  const lv = blindLevel(song);
+  const hard = lv === 2;
+  const pending = !song.blindDecided;
   // 🎓 : ambre quand très difficile (l'émoji, sombre, reste lisible), violet pâle sinon
   const hardCls = hard ? "bg-amber-300 text-amber-950 hover:bg-amber-200" : "bg-violet-100 text-violet-600 hover:text-violet-900";
   const hardTitle = hard ? "Très difficile : pioché seulement si la soirée inclut les titres très difficiles (au plus 1 sur N). Cliquer : difficulté normale"
     : "Difficulté normale. Cliquer si ce titre est trop dur pour une soirée grand public";
+  const label = song.blind ? "Blind test" : pending ? (big ? "Blind test : à décider" : "Blind test ?") : "Pas au blind";
+  const off = pending ? "bg-white text-gray-500 border border-dashed border-gray-300 hover:text-gray-900" : "bg-gray-100 text-gray-400 hover:text-gray-700";
+  const blindTitle = song.blind ? "Retirer du blind test (pour la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)";
+  const wait = pending && song.blind && <span className={`font-semibold opacity-80 ${big ? "text-xs" : "text-[10px]"}`}> · à confirmer</span>;
   if (big) { // revue : 🕵️ en haut, 🎓 en bandeau dessous (tient dans la case)
     return (
-      <div className={`flex flex-col min-w-0 rounded-xl overflow-hidden ${song.blind ? "bg-violet-600 text-white" : "bg-gray-100 text-gray-500"}`}>
-        <button onClick={onBlind} title={song.blind ? "Retirer du blind test (étiquette de la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)"}
-          className={`flex-1 text-sm font-bold px-3 py-2 text-left min-w-0 ${song.blind ? "" : "hover:text-gray-900"}`}>
-          🕵️ {song.blind ? "Blind test" : "Pas au blind"}{k(blindKey)}
+      <div className={`flex flex-col min-w-0 rounded-xl overflow-hidden ${song.blind ? "bg-violet-600 text-white" : off}`}>
+        <button onClick={() => onLevel(song.blind ? 0 : 1)} title={blindTitle} className="flex-1 text-sm font-bold px-3 py-2 text-left min-w-0">
+          🕵️ {label}{wait}
           {sub && <span className="block text-[10px] font-semibold opacity-80">{sub}</span>}
         </button>
         {song.blind && (
-          <button onClick={onHard} title={hardTitle} className={`text-xs font-bold px-3 py-1 text-left ${hardCls}`}>
-            🎓 {hard ? "Très difficile" : "Difficulté normale"}{k(hardKey)}
+          <button onClick={() => onLevel(hard ? 1 : 2)} title={hardTitle} className={`text-xs font-bold px-3 py-1 text-left ${hardCls}`}>
+            🎓 {hard ? "Très difficile" : "Difficulté normale"}
           </button>
         )}
       </div>
@@ -84,12 +92,12 @@ export function BlindTag({ song, onBlind, onHard, big = false, sub = null, blind
   }
   return (
     <span className="inline-flex items-stretch">
-      <button onClick={onBlind} title={song.blind ? "Retirer du blind test (étiquette de la chanson : toutes ses versions)" : "Utiliser dans le blind test (version paroles, sinon clip)"}
-        className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap ${song.blind ? "bg-violet-600 text-white rounded-l-full" : "bg-gray-100 text-gray-400 hover:text-gray-700 rounded-full"}`}>
-        🕵️ {song.blind ? "Blind test" : "Blind test ?"}
+      <button onClick={() => onLevel(song.blind ? 0 : 1)} title={blindTitle}
+        className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap ${song.blind ? "bg-violet-600 text-white rounded-l-full" : `${off} rounded-full`}`}>
+        🕵️ {label}{wait}
       </button>
       {song.blind && (
-        <button onClick={onHard} title={hardTitle} className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap rounded-r-full ${hardCls}`}>
+        <button onClick={() => onLevel(hard ? 1 : 2)} title={hardTitle} className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap rounded-r-full ${hardCls}`}>
           🎓{hard ? " Très difficile" : " ?"}
         </button>
       )}
@@ -98,12 +106,11 @@ export function BlindTag({ song, onBlind, onHard, big = false, sub = null, blind
 }
 
 /* Réponses des invités au blind test (« trouvé par 2 sur 11 ») et, si les
- * stats le suggèrent, reclassement ou « Garder ainsi » (le titre ne revient
- * plus dans 📊 À reclasser). */
+ * réponses reçues depuis la décision le suggèrent, reclassement ou « Garder
+ * ainsi » (seules les réponses suivantes compteront). */
 export function BlindStat({ song, run }) {
   const st = song.blindStat;
   if (!song.blind || !st) return null;
-  const hard = song.difficulty >= 2;
   return (
     <span className="inline-flex flex-wrap items-center gap-1 text-[11px]">
       <span className={`font-bold ${song.rerank ? "text-orange-600" : "text-violet-700/70"}`} title="Réponses des invités au blind test : artiste ou titre trouvé">
@@ -112,7 +119,7 @@ export function BlindStat({ song, run }) {
       {song.rerank && (
         <>
           <span className="text-orange-600">· {song.rerank === "hard" ? "peu trouvé : très difficile ?" : "souvent trouvé : normal ?"}</span>
-          <button onClick={() => run({ action: "difficultySong", key: song.key, hard })} title="Garder ce niveau : le titre ne reviendra plus dans « À reclasser »"
+          <button onClick={() => run({ action: "blindDecide", key: song.key, level: blindLevel(song) })} title="Garder ce niveau : seules les prochaines réponses compteront"
             className="font-bold text-gray-500 underline hover:text-gray-900">Garder ainsi</button>
         </>
       )}

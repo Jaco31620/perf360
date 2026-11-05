@@ -21,10 +21,9 @@ export function SongVideoChooser({ song, call, onClose, onDone }) {
 }
 
 /* Revue des titres à vérifier, un par un : vidéo lancée à 40 s (là où les
- * paroles s'affichent), étiquettes en grand, raccourcis clavier. Les actions
+ * paroles s'affichent), étiquettes en grand. Les actions
  * passent par run() (effet immédiat sur la liste de la mémoire). */
 const REVIEW_START = 40;
-const Key = ({ k }) => <kbd className="ml-1.5 text-[10px] font-mono bg-black/10 rounded px-1 py-0.5">{k}</kbd>;
 
 export function SongReview({ review, setReview, songs, run, changeRun, call, editYear, busy, onFix, onRetitle, onClose }) {
   const [compare, setCompare] = useState(null); // vidéo proposée en aperçu (à la place de l'actuelle)
@@ -49,8 +48,6 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
   const act = {
     validate: () => { if (song && !song.missing) runR({ action: "validateSong", key: song.key, validated: true }); go(1); },
     lyrics: () => song && runR({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
-    blind: () => song && runR({ action: "blindSong", key: song.key, blind: !song.blind }),
-    hard: () => song?.blind && runR({ action: "difficultySong", key: song.key, hard: !(song.difficulty >= 2) }),
     fix: () => song && onFix(song),
     text: () => song && setEditing("title"),
     artist: () => setArtistOpen((v) => !v),
@@ -63,16 +60,9 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
     next: () => go(1),
     prev: () => go(-1),
   };
-  const actRef = useRef(act);
-  actRef.current = act;
+  // Échap : fermer (pas d'autres raccourcis)
   useEffect(() => {
-    const onKey = (e) => {
-      if (busy || e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-      const a = actRef.current;
-      const k = e.key.toLowerCase();
-      const fn = { v: a.validate, p: a.lyrics, b: a.blind, e: a.hard, c: a.fix, o: a.forget, t: a.text, r: a.retitle, a: a.artist, arrowright: a.next, n: a.next, arrowleft: a.prev, escape: onClose }[k];
-      if (fn) { e.preventDefault(); fn(); }
-    };
+    const onKey = (e) => { if (!busy && e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
@@ -135,7 +125,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     onSave={(artist, title) => { setEditing(null); run({ action: "songText", key: song.key, artist, title }); }} />
                 ) : (
                   <SongName song={song} wrap className="text-lg font-bold leading-snug" artistActive={artistOpen}
-                    artistHint="Autres titres de cet interprète (A)" titleHint="Corriger le texte (T)"
+                    artistHint="Autres titres de cet interprète" titleHint="Corriger le texte"
                     onArtist={() => setArtistOpen((v) => !v)} onTitle={() => setEditing("title")} onEdit={() => setEditing("artist")} />
                 )}
                 {song.suspect?.length > 0 && (
@@ -167,35 +157,35 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
 
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={act.lyrics} className={`text-sm font-bold px-3 py-2 rounded-xl text-left ${song.lyrics ? "bg-amber-500 text-white" : "bg-gray-100 text-gray-500 hover:text-gray-900"}`}>
-                  📝 {song.lyrics ? "Avec paroles" : "Sans paroles"}<Key k="P" />
+                  📝 {song.lyrics ? "Avec paroles" : "Sans paroles"}
                 </button>
-                <BlindTag song={song} big onBlind={act.blind} onHard={act.hard} blindKey="B" hardKey="E"
+                <BlindTag song={song} big onLevel={(level) => runR({ action: "blindDecide", key: song.key, level })}
                   sub={<>pour la chanson · joue {song.mode === "clip" && (songs || []).some((x) => x.workId === song.workId && x.mode === "normal" && !x.missing) ? "la version Paroles" : song.mode === "karaoke" ? "Paroles ou Clip" : `cette version`}</>} />
                 {song.blindStat && <div className="col-span-2 -mt-1"><BlindStat song={song} run={runR} /></div>}
-                <button onClick={act.fix} className={tool}>🎬 {song.missing ? "Remplacer vidéo" : "Changer vidéo"}<Key k="C" /></button>
-                <button onClick={act.text} className={tool} title="Corriger l'interprète ou le titre affichés (faute, majuscules, mention en trop), sans changer de titre ni de vidéo">✎ Texte<Key k="T" /></button>
-                <button onClick={act.artist} className={`${tool} ${artistOpen ? "!bg-fuchsia-100 text-fuchsia-800" : ""}`} title="Autres titres de cet interprète en mémoire, pour comparer (orthographe, doublons)">👤 Interprète<Key k="A" /></button>
-                <button onClick={act.retitle} className={tool} title="Mauvais titre Deezer (reprise, compilation…) : rattacher au bon titre">🔁 Autre titre<Key k="R" /></button>
+                <button onClick={act.fix} className={tool}>🎬 {song.missing ? "Remplacer vidéo" : "Changer vidéo"}</button>
+                <button onClick={act.text} className={tool} title="Corriger l'interprète ou le titre affichés (faute, majuscules, mention en trop), sans changer de titre ni de vidéo">✎ Texte</button>
+                <button onClick={act.artist} className={`${tool} ${artistOpen ? "!bg-fuchsia-100 text-fuchsia-800" : ""}`} title="Autres titres de cet interprète en mémoire, pour comparer (orthographe, doublons)">👤 Interprète</button>
+                <button onClick={act.retitle} className={tool} title="Mauvais titre Deezer (reprise, compilation…) : rattacher au bon titre">🔁 Autre titre</button>
               </div>
 
               <div className="flex gap-2">
-                <button onClick={act.prev} disabled={i === 0} title="Précédent (←)" className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl disabled:opacity-40">←</button>
-                <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl whitespace-nowrap">Passer<Key k="→" /></button>
+                <button onClick={act.prev} disabled={i === 0} title="Précédent" className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl disabled:opacity-40">←</button>
+                <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl whitespace-nowrap">Passer</button>
                 <button onClick={act.validate} disabled={song.missing}
                   className="flex-1 text-sm font-bold text-white bg-green-600 hover:bg-green-700 px-3 py-3 rounded-2xl disabled:opacity-40 whitespace-nowrap">
-                  ✓ Valider et suivant<Key k="V" />
+                  ✓ Valider et suivant
                 </button>
               </div>
               <div className="flex items-start gap-3">
                 <details className="flex-1 text-xs text-gray-400">
                   <summary className="cursor-pointer hover:text-gray-600">Aide</summary>
                   <p className="mt-1">
-                    Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. <b>⏮ Début ici / Fin ici ⏭</b> (D / F) rognent l'habillage de la vidéo (intro, logo, scène parlée) : réglé pour cette vidéo dans toutes les soirées. <b>✎ Texte</b> corrige l'interprète
+                    Validé = la vidéo est le bon titre, dans la bonne version, et les étiquettes sont justes. <b>⏮ Début ici / Fin ici ⏭</b> rognent l'habillage de la vidéo (intro, logo, scène parlée) : réglé pour cette vidéo dans toutes les soirées. <b>✎ Texte</b> corrige l'interprète
                     ou le titre affichés (faute, majuscules ; clic sur le titre aussi) ; <b>👤 Interprète</b> montre ses autres titres en mémoire (clic sur
-                    son nom aussi) ; <b>🔁 Autre titre</b> rattache au bon titre Deezer (reprise, compilation). On reste dans la revue. Échap pour fermer.
+                    son nom aussi) ; <b>🔁 Autre titre</b> rattache au bon titre Deezer (reprise, compilation). On reste dans la revue.
                   </p>
                 </details>
-                <button onClick={act.forget} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg shrink-0">Oublier<Key k="O" /></button>
+                <button onClick={act.forget} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg shrink-0">Oublier</button>
               </div>
             </div>
           </div>

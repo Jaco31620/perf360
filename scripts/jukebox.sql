@@ -475,3 +475,32 @@ from public.jukebox_versions v
 join public.jukebox_works w on w.id = v.work_id;
 revoke all on public.jukebox_catalog from anon, authenticated;
 grant select on public.jukebox_catalog to service_role;
+
+-- v31 (05/11/2026) : décision blind test datée (super-admin, file « 🕵️ Blind
+-- test à décider »). blind_decided_at null = pas encore décidé : les « oui »
+-- d'avant restent joués (à confirmer), les autres attendent une décision.
+-- blind_seen / blind_seen_found : réponses des invités (total, trouvées) au
+-- moment de la décision — « À reclasser » ne regarde que les suivantes.
+alter table public.jukebox_works add column if not exists blind_decided_at timestamptz;
+alter table public.jukebox_works add column if not exists blind_seen int;
+alter table public.jukebox_works add column if not exists blind_seen_found int;
+-- déjà marqués 🎓 (v30) : décidés
+update public.jukebox_works set blind_decided_at = now()
+  where blind_decided_at is null and (difficulty_checked or difficulty >= 2);
+create or replace view public.jukebox_catalog with (security_invoker = true) as
+select
+  'w:' || w.id || ':' || v.kind as key,
+  w.id as work_id,
+  v.kind as mode,
+  (select min(a.deezer_id) from public.jukebox_work_aliases a where a.work_id = w.id) as deezer_id,
+  v.video_id, v.duration, v.video_title, v.video_channel, v.lyrics, v.validated, v.missing,
+  v.confidence, v.source, v.checked_at, v.created_at,
+  w.label, w.artist_fix, w.title_fix, w.isrc, w.song_duration, w.year, w.lang, w.country, w.fr,
+  w.enriched_at, w.rank, w.plays, w.blind,
+  null::text as merged_into,
+  w.difficulty, w.difficulty_checked,
+  w.blind_decided_at, w.blind_seen, w.blind_seen_found
+from public.jukebox_versions v
+join public.jukebox_works w on w.id = v.work_id;
+revoke all on public.jukebox_catalog from anon, authenticated;
+grant select on public.jukebox_catalog to service_role;

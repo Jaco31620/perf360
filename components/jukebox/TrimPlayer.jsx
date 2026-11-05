@@ -2,7 +2,7 @@
 /*
  * Jukebox — aperçu d'une vidéo avec rognage (revue du super-admin) : lecteur
  * YouTube (API IFrame, pour lire la position), boutons « Début ici » /
- * « Fin ici » (touches D et F), réglage fin ±1 s, écoute du début et de la
+ * « Fin ici », réglage fin ±1 s, écoute du début et de la
  * fin de la partie gardée, suggestion SponsorBlock (passages sans musique,
  * intro, outro) à appliquer d'un clic. Chaque changement est enregistré
  * (onSave) : il vaut pour cette vidéo dans toutes les soirées.
@@ -19,7 +19,6 @@ const fmt = (x) => {
 };
 const r1 = (x) => Math.round(x * 10) / 10;
 
-const Key = ({ k }) => <kbd className="ml-1 text-[10px] font-mono bg-black/10 rounded px-1">{k}</kbd>;
 
 export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, busy = false }) {
   const box = useRef(null);
@@ -105,18 +104,8 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
   const setStartHere = () => save(pos(), end);
   const setEndHere = () => save(start, pos());
 
-  const keys = useRef({});
-  keys.current = busy ? {} : { d: setStartHere, f: setEndHere }; // fenêtre ouverte par-dessus : touches et lecture en pause
+  // fenêtre ouverte par-dessus : lecture en pause
   useEffect(() => { if (busy) try { player.current?.pauseVideo?.(); } catch (e) { /* lecteur pas prêt */ } }, [busy]);
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-      const fn = keys.current[e.key.toLowerCase()];
-      if (fn) { e.preventDefault(); fn(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const keptEnd = end ?? duration;
   const hintUseful = hint && (hint.start > 0 || hint.end != null) && (Math.abs(hint.start - start) > 0.5 || (hint.end ?? null) !== (end ?? null));
@@ -148,7 +137,7 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
       )}
       <div className="flex flex-wrap items-center gap-1">
         <button onClick={() => play(start)} disabled={!ready} className={btn} title="Écouter depuis le début gardé">▶ Écouter début</button>
-        <button onClick={setStartHere} disabled={!ready} className={btn} title="La soirée démarrera la vidéo ici">⏮ Début ici<Key k="D" /></button>
+        <button onClick={setStartHere} disabled={!ready} className={btn} title="La soirée démarrera la vidéo ici">⏮ Début ici</button>
         <span className="flex items-center gap-0.5 text-xs">
           <button onClick={() => save(start - 1, end)} className={nudge} aria-label="Début −1 s">−1</button>
           <b className="tabular-nums">{fmt(start)}</b>
@@ -160,7 +149,7 @@ export default function TrimPlayer({ song, previewStart = 0, onSave, suggest, bu
           <b className="tabular-nums" title={end == null ? "Jusqu'au bout de la vidéo" : undefined}>{end == null ? formatDuration(duration) : fmt(end)}</b>
           {end != null && <button onClick={() => save(start, end + 1)} className={nudge} aria-label="Fin +1 s">+1</button>}
         </span>
-        <button onClick={setEndHere} disabled={!ready} className={btn} title="La soirée passera au titre suivant ici">Fin ici ⏭<Key k="F" /></button>
+        <button onClick={setEndHere} disabled={!ready} className={btn} title="La soirée passera au titre suivant ici">Fin ici ⏭</button>
         <button onClick={() => play(keptEnd - 6, end == null ? null : end)} disabled={!ready} className={btn} title="Écouter les 6 dernières secondes gardées">▶ Écouter fin</button>
         <span className="text-[11px] text-gray-400 ml-auto tabular-nums">{fmt(r1(now))}</span>
       </div>

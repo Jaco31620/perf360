@@ -8,6 +8,7 @@ import { FR_NEXT, MODE_TAG, MODE_ICON, modeLabel, SearchInput, VersionLabel } fr
 import { VideoTitle, SongName, SongTextForm, BlindTag, BlindStat } from "./SongParts";
 import { Backup } from "./Backup";
 import { SongVideoChooser, SongReview, ChangeInfo, SongTitleChooser } from "./SongReview";
+import { BlindReview } from "./BlindReview";
 import { FrFlag } from "../FrFlag";
 
 /* Mémoire des titres : effet immédiat d'une action sur la liste affichée.
@@ -24,7 +25,7 @@ function applySong(list, body) {
     }));
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated } : s));
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
-    case "difficultySong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, difficulty: body.hard ? 2 : 0, difficultyChecked: true, rerank: null } : s));
+    case "blindDecide": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: body.level > 0, difficulty: body.level === 2 ? 2 : 0, blindDecided: true, rerank: null } : s));
     case "lyricsSong": return list.map((s) => (s.key === body.key ? { ...s, lyrics: !!body.lyrics } : s));
     case "trimVideo": return list.map((s) => (s.videoId === body.videoId && (!body.kind || s.mode === body.kind) ? { ...s, start: body.start || 0, end: body.end ?? null, trimKind: body.kind || null } : s)); // rognage propre à la version
     case "songMeta": return list.map((s) => (s.key.split(":")[1] !== id ? s : {
@@ -60,7 +61,19 @@ const CONFIDENCE = {
  * (à vérifier / validés, mode), aperçu de la vidéo retenue, validation,
  * changement de vidéo (repasse « à vérifier »), oubli (le titre sera recherché à
  * nouveau au prochain ajout). */
-const STATUS_FILTERS = [["all", "Tous"], ["changes", "🔄 Proposés"], ["todo", "À vérifier"], ["suspect", "🧐 Suspects"], ["dups", "👯 Doublons"], ["missing", "⚠️ À remplacer"], ["ok", "Validés"], ["blind", "🕵️ Blind test"], ["rerank", "📊 À reclasser"], ["lyrics", "📝 Avec paroles"]];
+/* Files « À traiter », de la plus urgente à la moins urgente. blind : revue
+ * blind test (une décision par chanson) ; list : traitée dans la liste. */
+const QUEUES = [
+  { id: "missing", label: "⚠️ Vidéos disparues", help: "Vidéos qui n'existent plus ou ne sont plus lisibles : choisissez-en une autre (Remplacer la vidéo) avant la prochaine soirée." },
+  { id: "changes", label: "🔄 Proposés en soirée", help: "« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis adoptez la vidéo proposée (pour toutes les soirées) ou gardez l'actuelle." },
+  { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
+  { id: "dups", label: "👯 Doublons", list: true, help: "Chansons qui se ressemblent (même vidéo, même ISRC, ou interprète et titre proches). « Garder celui-ci » fusionne le groupe : écoutes, étiquettes, versions et fiches Deezer sont regroupées sur la chanson gardée." },
+  { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui très difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
+  { id: "rerank", label: "📊 Blind à reclasser", blind: true, help: "D'après les réponses des invités reçues depuis votre décision (au moins 8) : difficulté normale mais trouvé par moins d'1 joueur sur 4, ou très difficile mais trouvé par 7 sur 10 ou plus. Reclassez, ou gardez : seules les réponses suivantes compteront." },
+  { id: "meta", label: "📅 Année ou langue manquante", help: "Chansons enrichies sans année ou sans langue trouvée (filtres du blind test et du catalogue invités) : cliquez l'année ou la langue pour la renseigner." },
+];
+const VERSION_FILTERS = [["all", "Toutes les vidéos"], ["todo", "Vidéos à vérifier"], ["ok", "Vidéos validées"], ["lyrics", "📝 Avec paroles"], ["missing", "⚠️ Vidéos disparues"]];
+const BLIND_FILTERS = [["", "Blind test : tous"], ["undecided", "🕵️ À décider"], ["yes", "🕵️ Oui"], ["hard", "🎓 Très difficile"], ["no", "Pas au blind"]];
 /* Tri : critère + sens (bouton à côté) ; libellés du sens selon le critère : [normal, inversé]. */
 const SORTS = [["added", "Date d'ajout"], ["plays", "Écoutes"], ["rank", "Popularité"], ["year", "Année"], ["alpha", "Alphabétique"]];
 const SORT_DIR = {
@@ -74,7 +87,9 @@ const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "�
 export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
+  const [view, setView] = useState("todo"); // todo : files à vider ; catalog : exploration
+  const [status, setStatus] = useState("todo");
+  const [blind, setBlind] = useState(""); // catalogue : filtre blind test
   const [sort, setSort] = useState("added");
   const [sortRev, setSortRev] = useState(false); // sens inversé (bouton à côté du tri)
   const [editing, setEditing] = useState(null); // clé du titre dont on corrige le texte
@@ -83,7 +98,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   useEffect(() => {
     if (!focus) return;
     setOpen(true);
+    setView("catalog");
     setStatus("all");
+    setBlind("");
     setQ("");
     setLang("");
     setDecade("");
@@ -121,7 +138,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   const load = useCallback(async () => {
     const started = Date.now();
     try {
-      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort, ...(sortRev ? { rev: "1" } : {}) });
+      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort, ...(blind ? { blind } : {}), ...(sortRev ? { rev: "1" } : {}) });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
@@ -130,7 +147,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
       if (started < lastAct.current) return;
       setSongs(d.songs);
       setExtra([]); // relus ci-dessous s'ils manquent (état à jour)
-      if (status !== "dups") fetch(`/api/jukebox/super?${new URLSearchParams({ facets: "1", q, status, mode, lang, decade })}`, {
+      if (status !== "dups") fetch(`/api/jukebox/super?${new URLSearchParams({ facets: "1", q, status, mode, lang, decade, ...(blind ? { blind } : {}) })}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       }).then((r) => (r.ok ? r.json() : null)).then((f) => f && setFacets(f)).catch(() => {});
       else setFacets(null);
@@ -139,7 +156,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, mode, lang, decade, sort, sortRev, loadCounts]);
+  }, [q, status, blind, mode, lang, decade, sort, sortRev, loadCounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -220,6 +237,18 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
       onChanged?.();
     } catch (e) { alert(e.message); } finally { setEnriching(false); }
   };
+  const qdef = view === "todo" ? QUEUES.find((x) => x.id === status) : null;
+  const todoTotal = QUEUES.reduce((n, x) => n + (counts[x.id] || 0), 0);
+  const switchView = (v) => {
+    if (v === view) return;
+    commitDraft();
+    setView(v);
+    setOpenId(null);
+    setBlind("");
+    setStatus(v === "catalog" ? "all" : (QUEUES.find((x) => counts[x.id] > 0) || QUEUES[2]).id);
+  };
+  // compteurs des files dès l'ouverture
+  useEffect(() => { loadCounts(); }, [loadCounts]);
   const editYear = (s) => {
     const v = prompt(`Année de sortie de « ${s.label} » (vide : inconnue)`, s.year || "");
     if (v !== null) run({ action: "songMeta", key: s.key, year: v.trim() });
@@ -234,11 +263,8 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
       {open && (
         <div className="px-5 pb-5 space-y-3">
           <p className="text-xs text-gray-500">
-            Vidéo YouTube retenue pour chaque titre et chaque mode (cliquez la miniature pour l'écouter ici). <b>Valider</b> confirme
-            qu'elle est bonne ; <b>Changer la vidéo</b> en choisit une autre, qui repasse « À vérifier » : testez-la (aperçu ouvert d'office) puis validez-la. Les corrections « Mauvaise vidéo ? » faites en régie arrivent aussi ici à vérifier ;
-            <b> Oublier</b> la fera rechercher à nouveau au prochain ajout. L'<b>année</b> et la <b>langue</b> (filtres du blind test)
-            sont trouvées automatiquement ; cliquez-les pour les corriger, comme le <b>titre</b> lui-même s'il désigne une reprise ou une compilation. <b>📝 Paroles</b> indique que la vidéo affiche les paroles
-            (deviné d'après son titre YouTube : vérifiez-le en validant).
+            Chaque chanson a ses versions (Paroles, Clip, Karaoké), chacune avec sa vidéo YouTube. <b>📥 À traiter</b> : les files à vider, une décision
+            à la fois. <b>🔎 Catalogue</b> : tout le reste, pour chercher et corriger au cas par cas.
           </p>
           {catalog && !catalog.works && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}{/* migration faite : encadré masqué */}
           {clips?.missing > 0 && <ClipScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
@@ -255,54 +281,73 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               )}
             </div>
           )}
-          {proposals > 0 && status !== "changes" && (
-            <div className="flex flex-wrap items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 text-sm">
-              <span className="flex-1 min-w-[200px] text-orange-900">
-                🔄 <b>{proposals}</b> titre{proposals > 1 ? "s" : ""} vérifié{proposals > 1 ? "s" : ""} avec une autre vidéo proposée en soirée.
-              </span>
-              <button onClick={() => setStatus("changes")} className="font-bold bg-orange-500 text-white px-3 py-1 rounded-full">Voir</button>
+          {/* deux écrans : files à vider (À traiter) / exploration (Catalogue) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-gray-100 rounded-2xl p-0.5 text-sm font-bold">
+              <button onClick={() => switchView("todo")} className={`px-4 py-1.5 rounded-xl ${view === "todo" ? "bg-fuchsia-600 text-white" : "text-gray-600 hover:text-gray-900"}`}>
+                📥 À traiter{todoTotal > 0 && <span className={`ml-1 ${view === "todo" ? "" : "text-fuchsia-600"}`}>({todoTotal})</span>}
+              </button>
+              <button onClick={() => switchView("catalog")} className={`px-4 py-1.5 rounded-xl ${view === "catalog" ? "bg-fuchsia-600 text-white" : "text-gray-600 hover:text-gray-900"}`}>🔎 Catalogue</button>
             </div>
-          )}
-          {status === "changes" && <p className="text-xs text-gray-500">« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis <b>adoptez</b> (la vidéo proposée devient celle de toutes les soirées, validée) ou <b>gardez l'actuelle</b>.</p>}
-          {(() => {
-            const main = (songs || []).filter((s) => !s.sibling); // lignes du filtre (sans les autres versions ajoutées pour la vue par chanson)
-            // à vérifier : trouvailles automatiques les plus sûres d'abord (🎯, 👍, 🤔), sinon l'ordre de la liste
-            const todo = main.filter((s) => !s.validated && !s.missing)
-              .map((s, k) => [s, k]).sort((x, y) => (y[0].confidence || 0) - (x[0].confidence || 0) || x[1] - y[1]).map(([s]) => s);
-            const shown = main.filter((s) => !s.missing);
-            if (!todo.length) return shown.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
-                <button onClick={() => { setPreview(null); setReview({ keys: shown.map((s) => s.key), i: 0 }); }}
-                  className="text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 px-4 py-1.5 rounded-full">
-                  ▶ Revue de la liste affichée ({shown.length})
-                </button>
-                <span className="text-xs text-gray-500">Rien à vérifier ici : la revue repasse les titres affichés (validés compris), pour rogner une vidéo par exemple.</span>
-              </div>
-            );
-            return (
-              <div className="flex flex-wrap items-center gap-3 bg-fuchsia-50 rounded-xl px-3 py-2">
-                <button onClick={() => { setPreview(null); setReview({ keys: todo.map((s) => s.key), i: 0 }); }}
-                  className="text-sm font-bold text-white bg-fuchsia-600 hover:bg-fuchsia-700 px-4 py-1.5 rounded-full">
-                  ▶ Revue des titres à vérifier ({todo.length})
-                </button>
-                <span className="text-xs text-fuchsia-900/70">
-                  Un titre à la fois, vidéo lancée à 40 s, raccourcis clavier. Titres non validés de la liste affichée, les trouvailles automatiques les plus sûres d'abord, puis dans l'ordre de la liste (tri « Écoutes » : les plus utiles d'abord).
-                </span>
-              </div>
-            );
-          })()}
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="flex flex-wrap bg-gray-100 rounded-2xl p-0.5 text-sm">
-              {STATUS_FILTERS.map(([id, label]) => {
-                const n = counts[id] || 0; // compteur : seulement sur les filtres « à traiter »
+          </div>
+          {view === "todo" && (
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+              {QUEUES.map((qd) => {
+                const n = counts[qd.id] || 0;
+                const on = status === qd.id;
                 return (
-                  <button key={id} onClick={() => setStatus(id)}
-                    className={`px-3 py-1 rounded-full font-bold ${status === id ? "bg-fuchsia-600 text-white" : n ? "text-gray-900 hover:text-fuchsia-700" : "text-gray-500 hover:text-gray-900"}`}>
-                    {label}{n > 0 && <span className={`ml-1 font-black ${status === id ? "" : "text-fuchsia-600"}`}>({n})</span>}
+                  <button key={qd.id} onClick={() => setStatus(qd.id)}
+                    className={`text-left rounded-xl px-3 py-2 border-2 ${on ? "border-fuchsia-500 bg-fuchsia-50" : n ? "border-gray-200 hover:border-fuchsia-300" : "border-gray-100 text-gray-400"}`}>
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-bold">{qd.label}</span>
+                      <span className={`text-lg font-black tabular-nums ${n ? "text-fuchsia-600" : "text-gray-300"}`}>{n}</span>
+                    </span>
                   </button>
                 );
               })}
             </div>
+          )}
+          {view === "todo" && qdef && <p className="text-xs text-gray-500">{qdef.help}</p>}
+          {(() => {
+            const main = (songs || []).filter((s) => !s.sibling); // lignes du filtre (sans les autres versions ajoutées pour la vue par chanson)
+            if (view === "todo") {
+              if (!qdef || qdef.list || !main.length) return null; // doublons : directement dans la liste
+              let keys = main.filter((s) => !s.missing || status === "missing");
+              // versions à valider : suspects d'abord, puis les trouvailles les plus sûres (🎯, 👍, 🤔), puis l'ordre de la liste
+              if (status === "todo") keys = keys.map((s, k) => [s, k]).sort((x, y) => (y[0].suspect?.length ? 1 : 0) - (x[0].suspect?.length ? 1 : 0)
+                || (y[0].confidence || 0) - (x[0].confidence || 0) || x[1] - y[1]).map(([s]) => s);
+              return (
+                <button onClick={() => { setPreview(null); setReview({ keys: keys.map((s) => s.key), i: 0, blind: !!qdef.blind, title: qdef.label }); }}
+                  className={`text-sm font-bold text-white px-5 py-2 rounded-full ${qdef.blind ? "bg-violet-600 hover:bg-violet-700" : "bg-fuchsia-600 hover:bg-fuchsia-700"}`}>
+                  ▶ Commencer ({keys.length}{main.length === 200 ? "+" : ""})
+                </button>
+              );
+            }
+            const todo = main.filter((s) => !s.validated && !s.missing)
+              .map((s, k) => [s, k]).sort((x, y) => (y[0].confidence || 0) - (x[0].confidence || 0) || x[1] - y[1]).map(([s]) => s);
+            const shown = main.filter((s) => !s.missing);
+            const list = todo.length ? todo : shown;
+            return list.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                <button onClick={() => { setPreview(null); setReview({ keys: list.map((s) => s.key), i: 0 }); }}
+                  className="text-sm font-bold text-white bg-gray-800 hover:bg-gray-900 px-4 py-1.5 rounded-full">
+                  ▶ Revue {todo.length ? `des titres à vérifier affichés (${todo.length})` : `de la liste affichée (${shown.length})`}
+                </button>
+                <span className="text-xs text-gray-500">Un titre à la fois, avec rognage de la vidéo.</span>
+              </div>
+            );
+          })()}
+          <div className="flex flex-wrap gap-2 items-center">
+            {view === "catalog" && (
+              <>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${status !== "all" ? ACTIVE : "border-gray-200"}`}>
+                  {VERSION_FILTERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                </select>
+                <select value={blind} onChange={(e) => setBlind(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${blind ? ACTIVE : "border-gray-200"}`}>
+                  {BLIND_FILTERS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                </select>
+              </>
+            )}
             <select value={mode} onChange={(e) => setMode(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${mode ? ACTIVE : "border-gray-200"}`}>
               <option value="">Tous les modes</option>
               {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -315,7 +360,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
               <option value="unknown">❓ Année inconnue</option>
             </select>
-            {status !== "dups" && (
+            {status !== "dups" && status !== "rerank" && (
               <div className="flex items-center border-2 border-gray-200 rounded-full overflow-hidden text-sm font-semibold">
                 <select value={sort} onChange={(e) => { setSort(e.target.value); setSortRev(false); }} className="pl-3 pr-1 py-1 bg-transparent outline-none" title="Trier par">
                   {SORTS.map(([id, label]) => <option key={id} value={id}>Tri : {label}</option>)}
@@ -329,15 +374,16 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
             <SearchInput value={q} onChange={setQ} placeholder="Rechercher un artiste, un titre…" className="flex-1 min-w-[180px]" />
             {facets?.total && status !== "dups" && (
               <span className="text-sm font-bold text-gray-500 whitespace-nowrap" title="Titres correspondant aux filtres choisis">
-                {facets.total.songs} chanson{facets.total.songs > 1 ? "s" : ""} · {facets.total.versions} version{facets.total.versions > 1 ? "s" : ""}
+                {facets.total.songs} chanson{facets.total.songs > 1 ? "s" : ""}{facets.total.versions !== facets.total.songs ? ` · ${facets.total.versions} versions` : ""}
               </span>
             )}
           </div>
-          {status === "rerank" && <p className="text-xs text-gray-500">Titres du blind test d'après les réponses des invités (au moins 8) : <b>normaux trouvés par moins d'1 joueur sur 4</b> — à passer 🎓 très difficile ? — et <b>très difficiles trouvés par 7 joueurs sur 10</b> ou plus — à repasser normal ? Choisissez, ou « Garder ainsi » : le titre ne revient plus ici.</p>}
-          {status === "suspect" && <p className="text-xs text-gray-500">Titres non validés dont la vidéo semble ne pas correspondre : durée très différente du titre, titre absent de la vidéo, version live, reprise… Vérifiez-les puis validez ou changez la vidéo.</p>}
-          {status === "dups" && <p className="text-xs text-gray-500">Titres qui se ressemblent dans le même mode (même vidéo, ou interprète et titre proches). <b>Garder celui-ci</b> fusionne le groupe : écoutes, étiquettes, année et langue sont regroupées sur la ligne gardée, et les autres titres Deezer joueront sa vidéo (sans nouvelle recherche YouTube).</p>}
           {err && <p className="text-sm text-red-600">{err}</p>}
-          {review && (
+          {review?.blind && (
+            <BlindReview review={review} setReview={setReview} title={review.title} songs={[...(songs || []), ...extra.filter((e) => !songs?.some((s) => s.key === e.key))]}
+              run={run} editYear={editYear} onClose={() => { setReview(null); load(); }} />
+          )}
+          {review && !review.blind && (
             <SongReview review={review} setReview={setReview} songs={[...(songs || []), ...extra.filter((e) => !songs?.some((s) => s.key === e.key))]} run={run} changeRun={changeRun} call={call} editYear={editYear}
               busy={!!(fixing || retitling)} onFix={setFixing} onRetitle={setRetitling} onClose={() => { setReview(null); load(); }} />
           )}
@@ -350,7 +396,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
           {songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{status === "todo" ? "Rien à vérifier 🎉" : status === "missing" ? "Aucune vidéo disparue 👍" : status === "blind" ? "Aucun titre marqué « Blind test » : utilisez l'étiquette 🕵️ sur les titres (filtre Tous)." : status === "lyrics" ? "Aucun titre marqué « Avec paroles » : utilisez l'étiquette 📝 sur les titres (filtre Tous)." : status === "changes" ? "Aucun changement de vidéo proposé 👍" : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test, ou tout est déjà vu 👍" : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{view === "todo" ? (q || mode || lang || decade ? "Rien dans cette file avec ces filtres." : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test 👍" : "File vide 🎉") : "Aucun titre."}</p>
           ) : (
             <ul className="space-y-3">
               {groupByWork(songs).map((g, gi, all) => {
@@ -423,8 +469,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                             {head.fr === true ? <><FrFlag /> Français</> : head.fr === false ? "🌍 International" : head.enriched ? "❓ langue" : "…"}
                           </button>
-                          <BlindTag song={head} onBlind={() => run({ action: "blindSong", key: head.key, blind: !head.blind })}
-                            onHard={() => run({ action: "difficultySong", key: head.key, hard: !(head.difficulty >= 2) })} />
+                          <BlindTag song={head} onLevel={(level) => run({ action: "blindDecide", key: head.key, level })} />
                           <BlindStat song={head} run={run} />
                           {head.plays > 0 && <span className="text-[11px] font-bold text-gray-500" title="Joué jusqu'au bout en soirée">▶ joué {head.plays}×</span>}
                         </div>

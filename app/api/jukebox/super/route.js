@@ -27,6 +27,7 @@
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     deezerSearch { q } / retargetSong { key, deezerId } → rattacher la ligne au bon titre Deezer
  *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
+ *     blindDecide { key, level } → décision blind test de la chanson : 0 non, 1 oui, 2 très difficile
  *     lyricsSong { key, lyrics } → la vidéo retenue affiche les paroles
      songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
      enrich → enrichir des titres tout de suite (année, langue ; ~45 s par appel)
@@ -44,7 +45,7 @@ import { listActivations, createActivation, updateActivation, deleteActivation, 
 import { listRequests, approveRequest, rejectRequest, deleteRequest, reopenRequest, resendActivation, RequestError } from "@/lib/jukeboxRequests";
 import { isJukeboxSuper, loadConfig, saveConfig, sessionsWithActivity, searchesToday } from "@/lib/jukeboxAdmin";
 import { setSongText, mergeSongs, ignoreDuplicates, exportSongs, importSongs } from "@/lib/jukeboxLibrary";
-import { loadSession, songsCount, songStatusCounts, listSongs, withBlindStats, difficultySong, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
+import { loadSession, songsCount, songStatusCounts, listSongs, withBlindStats, blindDecide, forgetSong, songCandidates, replaceSongVideo, validateSong, blindSong, lyricsSong, retargetSong, deezerSearch, deezerPlaylistSearch, deezerPlaylistId, YoutubeError } from "@/lib/jukeboxServer";
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
@@ -160,9 +161,9 @@ export async function POST(req) {
       case "blindSong":
         await blindSong(body.key, body.blind);
         return Response.json({ ok: true });
-      case "difficultySong":
-        try { await difficultySong(body.key, !!body.hard); }
-        catch (e) { return Response.json({ error: /difficulty/.test(e.message || "") ? "Appliquez d'abord le SQL v30 (difficulté au blind test)." : e.message }, { status: 422 }); }
+      case "blindDecide":
+        try { await blindDecide(body.key, body.level); }
+        catch (e) { return Response.json({ error: /blind_|difficulty/.test(e.message || "") ? "Appliquez d'abord le SQL v31 (décision blind test)." : e.message }, { status: 422 }); }
         return Response.json({ ok: true });
       case "lyricsSong":
         await lyricsSong(body.key, body.lyrics);
