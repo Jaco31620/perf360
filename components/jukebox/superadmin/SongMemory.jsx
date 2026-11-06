@@ -85,13 +85,13 @@ const QUEUES = [
   { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
   { id: "links", label: "🔗 Ajoutés par lien", list: true, help: "Vidéos ajoutées par lien YouTube en soirée : hors mémoire (pas de fiche Deezer), elles ne profitent ni de la validation, ni du rognage, ni du blind test. Ajoutez-les à la mémoire en choisissant la chanson, ou ignorez-les (pas une chanson, sans intérêt)." },
   { id: "dups", label: "👯 Doublons", list: true, help: "Chansons qui se ressemblent (même vidéo, même ISRC, ou interprète et titre proches). « Garder celui-ci » fusionne le groupe : écoutes, étiquettes, versions et fiches Deezer sont regroupées sur la chanson gardée." },
-  { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui très difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
-  { id: "rerank", label: "📊 Blind à reclasser", blind: true, help: "D'après les réponses des invités reçues depuis votre décision (au moins 8) : difficulté normale mais trouvé par moins d'1 joueur sur 4, ou très difficile mais trouvé par 7 sur 10 ou plus. Reclassez, ou gardez : seules les réponses suivantes compteront." },
+  { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
+  { id: "rerank", label: "📊 Blind à reclasser", blind: true, help: "D'après les réponses des invités reçues depuis votre décision (au moins 8) : difficulté normale mais trouvé par moins d'1 joueur sur 4, ou difficile mais trouvé par 7 sur 10 ou plus. Reclassez, ou gardez : seules les réponses suivantes compteront." },
   { id: "yearq", label: "📅 Années à vérifier", list: true, help: "L'année trouvée vient parfois d'une réédition (remaster, compilation) : la vérification a trouvé une sortie plus ancienne. Acceptez-la (✓), gardez l'année actuelle (✕, plus reproposée), ou cliquez l'année pour en taper une autre." },
   { id: "meta", label: "📅 Année ou langue manquante", help: "Chansons enrichies sans année ou sans langue trouvée (filtres du blind test et du catalogue invités) : cliquez l'année ou la langue pour la renseigner." },
 ];
 const VERSION_FILTERS = [["all", "Toutes les vidéos"], ["todo", "Vidéos à vérifier"], ["ok", "Vidéos validées"], ["lyrics", "📝 Avec paroles"], ["missing", "⚠️ Vidéos disparues"]];
-const BLIND_FILTERS = [["", "Blind test : tous"], ["undecided", "🕵️ À décider"], ["yes", "🕵️ Oui"], ["hard", "🎓 Très difficile"], ["no", "Pas au blind"]];
+const BLIND_FILTERS = [["", "Blind test : tous"], ["undecided", "🕵️ À décider"], ["yes", "🕵️ Oui"], ["hard", "🎓 Difficile"], ["no", "Pas au blind"]];
 /* Tri : critère + sens (bouton à côté) ; libellés du sens selon le critère : [normal, inversé]. */
 const SORTS = [["added", "Date d'ajout"], ["plays", "Écoutes"], ["rank", "Popularité"], ["year", "Année"], ["alpha", "Alphabétique"]];
 const SORT_DIR = {

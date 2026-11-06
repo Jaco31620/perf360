@@ -27,7 +27,7 @@
  *     replaceSong { key, videoId } → changer la vidéo retenue (repasse « à vérifier »)
  *     deezerSearch { q } / retargetSong { key, deezerId } → rattacher la ligne au bon titre Deezer
  *     blindSong { key, blind } → titre (dans ce mode) utilisable par le blind test
- *     blindDecide { key, level } → décision blind test de la chanson : 0 non, 1 oui, 2 très difficile
+ *     blindDecide { key, level } → décision blind test de la chanson : 0 non, 1 oui, 2 difficile
  *     lyricsSong { key, lyrics } → la vidéo retenue affiche les paroles
      songMeta { key, year?, fr? } → corriger année / langue (toutes les versions du titre)
      enrich → enrichir des titres tout de suite (année, langue ; ~45 s par appel)

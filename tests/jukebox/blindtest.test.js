@@ -111,14 +111,14 @@ describe("tirage du blind test (topUpBlind / pickIndex)", () => {
   });
 });
 
-describe("titres très difficiles (🎓)", () => {
+describe("titres difficiles (🎓)", () => {
   const played = (video, min) => ({ video_id: video, channel: "X", status: "played", participant_id: "blind-auto", created_at: `2026-01-01T20:${min}:00Z`, played_at: `2026-01-01T20:${min}:00Z`, position: 1 });
   it("exclus par défaut", async () => {
     const songs = [song(1, "Queen – Bohemian Rhapsody"), song(2, "Obscur – Face B", { difficulty: 2 }), song(3, "ABBA – Waterloo")];
     const { inserted } = await draw({ songs });
     expect(inserted.map((r) => r.video_id).sort()).toEqual(["vid00000001", "vid00000003"]);
   });
-  it("inclus au plus 1 sur 5 : pas de très difficile si l'un des 4 derniers l'était", async () => {
+  it("inclus au plus 1 sur 5 : pas de difficile si l'un des 4 derniers l'était", async () => {
     const songs = [song(1, "Queen – Bohemian Rhapsody"), song(2, "Obscur – Face B", { difficulty: 2 }), song(3, "ABBA – Waterloo"), song(4, "Muse – Uprising")];
     const tracks = [played("vid00000099", "01"), played("hardvideo01", "02"), played("vid00000098", "03")];
     const songs2 = [...songs, { ...song(9, "Rare – Titre", { difficulty: 2 }), video_id: "hardvideo01" }];
@@ -135,7 +135,7 @@ describe("titres très difficiles (🎓)", () => {
     const { inserted } = await draw({ songs, blind: { hard: 3 } });
     expect(inserted.map((x) => x.video_id)).toEqual(["vid00000001", "vid00000003"]);
   });
-  it("plus que des très difficiles : la pioche continue quand même", async () => {
+  it("plus que des difficiles : la pioche continue quand même", async () => {
     const songs = [song(1, "Obscur – Face B", { difficulty: 2 }), song(2, "Rare – Autre", { difficulty: 2 })];
     const { n } = await draw({ songs, blind: { hard: 10 } });
     expect(n).toBe(2);

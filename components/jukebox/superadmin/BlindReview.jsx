@@ -2,7 +2,7 @@
 /*
  * Revue « blind test » : une décision par chanson, rien d'autre — la vidéo
  * démarre là où le blind test la démarre (début gardé), trois choix (pas au
- * blind, oui, oui très difficile) puis la chanson suivante. Sert aux files
+ * blind, oui, oui difficile) puis la chanson suivante. Sert aux files
  * « 🕵️ Blind test à décider » et « 📊 Blind à reclasser ».
  */
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { FrFlag } from "../FrFlag";
 const CHOICES = [
   { level: 0, label: "Pas au blind test", hint: "jamais pioché", on: "bg-gray-700 text-white", off: "bg-gray-100 text-gray-700 hover:bg-gray-200" },
   { level: 1, label: "🕵️ Oui", hint: "pioché en soirée", on: "bg-violet-600 text-white", off: "bg-violet-50 text-violet-800 hover:bg-violet-100" },
-  { level: 2, label: "🎓 Oui, très difficile", hint: "seulement si la soirée l'inclut (au plus 1 sur N)", on: "bg-amber-300 text-amber-950", off: "bg-amber-50 text-amber-900 hover:bg-amber-100" },
+  { level: 2, label: "🎓 Oui, difficile", hint: "seulement si la soirée l'inclut (au plus 1 sur N)", on: "bg-amber-300 text-amber-950", off: "bg-amber-50 text-amber-900 hover:bg-amber-100" },
 ];
 
 export function BlindReview({ review, setReview, songs, run, editYear, onClose, title }) {
@@ -104,7 +104,7 @@ export function BlindReview({ review, setReview, songs, run, editYear, onClose, 
                 {song.blindStat && (
                   <p className={`mt-1 ${song.rerank ? "font-bold text-orange-700" : ""}`}>
                     Trouvé par {song.blindStat.found} joueur{song.blindStat.found > 1 ? "s" : ""} sur {song.blindStat.n} (artiste ou titre)
-                    {song.rerank === "hard" ? " : peu trouvé, très difficile ?" : song.rerank === "easy" ? " : souvent trouvé, difficulté normale ?" : ""}
+                    {song.rerank === "hard" ? " : peu trouvé, difficile ?" : song.rerank === "easy" ? " : souvent trouvé, difficulté normale ?" : ""}
                   </p>
                 )}
               </div>

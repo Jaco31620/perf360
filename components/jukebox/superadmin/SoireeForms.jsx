@@ -141,7 +141,7 @@ export function SoireeFields({ value, features, onChange }) {
           <label className={check}><span className="pl-6">Vidéos validées seulement</span>
             <input type="checkbox" checked={!!v.blind.validated} onChange={(e) => blind("validated", e.target.checked)} className="w-5 h-5 accent-fuchsia-600" />
           </label>
-          <label className={check}><span className="pl-6">🎓 Titres très difficiles</span>
+          <label className={check}><span className="pl-6">🎓 Titres difficiles</span>
             <select value={v.blind.hard || 0} onChange={(e) => blind("hard", Number(e.target.value))} className={select}>
               {BLIND_HARD_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.v ? `Inclus, au plus ${c.label}` : "Exclus"}</option>)}
             </select>

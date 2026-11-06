@@ -257,7 +257,7 @@ function BlindFilters({ settings, facets, onChange }) {
   const tagged = (facets || []).reduce((n, c) => n + c[4], 0);
   const noYear = f.decades.length ? sumWhere(facets, { ...f, decades: [null] }) + sumWhere(facets, { ...f, decades: [null] }, true) : 0;
   const count = (patch) => (ready ? sumWhere(facets, { ...f, ...patch }) : null);
-  const hardCount = (facets || []).reduce((n, c) => n + (c[5] ? c[4] : 0), 0); // très difficiles, tous filtres confondus
+  const hardCount = (facets || []).reduce((n, c) => n + (c[5] ? c[4] : 0), 0); // difficiles, tous filtres confondus
   const badge = (n, active) => n == null ? null : (
     <span className={`ml-1 tabular-nums ${active ? "text-white/80" : "text-white/40"}`}>{n}</span>
   );
@@ -313,7 +313,7 @@ function BlindFilters({ settings, facets, onChange }) {
       </button>
 
       <div>
-        <p className="text-xs text-white/50 mb-1">🎓 Titres très difficiles{hardCount > 0 && <span className="text-white/30"> ({hardCount} en mémoire)</span>}</p>
+        <p className="text-xs text-white/50 mb-1">🎓 Titres difficiles{hardCount > 0 && <span className="text-white/30"> ({hardCount} en mémoire)</span>}</p>
         <div className="grid grid-cols-4 gap-1 bg-white/10 rounded-xl p-0.5">
           {BLIND_HARD_CHOICES.map((c) => (
             <button key={c.v} onClick={() => c.v !== f.hard && set({ hard: c.v })}
