@@ -51,7 +51,7 @@ import { loadSession, songsCount, songStatusCounts, listSongs, withBlindStats, b
 import { changeMasterPassword } from "@/lib/clicclac/server";
 import { ensureRegieCode, resetRegieCode } from "@/lib/jukeboxAccess";
 import { normalizeFeatures, MAX_NAME_LEN, cleanValid, sessionEndsAt, morningAfter } from "@/lib/jukebox";
-import { enrichSongs, enrichPending, editSongMeta, checkYears, yearsToCheck, answerYear } from "@/lib/jukeboxEnrich";
+import { enrichSongs, enrichPending, enrichNight, editSongMeta, checkYears, yearsToCheck, answerYear } from "@/lib/jukeboxEnrich";
 import { prefillState, prefillFromLines, prefillFromPlaylist, prefillItems, editPrefill, clearPrefill } from "@/lib/jukeboxPrefill";
 import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
@@ -109,6 +109,7 @@ export async function GET(req) {
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
     const requests = await listRequests().catch(() => null); // null : SQL v23 à appliquer
+    const night = await enrichNight().catch(() => null); // dernier enrichissement de nuit
     const proposals = (await proposedKeys()).length; // titres avec un changement de vidéo proposé
     return Response.json({
       config,
@@ -116,6 +117,7 @@ export async function GET(req) {
       songs,
       prefill,
       enrich, // titres pas encore enrichis (année, langue)
+      night,
       catalog, // nouveau catalogue (SQL v28) : null si tables absentes
       clips,
       years,

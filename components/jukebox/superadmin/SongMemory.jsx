@@ -102,7 +102,7 @@ const SORT_DIR = {
   alpha: ["A → Z", "Z → A"],
 };
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
-export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog, clips, years, onChanged }) {
+export function SongMemory({ call, total, proposals = 0, focus, enrich, night, catalog, clips, years, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [view, setView] = useState("todo"); // todo : files à vider ; catalog : exploration
@@ -308,7 +308,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
           {clips?.missing > 0 && <ClipScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
-              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées chaque nuit (Deezer + MusicBrainz, sans quota YouTube).</span>
+              <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées automatiquement chaque nuit (Deezer + MusicBrainz, sans quota YouTube). Le bouton ne sert que si vous en avez besoin tout de suite.</span>
               {enriching ? (
                 <span className="flex items-center gap-2 font-bold">
                   ⏳ {enriching.done} titre{enriching.done > 1 ? "s" : ""} complété{enriching.done > 1 ? "s" : ""}{enriching.pending != null ? `, ${enriching.pending} ligne${enriching.pending > 1 ? "s" : ""} restante${enriching.pending > 1 ? "s" : ""}` : ""}…
@@ -318,6 +318,13 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                 <button onClick={enrichNow} className="font-bold bg-sky-600 text-white px-3 py-1 rounded-full">Tout enrichir maintenant</button>
               )}
             </div>
+          )}
+          {night?.at && (
+            <p className={`text-xs ${night.error ? "text-amber-700" : "text-gray-500"}`}>
+              🌙 Dernier enrichissement, le {new Date(night.at).toLocaleDateString("fr-FR")} : {night.enriched || 0} titre{night.enriched > 1 ? "s" : ""} complété{night.enriched > 1 ? "s" : ""}, {night.years || 0} année{night.years > 1 ? "s" : ""} vérifiée{night.years > 1 ? "s" : ""}{night.suggested ? ` (${night.suggested} à confirmer)` : ""}, {night.rounds || 0} tour{night.rounds > 1 ? "s" : ""}
+              {night.stop === "done" ? " : terminé." : night.stop === "rounds" ? ` : limite de tours atteinte, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "stalled" ? ` : arrêté sans progrès, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "relaunch" ? " : relance impossible, repris la nuit suivante." : " : en cours…"}
+              {night.error && <> Erreur : {night.error}</>}
+            </p>
           )}
           {/* deux écrans : files à vider (À traiter) / exploration (Catalogue) */}
           <div className="flex flex-wrap items-center gap-2">
