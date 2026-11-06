@@ -570,3 +570,46 @@ create table if not exists public.jukebox_link_ignore (
 );
 alter table public.jukebox_link_ignore enable row level security;
 grant all on public.jukebox_link_ignore to service_role;
+
+-- v36 (06/11/2026) : soirée d'où vient la vidéo d'une version (nom recopié : la
+-- soirée peut être purgée). Reprise des anciennes lignes : première piste de
+-- cette vidéo dans une soirée encore en base, seulement si elle existait déjà
+-- à la création de la version (10 min de marge). Sinon la version préexistait
+-- à la soirée (pré-remplissage, par exemple) : rien n'est attribué.
+alter table public.jukebox_versions add column if not exists source_session text;
+create or replace view public.jukebox_catalog with (security_invoker = true) as
+select
+  'w:' || w.id || ':' || v.kind as key,
+  w.id as work_id,
+  v.kind as mode,
+  (select min(a.deezer_id) from public.jukebox_work_aliases a where a.work_id = w.id) as deezer_id,
+  v.video_id, v.duration, v.video_title, v.video_channel, v.lyrics, v.validated, v.missing,
+  v.confidence, v.source, v.checked_at, v.created_at,
+  w.label, w.artist_fix, w.title_fix, w.isrc, w.song_duration, w.year, w.lang, w.country, w.fr,
+  w.enriched_at, w.rank, w.plays, w.blind,
+  null::text as merged_into,
+  w.difficulty, w.difficulty_checked,
+  w.blind_decided_at, w.blind_seen, w.blind_seen_found,
+  w.year_suggest, w.year_suggest_src, w.year_checked_at,
+  v.source_session
+from public.jukebox_versions v
+join public.jukebox_works w on w.id = v.work_id;
+revoke all on public.jukebox_catalog from anon, authenticated;
+grant select on public.jukebox_catalog to service_role;
+with first_track as (
+  select distinct on (t.video_id) t.video_id, t.created_at, t.author, coalesce(s.name, s.code) as session_name
+  from public.jukebox_tracks t
+  join public.jukebox_sessions s on s.id = t.session_id
+  where t.participant_id <> 'blind-auto'
+  order by t.video_id, t.created_at
+)
+update public.jukebox_versions v
+  set source = case when f.author = 'Régie' then 'regie' else 'guest' end,
+      source_session = f.session_name
+  from first_track f
+  where v.video_id = f.video_id
+    and v.source in ('migration', 'search')
+    and v.source_session is null
+    and f.created_at <= v.created_at + interval '10 minutes';
+select source, count(*) as versions, count(source_session) as avec_soiree
+  from public.jukebox_versions group by source order by versions desc;

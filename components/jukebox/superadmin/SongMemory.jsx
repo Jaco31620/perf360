@@ -122,10 +122,12 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
     setQ("");
     setLang("");
     setDecade("");
+    setSource("");
   }, [focus]);
   const [mode, setMode] = useState("");
   const [lang, setLang] = useState("");
   const [decade, setDecade] = useState("");
+  const [source, setSource] = useState("");
   const [enriching, setEnriching] = useState(false);
   const [songs, setSongs] = useState(null);
   const [err, setErr] = useState("");
@@ -156,7 +158,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
   const load = useCallback(async () => {
     const started = Date.now();
     try {
-      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort, ...(blind ? { blind } : {}), ...(sortRev ? { rev: "1" } : {}) });
+      const qs = new URLSearchParams({ songs: "1", q, status, mode, lang, decade, sort, ...(source ? { source } : {}), ...(blind ? { blind } : {}), ...(sortRev ? { rev: "1" } : {}) });
       const res = await fetch(`/api/jukebox/super?${qs}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       });
@@ -165,7 +167,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
       if (started < lastAct.current) return;
       setSongs(d.songs);
       setExtra([]); // relus ci-dessous s'ils manquent (état à jour)
-      if (status !== "dups") fetch(`/api/jukebox/super?${new URLSearchParams({ facets: "1", q, status, mode, lang, decade, ...(blind ? { blind } : {}) })}`, {
+      if (status !== "dups") fetch(`/api/jukebox/super?${new URLSearchParams({ facets: "1", q, status, mode, lang, decade, ...(source ? { source } : {}), ...(blind ? { blind } : {}) })}`, {
         cache: "no-store", headers: { "x-jukebox-super": getSuperToken() || "" },
       }).then((r) => (r.ok ? r.json() : null)).then((f) => f && setFacets(f)).catch(() => {});
       else setFacets(null);
@@ -174,7 +176,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
     } catch (e) {
       setErr(e.message);
     }
-  }, [q, status, blind, mode, lang, decade, sort, sortRev, loadCounts]);
+  }, [q, status, blind, mode, lang, decade, source, sort, sortRev, loadCounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -410,6 +412,10 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
               {DECADES.map((d) => <option key={d} value={d}>{decadeLabel(d)}</option>)}
               <option value="unknown">❓ Année inconnue</option>
             </select>
+            <select value={source} onChange={(e) => setSource(e.target.value)} className={`border-2 rounded-full px-3 py-1 text-sm font-semibold ${source ? ACTIVE : "border-gray-200"}`}>
+              <option value="">Toutes provenances</option>
+              {Object.entries(SOURCE).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
             {status !== "dups" && status !== "rerank" && (
               <div className="flex items-center border-2 border-gray-200 rounded-full overflow-hidden text-sm font-semibold">
                 <select value={sort} onChange={(e) => { setSort(e.target.value); setSortRev(false); }} className="pl-3 pr-1 py-1 bg-transparent outline-none" title="Trier par">
@@ -446,7 +452,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
           {fixing && <SongVideoChooser song={fixing} call={call} onClose={() => setFixing(null)}
             onDone={() => { setStatus((st) => (st === "ok" ? "all" : st)); if (!review) setPreview(fixing.key); load(); }} />}
           {view === "todo" && status === "links" ? null : songs === null ? <p className="text-sm text-gray-400">Chargement…</p> : songs.length === 0 ? (
-            <p className="text-sm text-gray-400">{view === "todo" ? (q || mode || lang || decade ? "Rien dans cette file avec ces filtres." : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test 👍" : "File vide 🎉") : "Aucun titre."}</p>
+            <p className="text-sm text-gray-400">{view === "todo" ? (q || mode || lang || decade || source ? "Rien dans cette file avec ces filtres." : status === "rerank" ? "Rien à reclasser : pas encore assez de réponses au blind test 👍" : "File vide 🎉") : "Aucun titre."}</p>
           ) : (
             <ul className="space-y-3">
               {groupByWork(songs).map((g, gi, all) => {
@@ -564,7 +570,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700" title="Vidéo à vérifier en priorité">🧐 {s.suspect.join(" · ")}</span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)}{s.createdAt && <> · ajouté le {new Date(s.createdAt).toLocaleDateString("fr-FR")}</>}{s.source && <> · {SOURCE[s.source] || s.source}</>} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
+                          <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)}{s.createdAt && <> · ajouté le {new Date(s.createdAt).toLocaleDateString("fr-FR")}</>}{s.source && <> · {SOURCE[s.source] || s.source}</>}{s.sourceSession && <> ({s.sourceSession})</>} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                           <ChangeInfo song={s} run={changeRun} onCompare={() => reviewFrom(s.key)} />
                           <ReportInfo song={s} run={run} />
                         </div>
