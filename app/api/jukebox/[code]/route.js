@@ -168,7 +168,7 @@ export async function POST(req, { params }) {
       if (!song) return Response.json({ error: "Titre introuvable." }, { status: 422 });
       // déjà dans la file (même titre, même artiste) : refusé avant toute recherche YouTube
       if (waiting.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
-      const yt = await youtubeForSong(song, publicSession(s).searchMode, { beforeSearch });
+      const yt = await youtubeForSong(song, publicSession(s).searchMode, { beforeSearch, source: admin ? "regie" : "guest" });
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
       v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };
     } else {

@@ -278,7 +278,7 @@ export async function POST(req, { params }) {
         if (res.error) break;
         // mémoire (prochaines soirées) : titre validé → proposition au super-admin ; sinon vidéo retenue, à vérifier (trace dans les deux cas)
         const memory = key ? await soireeVideoChange({
-          key, video, session: s, bySuper: isJukeboxSuper(req), remember: () => rememberSong(key, video, null, false),
+          key, video, session: s, bySuper: isJukeboxSuper(req), remember: () => rememberSong(key, video, null, false, { source: "regie" }),
         }) : null;
         ev = { kind: "video_changed", data: { title: `${t.channel} – ${t.title}`, video: video.id } };
         await after();

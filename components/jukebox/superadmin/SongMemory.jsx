@@ -53,6 +53,18 @@ function groupByWork(list) {
   }
   return out;
 }
+/* Provenance de la vidéo retenue (jukebox_versions.source). */
+const SOURCE = {
+  guest: "invité en soirée",
+  regie: "régie en soirée",
+  link: "lien YouTube en soirée",
+  prefill: "pré-remplissage",
+  scan: "scan auto des clips",
+  manual: "super-admin",
+  copy: "copie d'une autre version",
+  search: "recherche auto (invité, régie ou pré-remplissage)",
+  migration: "origine inconnue (avant le 03/11/2026)",
+};
 /* Indice de confiance de la recherche automatique (clip officiel…). */
 const CONFIDENCE = {
   3: { label: "🎯 sûr", cls: "bg-emerald-100 text-emerald-700" },
@@ -552,7 +564,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, catalog,
                               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700" title="Vidéo à vérifier en priorité">🧐 {s.suspect.join(" · ")}</span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
+                          <p className="text-xs text-gray-400 mt-1">{formatDuration(s.duration)}{s.createdAt && <> · ajouté le {new Date(s.createdAt).toLocaleDateString("fr-FR")}</>}{s.source && <> · {SOURCE[s.source] || s.source}</>} · vérifié le {new Date(s.checkedAt).toLocaleDateString("fr-FR")}</p>
                           <ChangeInfo song={s} run={changeRun} onCompare={() => reviewFrom(s.key)} />
                           <ReportInfo song={s} run={run} />
                         </div>
