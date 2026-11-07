@@ -9,7 +9,6 @@
 import { tooMany } from "@/lib/jukeboxRate";
 import { runPrefill } from "@/lib/jukeboxPrefill";
 import { launchEnrichRound } from "@/lib/jukeboxEnrich";
-import { scanClips } from "@/lib/jukeboxScan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,12 +25,8 @@ export async function GET(request) {
   if (!secret && await tooMany("prefill", 2, 7200)) // sans secret : pas d'appels répétés dans le créneau
     return Response.json({ status: "error", reason: "too many" }, { status: 429 });
   try {
-    const start = Date.now();
     const prefill = await runPrefill(150e3);
-    // clips manquants : après le pré-remplissage (prioritaire), avec le reste du quota
-    const clips = prefill.stop === "quota" ? { stop: "quota", skipped: true }
-      : await scanClips(Math.max(0, 270e3 - (Date.now() - start))).catch((e) => ({ error: String(e?.message || e) }));
-    return Response.json({ status: "ok", ...prefill, clips });
+    return Response.json({ status: "ok", ...prefill });
   } catch (e) {
     console.error("jukebox prefill:", e);
     return Response.json({ status: "error", reason: String(e?.message || e) }, { status: 500 });

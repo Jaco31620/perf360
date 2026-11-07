@@ -102,7 +102,7 @@ const SORT_DIR = {
   alpha: ["A → Z", "Z → A"],
 };
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
-export function SongMemory({ call, total, proposals = 0, focus, enrich, night, catalog, clips, years, onChanged }) {
+export function SongMemory({ call, total, proposals = 0, focus, enrich, night, catalog, years, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [view, setView] = useState("todo"); // todo : files à vider ; catalog : exploration
@@ -305,7 +305,6 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
             à la fois. <b>🔎 Catalogue</b> : tout le reste, pour chercher et corriger au cas par cas.
           </p>
           {catalog && !catalog.works && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}{/* migration faite : encadré masqué */}
-          {clips?.missing > 0 && <ClipScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
               <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées automatiquement chaque nuit (Deezer + MusicBrainz, sans quota YouTube). Le bouton ne sert que si vous en avez besoin tout de suite.</span>
@@ -670,37 +669,3 @@ function CatalogMigration({ catalog, call, onDone }) {
   );
 }
 
-/* Clips manquants : cherchés chaque matin après le pré-remplissage ; à la main,
- * quelques-uns sur le quota du jour. */
-const SCAN_STOP = { done: "liste terminée", empty: "rien à chercher", time: "temps écoulé", quota: "quota YouTube atteint", error: "erreur" };
-function ClipScan({ clips, call, onDone }) {
-  const [n, setN] = useState(5);
-  const [busy, setBusy] = useState(false);
-  const [report, setReport] = useState(null);
-  const run = async () => {
-    if (!confirm(`Chercher le clip de ${n} chanson${n > 1 ? "s" : ""} maintenant ?\n\nJusqu'à ${n} recherche${n > 1 ? "s" : ""} YouTube sur le quota du jour (≈ 100 par jour, partagé avec les soirées).`)) return;
-    setBusy(true);
-    try {
-      const d = await call("POST", { action: "scanClips", max: n });
-      setReport(d.report);
-      onDone?.();
-    } catch (e) { alert(e.message); } finally { setBusy(false); }
-  };
-  const last = report || clips.last;
-  return (
-    <div className="text-xs bg-emerald-50 text-emerald-900 rounded-xl px-3 py-2 space-y-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <span>🎬 <b>{clips.missing} chanson{clips.missing > 1 ? "s" : ""} sans version clip</b> : cherchées chaque matin après le pré-remplissage, avec le reste du quota.</span>
-        <span className="flex items-center gap-1.5">
-          Sans attendre : chercher le clip de
-          <select value={n} onChange={(e) => setN(Number(e.target.value))} className="border border-emerald-300 rounded-full px-2 py-0.5 bg-white font-bold">
-            {[1, 3, 5, 10, 20].map((x) => <option key={x} value={x}>{x} chanson{x > 1 ? "s" : ""}</option>)}
-          </select>
-          <span className="text-emerald-700/70">({n} recherche{n > 1 ? "s" : ""} YouTube sur le quota du jour)</span>
-        </span>
-        <button onClick={run} disabled={busy} className="font-bold bg-emerald-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Recherche…" : "Lancer"}</button>
-      </div>
-      {last && <p>Dernier passage {new Date(last.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} : {last.found} trouvé{last.found > 1 ? "s" : ""}{last.failed ? `, ${last.failed} sans résultat` : ""} ({SCAN_STOP[last.stop] || last.stop}). Les trouvailles sont « À vérifier » (filtre Version Clip).</p>}
-    </div>
-  );
-}

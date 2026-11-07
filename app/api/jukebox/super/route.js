@@ -57,7 +57,6 @@ import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
 import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
 import { getVersion } from "@/lib/jukeboxCatalog";
-import { scanClips, scanState } from "@/lib/jukeboxScan";
 import { withSiblings, searchVersion, copyVersion, songFacets } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
@@ -104,7 +103,6 @@ export async function GET(req) {
       return Response.json({ songs }, { headers: { "cache-control": "no-store" } });
     }
     const [config, sessions, searches, songs, prefill, enrich, catalog] = await Promise.all([loadConfig(), sessionsWithActivity(), searchesToday(), songsCount(), prefillState(), enrichPending().catch(() => null), catalogState().catch(() => null)]);
-    const clips = await scanState().catch(() => null); // chansons sans version clip, dernier passage
     const years = await yearsToCheck().catch(() => null); // chansons dont l'année n'est pas encore vérifiée
     // null : table jukebox_activations absente (SQL v19 à appliquer)
     const activations = await listActivations().catch(() => null);
@@ -119,7 +117,6 @@ export async function GET(req) {
       enrich, // titres pas encore enrichis (année, langue)
       night,
       catalog, // nouveau catalogue (SQL v28) : null si tables absentes
-      clips,
       years,
       activations,
       requests,
@@ -207,10 +204,6 @@ export async function POST(req) {
       case "copyVersion": { // même vidéo qu'une autre version (pas de clip officiel)
         const err = await copyVersion(body.key, body.kind);
         return err ? Response.json({ error: err }, { status: 422 }) : Response.json({ ok: true });
-      }
-      case "scanClips": { // à la main : quelques clips sur le quota du jour (1 à 20)
-        const n = Math.max(1, Math.min(20, parseInt(body.max, 10) || 5));
-        return Response.json({ ok: true, report: await scanClips(50e3, n), clips: await scanState() });
       }
       case "migrateCatalog": // refonte chanson / versions (relançable)
         // bascule faite : plus de remise à zéro (fresh) depuis l'ancien catalogue
