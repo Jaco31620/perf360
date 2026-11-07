@@ -2,11 +2,13 @@
  * Route de nuit — enrichissement de la mémoire des titres (année, langue, ISRC,
  * vérification des années ; lib/jukeboxEnrich.js). Lancée par
  * /api/jukebox/prefill, puis par elle-même tant qu'il reste du travail, dans la
- * limite de MAX_ROUNDS tours. Sans quota YouTube.
+ * limite de MAX_ROUNDS tours. Sans quota YouTube. Aussi un cron de secours à
+ * 6 h UTC (vercel.json, sans ?round) : ne fait rien si la nuit est déjà finie
+ * ou en cours.
  * Même protection que /api/jukebox/prefill (CRON_SECRET si défini).
  */
 import { tooMany } from "@/lib/jukeboxRate";
-import { enrichRound, launchEnrichRound, MAX_ROUNDS } from "@/lib/jukeboxEnrich";
+import { enrichRound, launchEnrichRound, enrichNight, nightSkip, MAX_ROUNDS } from "@/lib/jukeboxEnrich";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +19,13 @@ export async function GET(request) {
   if (secret && (request.headers.get("authorization") || "") !== `Bearer ${secret}`)
     return Response.json({ status: "error", reason: "unauthorized" }, { status: 401 });
   const h = new Date().getUTCHours();
-  if (!secret && (h < 5 || h > 6))
+  if (!secret && (h < 5 || h > 7))
     return Response.json({ status: "error", reason: "outside window" }, { status: 403 });
-  if (!secret && await tooMany("enrich", MAX_ROUNDS + 2, 7200))
+  if (!secret && await tooMany("enrich", 2 * MAX_ROUNDS + 4, 10800))
     return Response.json({ status: "error", reason: "too many" }, { status: 429 });
   const url = new URL(request.url);
+  if (!url.searchParams.has("round") && nightSkip(await enrichNight().catch(() => null)))
+    return Response.json({ status: "ok", skipped: true });
   const round = Math.min(MAX_ROUNDS, Math.max(1, parseInt(url.searchParams.get("round"), 10) || 1));
   try {
     const res = await enrichRound(round);

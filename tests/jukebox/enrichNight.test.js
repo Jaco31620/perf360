@@ -10,7 +10,7 @@ vi.mock("@/lib/supabaseAdmin", () => ({
 }));
 vi.mock("@/lib/jukeboxRate", () => ({ tooMany: async () => false }));
 
-import { nightStop, launchEnrichRound, MAX_ROUNDS } from "@/lib/jukeboxEnrich";
+import { nightStop, nightSkip, launchEnrichRound, MAX_ROUNDS } from "@/lib/jukeboxEnrich";
 import { GET } from "@/app/api/jukebox/enrich/route";
 
 beforeEach(() => { upsert.mockClear(); vi.stubEnv("CRON_SECRET", "s3cret"); });
@@ -24,6 +24,22 @@ describe("nightStop", () => {
     expect(nightStop(1, { done: 5, left: 0 })).toBe("done");
     expect(nightStop(1, { done: 0, left: 3 })).toBe("stalled");
     expect(nightStop(MAX_ROUNDS, { done: 5, left: 3 })).toBe("rounds");
+  });
+});
+
+describe("nightSkip (cron de secours)", () => {
+  const now = Date.parse("2026-11-08T06:10:00Z");
+  const at = (min) => new Date(now - min * 60e3).toISOString();
+  it("passe son tour si la nuit est finie ou en cours", () => {
+    expect(nightSkip({ at: at(40), stop: "done" }, now)).toBe(true);
+    expect(nightSkip({ at: at(2), stop: null }, now)).toBe(true);
+  });
+  it("tourne sinon : rien cette nuit, chaîne coupée ou inachevée", () => {
+    expect(nightSkip(null, now)).toBe(false);
+    expect(nightSkip({ at: at(24 * 60), stop: "done" }, now)).toBe(false);
+    expect(nightSkip({ at: at(30), stop: null }, now)).toBe(false);
+    expect(nightSkip({ at: at(30), stop: "rounds" }, now)).toBe(false);
+    expect(nightSkip({ at: at(30), stop: "relaunch" }, now)).toBe(false);
   });
 });
 
