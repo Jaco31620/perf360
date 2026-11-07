@@ -100,7 +100,7 @@ export function BlindTag({ song, onLevel, big = false, sub = null }) {
       </button>
       {song.blind && (
         <button onClick={() => onLevel(hard ? 1 : 2)} title={hardTitle} className={`text-[11px] font-bold px-2 py-0.5 whitespace-nowrap rounded-r-full ${hardCls}`}>
-          🎓{hard ? " Difficile" : " ?"}
+          🎓{hard ? " Difficile" : " Normal"}
         </button>
       )}
     </span>
