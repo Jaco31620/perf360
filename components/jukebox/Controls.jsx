@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume1, Volume2, VolumeX, RefreshCw, ExternalLink, Check, Flag } from "lucide-react";
 import { authHeaders, participantId } from "./storage";
-import { MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan, REPORT_REASONS } from "@/lib/jukebox";
+import { MAX_CHOICES, pickModes, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan, REPORT_REASONS } from "@/lib/jukebox";
 import { backdropClose } from "@/lib/backdrop";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
@@ -26,7 +26,7 @@ export function Settings({ session, act }) {
       <div className="space-y-1.5">
         <span className="text-white/70">🔎 Versions proposées</span>
         <div className="flex bg-white/10 rounded-full p-0.5">
-          {SEARCH_MODES.map((m) => (
+          {pickModes(session.searchMode).map((m) => (
             <button key={m.id} onClick={() => m.id !== session.searchMode && act("searchMode", { mode: m.id })}
               className={`flex-1 px-2 py-1 rounded-full font-bold ${m.id === session.searchMode ? "bg-fuchsia-600" : "text-white/60 hover:text-white"}`}>
               {m.label}

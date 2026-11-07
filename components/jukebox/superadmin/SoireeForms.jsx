@@ -3,7 +3,7 @@ import { ValiditySelect } from "./shared";
 import { useState } from "react";
 import { inviteText } from "@/lib/jukeboxMessages";
 import ShareActions from "../ShareActions";
-import { MAX_NAME_LEN, MAX_CHOICES, SEARCH_MODES, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel } from "@/lib/jukebox";
+import { MAX_NAME_LEN, MAX_CHOICES, pickModes, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, FEATURES, THEMES, SOIREE_DEFAULTS, maxLabel } from "@/lib/jukebox";
 import { BLIND_MODES, BLIND_REVEAL_CHOICES, BLIND_AFTER_CHOICES, BLIND_LANGS, BLIND_HARD_CHOICES } from "@/lib/jukeboxBlind";
 
 /* Création d'une soirée déjà configurée : fonctions activées et réglages de
@@ -91,7 +91,7 @@ export function SoireeFields({ value, features, onChange }) {
       </label>
       <label className={check}><span>Versions proposées</span>
         <select value={v.searchMode} onChange={(e) => onChange({ searchMode: e.target.value })} className={select}>
-          {SEARCH_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          {pickModes(v.searchMode).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </label>
       <label className={check}><span>Fondu enchaîné</span>

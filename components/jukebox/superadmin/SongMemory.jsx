@@ -609,7 +609,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                       return (
                         <div key={kind} className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-gray-300 px-3 py-2 text-xs">
                           <VersionLabel mode={kind} className="opacity-60" />
-                          <span className="text-gray-500">pas encore trouvée{kind === "clip" ? " (cherchée chaque matin après le pré-remplissage)" : ""}</span>
+                          <span className="text-gray-500">pas encore trouvée</span>
                           <button onClick={() => versionAct({ action: "searchVersion", key: head.key, kind }, `Chercher la version ${modeLabel(kind)} de « ${head.artist} – ${head.title} » maintenant ?\n\n1 recherche YouTube sur le quota du jour.`)}
                             className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">🔎 Chercher</button>
                           {from && from.mode !== kind && !from.missing && (

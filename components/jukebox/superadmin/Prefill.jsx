@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getSuperToken } from "../storage";
-import { SEARCH_MODES } from "@/lib/jukebox";
+import { pickModes } from "@/lib/jukebox";
 import { fmtDate, MODE_TAG, modeLabel } from "./shared";
 
 const STOP_TEXT = {
@@ -86,7 +86,7 @@ export function Prefill({ call, state, onChanged }) {
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-gray-600">Modes :</span>
-            {SEARCH_MODES.map((m) => (
+            {pickModes(modes).map((m) => (
               <button key={m.id} onClick={() => toggle(m.id)}
                 className={`px-3 py-1 rounded-full font-bold ${modes.includes(m.id) ? "bg-fuchsia-600 text-white" : "bg-gray-100 text-gray-500"}`}>
                 {m.label}
