@@ -10,7 +10,7 @@ vi.mock("@/lib/supabaseAdmin", () => ({
 }));
 vi.mock("@/lib/jukeboxRate", () => ({ tooMany: async () => false }));
 
-import { nightStop, nightSkip, launchEnrichRound, MAX_ROUNDS } from "@/lib/jukeboxEnrich";
+import { nightStop, nightSkip, launchEnrichRound, MAX_ROUNDS, wikidataYear, DEADLINE } from "@/lib/jukeboxEnrich";
 import { GET } from "@/app/api/jukebox/enrich/route";
 
 beforeEach(() => { upsert.mockClear(); vi.stubEnv("CRON_SECRET", "s3cret"); });
@@ -66,5 +66,20 @@ describe("GET /api/jukebox/enrich", () => {
   it("refuse sans le secret", async () => {
     const res = await GET(new Request("https://x.test/api/jukebox/enrich?round=1"));
     expect(res.status).toBe(401);
+  });
+});
+
+describe("échéance des appels réseau", () => {
+  it("n'appelle plus rien une fois l'échéance atteinte (le tour peut écrire son rapport)", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(wikidataYear("Queen", "Bohemian Rhapsody", Date.now() + 500)).rejects.toThrow(DEADLINE);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("borne chaque appel par l'échéance", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ search: [] }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await wikidataYear("Queen", "Bohemian Rhapsody", Date.now() + 60e3)).toBe(null);
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 });

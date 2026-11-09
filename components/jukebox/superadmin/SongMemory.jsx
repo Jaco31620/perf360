@@ -321,7 +321,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
           {night?.at && (
             <p className={`text-xs ${night.error ? "text-amber-700" : "text-gray-500"}`}>
               🌙 Dernier enrichissement, le {new Date(night.at).toLocaleDateString("fr-FR")} : {night.enriched || 0} titre{night.enriched > 1 ? "s" : ""} complété{night.enriched > 1 ? "s" : ""}, {night.years || 0} année{night.years > 1 ? "s" : ""} vérifiée{night.years > 1 ? "s" : ""}{night.suggested ? ` (${night.suggested} à confirmer)` : ""}, {night.rounds || 0} tour{night.rounds > 1 ? "s" : ""}
-              {night.stop === "done" ? " : terminé." : night.stop === "rounds" ? ` : limite de tours atteinte, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "stalled" ? ` : arrêté sans progrès, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "relaunch" ? " : relance impossible, repris la nuit suivante." : " : en cours…"}
+              {night.stop === "done" ? " : terminé." : night.stop === "rounds" ? ` : limite de tours atteinte, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "stalled" ? ` : arrêté sans progrès, ${night.left} restant${night.left > 1 ? "s" : ""}, repris la nuit suivante.` : night.stop === "relaunch" ? " : relance impossible, repris la nuit suivante." : Date.now() - new Date(night.at).getTime() > 10 * 60e3 ? " : interrompu (tour coupé avant la fin), repris par le cron de secours ou la nuit suivante." : " : en cours…"}
               {night.error && <> Erreur : {night.error}</>}
             </p>
           )}
