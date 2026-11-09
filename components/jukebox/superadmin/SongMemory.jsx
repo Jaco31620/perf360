@@ -354,7 +354,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
           {view === "todo" && qdef && <p className="text-xs text-gray-500">{qdef.help}</p>}
           {view === "todo" && status === "yearq" && (years > 0 || checking) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-orange-50 text-orange-900 rounded-xl px-3 py-2">
-              <span>📅 {checking ? checking.left ?? years : years} chanson{years > 1 ? "s" : ""} pas encore vérifiée{years > 1 ? "s" : ""} : vérifiées chaque nuit (MusicBrainz, sans quota YouTube, ≈ 2 s par chanson).</span>
+              <span>📅 {checking ? checking.left ?? years : years} chanson{years > 1 ? "s" : ""} pas encore vérifiée{years > 1 ? "s" : ""} : vérifiées chaque nuit après l’enrichissement (Wikidata puis MusicBrainz, sans quota YouTube, quelques secondes par chanson : parfois plusieurs nuits).</span>
               {checking ? (
                 <span className="flex items-center gap-2 font-bold">
                   ⏳ {checking.done} vérifiée{checking.done > 1 ? "s" : ""}, {checking.suggested} proposition{checking.suggested > 1 ? "s" : ""}…
