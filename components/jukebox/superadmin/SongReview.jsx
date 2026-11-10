@@ -153,7 +153,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     {song.year || (song.enriched ? "année ?" : "…")}
                   </button>
                   {clipInfo.same && <span className={`${tag} bg-amber-100 text-amber-800`} title="Cette vidéo est aussi celle de la version paroles">🔁 Même vidéo que la version paroles{clipInfo.paroles?.lyrics ? " (avec paroles)" : ""}</span>}
-                  <YearSuggest song={song} run={runR} />
+                  <YearSuggest song={song} run={runR} lookup />
                   <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
                     className={`${tag} ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
                     {song.fr === true ? <><FrFlag /> Français</> : song.fr === false ? "🌍 International" : song.enriched ? "❓ langue" : "…"}

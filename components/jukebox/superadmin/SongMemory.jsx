@@ -528,7 +528,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
                             {head.year || (head.enriched ? "année ?" : "…")}
                           </button>
-                          <YearSuggest song={head} run={run} />
+                          <YearSuggest song={head} run={run} lookup />
                           <button onClick={() => run({ action: "songMeta", key: head.key, fr: FR_NEXT[String(head.fr)] })}
                             title="Langue (cliquer : français → international → inconnue)"
                             className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${head.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>

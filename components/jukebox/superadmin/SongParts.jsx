@@ -129,10 +129,21 @@ export function BlindStat({ song, run }) {
   );
 }
 
+/* Recherche web de l'année de sortie (nouvel onglet). */
+const yearSearchUrl = (song) => `https://www.google.com/search?q=${encodeURIComponent(`${song.artist} ${song.title} année de sortie`)}`;
+
 /* Année plus ancienne proposée par la vérification (MusicBrainz) : à
- * accepter ou refuser (plus reproposée). Une autre année : clic sur l'année. */
-export function YearSuggest({ song, run, className = "" }) {
-  if (!song.yearSuggest) return null;
+ * accepter ou refuser (plus reproposée). Une autre année : clic sur l'année.
+ * Année manquante (sans proposition) : lien pour la chercher sur le web. */
+export function YearSuggest({ song, run, className = "", lookup = false }) {
+  if (!song.yearSuggest) {
+    if (song.year || !lookup) return null;
+    return (
+      <a href={yearSearchUrl(song)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+        title="Chercher l'année sur le web (nouvel onglet), puis cliquer l'année pour la renseigner"
+        className={`text-[11px] font-bold text-gray-500 hover:text-gray-900 underline ${className}`}>🔎 chercher l'année</a>
+    );
+  }
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   return (
     <span className={`inline-flex flex-wrap items-center gap-1 text-[11px] ${className}`} onClick={(e) => e.stopPropagation()}>
@@ -147,7 +158,7 @@ export function YearSuggest({ song, run, className = "" }) {
         const v = prompt(`Année de sortie de « ${song.artist} – ${song.title} »`, "");
         if (v && v.trim()) run({ action: "songMeta", key: song.key, year: v.trim() }); // la proposition disparaît
       })} title="Ni l'une ni l'autre : taper l'année" className="font-bold bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">✎ autre</button>
-      <a href={`https://www.google.com/search?q=${encodeURIComponent(`${song.artist} ${song.title} année de sortie`)}`} target="_blank" rel="noreferrer"
+      <a href={yearSearchUrl(song)} target="_blank" rel="noreferrer"
         onClick={(e) => e.stopPropagation()} title="Chercher l'année sur le web (nouvel onglet)" className="font-bold text-gray-500 hover:text-gray-900 underline">🔎 chercher</a>
     </span>
   );
