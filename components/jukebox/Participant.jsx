@@ -28,7 +28,7 @@ export default function Participant({ code }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
   // catalogue des titres vérifiés (option de la soirée) : filtres en cours, page suivante disponible
-  // null : recherche normale ; { decades: [], lang, sort, q, view: "songs" | "artists", artist }
+  // null : recherche normale ; { decades: [], lang, sort, q, view: "songs" | "artists" }
   const [browse, setBrowse] = useState(null);
   const [browseMore, setBrowseMore] = useState(false);
   const [artists, setArtists] = useState(null); // vue « Artistes » : [{ name, count }]
@@ -41,7 +41,6 @@ export default function Participant({ code }) {
     try {
       const qs = new URLSearchParams({ decade: f.decades.join(","), lang: f.lang, sort: f.sort, q: f.view === "artists" ? "" : f.q, offset: append ? String(results?.length || 0) : "0" });
       if (f.view === "artists") qs.set("view", "artists");
-      else if (f.artist) qs.set("artist", f.artist);
       const res = await fetch(`/api/jukebox/${code}/catalog?${qs}`, { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
@@ -136,16 +135,42 @@ export default function Participant({ code }) {
     }
   };
 
-  /* Toucher un interprète (résultats, catalogue, en ce moment, file) : ses
-   * titres vérifiés du catalogue ; sans catalogue, une recherche à son nom. */
-  const openArtist = (artist) => {
-    if (!artist) return;
-    searchCard.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (!data?.session?.catalog) { setQ(artist); runSearch(artist); return; }
-    setResults(null);
-    loadCatalog({ decades: [], lang: "", sort: "plays", q: "", view: "songs", artist });
+  /* Toucher un interprète (résultats, catalogue, en ce moment, file) : fenêtre
+   * « Autres titres de… » (ses titres vérifiés, sans les filtres du
+   * catalogue) ; sans catalogue, une recherche à son nom. */
+  const [artistPop, setArtistPop] = useState(null); // { name, list: null (chargement) | [...], error }
+  const openArtist = async (name) => {
+    if (!name) return;
+    if (!data?.session?.catalog) { searchArtist(name); return; }
+    setArtistPop({ name, list: null });
+    try {
+      const res = await fetch(`/api/jukebox/${code}/catalog?${new URLSearchParams({ artist: name, sort: "plays" })}`, { cache: "no-store" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
+      setArtistPop((cur) => (cur?.name === name ? { name, list: d.results || [] } : cur));
+    } catch (err) {
+      setArtistPop((cur) => (cur?.name === name ? { name, list: [], error: err.message } : cur));
+    }
   };
-  const searchArtist = (artist) => { setQ(artist); runSearch(artist); };
+  // bouton retour du téléphone : ferme la fenêtre au lieu de quitter la page
+  const popOpen = !!artistPop;
+  useEffect(() => {
+    if (!popOpen) return;
+    window.history.pushState({ jbArtist: 1 }, "");
+    const onPop = () => setArtistPop(null);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [popOpen]);
+  const closeArtist = () => {
+    if (window.history.state?.jbArtist) window.history.back(); // → popstate : fermée
+    else setArtistPop(null);
+  };
+  const searchArtist = (name) => {
+    if (artistPop) closeArtist();
+    setQ(name);
+    runSearch(name);
+    searchCard.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const artistTap = !(blindOn && !data?.admin); // blind test : pas de recherche côté invité
 
   const add = async (v) => {
@@ -160,9 +185,8 @@ export default function Participant({ code }) {
       if (!res.ok) throw new Error(d.error || "Ajout impossible.");
       setFlash(v.title);
       setTimeout(() => setFlash(""), 2500);
-      setResults(null);
-      setBrowse(null);
-      setArtists(null);
+      if (artistPop) closeArtist();
+      else { setResults(null); setBrowse(null); setArtists(null); }
       setDedication("");
       setPicked(null);
       setQ("");
@@ -237,6 +261,36 @@ export default function Participant({ code }) {
   const inQueue = new Set([now?.videoId, ...queue.map((t) => t.videoId), ...[now, ...queue].filter(Boolean).map(songKey)]);
   const isQueued = (v) => inQueue.has(v.id) || inQueue.has(songKey(v)); // résultats Deezer : même titre + artiste
   const blocked = !open && !admin; // ajouts bloqués : on peut chercher, pas ajouter
+  /* Un titre proposé (résultats, catalogue, « Autres titres de… ») : bouton Ajouter. */
+  const songRow = (v, linkArtist) => (
+    <li className="flex items-center gap-3 py-2.5">
+      {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
+        <p className="text-xs text-gray-500 truncate">
+          {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
+        </p>
+        {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
+        {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
+          <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
+            {admin && v.known ? <span className="text-gray-500" title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)">⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
+              : v.known === 2 ? <span className="text-green-700" title="Version vérifiée : bonne vidéo, passe tout de suite">✓ vérifié</span> : null}
+            {v.playedAt && !isQueued(v) ? <span className="text-amber-700">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
+          </p>
+        )}
+      </div>
+      {isQueued(v) ? (
+        <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
+      ) : (
+        <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding || blocked || full}
+          title={blocked ? "Ajouts bloqués pour le moment" : full ? "Attendez qu'un de vos titres passe" : undefined}
+          className="shrink-0 bg-[var(--jb-accent2)] hover:brightness-110 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
+          {adding === v.id ? "…" : "+ Ajouter"}
+        </button>
+      )}
+    </li>
+  );
+
 
   const theme = session.theme;
   return (
@@ -331,7 +385,7 @@ export default function Participant({ code }) {
             )}
 
             {session.catalog && !browse && (
-              <button onClick={() => { setResults(null); loadCatalog({ decades: [], lang: "", sort: "plays", q: "", view: "songs", artist: "" }); }}
+              <button onClick={() => { setResults(null); loadCatalog({ decades: [], lang: "", sort: "plays", q: "", view: "songs" }); }}
                 className="mt-3 w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-2.5">
                 📚 Pas d'idée ? Parcourir le catalogue des titres vérifiés
               </button>
@@ -342,19 +396,11 @@ export default function Participant({ code }) {
                   <p className="text-sm font-bold text-gray-800">📚 Catalogue · titres vérifiés</p>
                   <button onClick={() => { setBrowse(null); setResults(null); setArtists(null); }} className="text-sm text-gray-500 underline">Fermer</button>
                 </div>
-                {browse.artist ? (
-                  /* titres d'un interprète : la croix ramène au catalogue complet */
-                  <div className="flex items-center gap-2 rounded-xl bg-[var(--jb-soft)] px-3 py-2">
-                    <p className="flex-1 min-w-0 text-sm font-bold text-[var(--jb-accent)] truncate">👤 {browse.artist}</p>
-                    <button onClick={() => loadCatalog({ ...browse, artist: "" })} className="shrink-0 text-sm font-bold text-gray-500 px-1" aria-label="Tout le catalogue">✕</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="w-14 shrink-0 font-semibold text-gray-400">Voir</span>
-                    <Segmented value={browse.view} onChange={(v) => loadCatalog({ ...browse, view: v, q: "" })}
-                      options={[["songs", "🎵 Titres"], ["artists", "👤 Artistes"]]} />
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-14 shrink-0 font-semibold text-gray-400">Voir</span>
+                  <Segmented value={browse.view} onChange={(v) => loadCatalog({ ...browse, view: v, q: "" })}
+                    options={[["songs", "🎵 Titres"], ["artists", "👤 Artistes"]]} />
+                </div>
                 {/* filtres : toutes les options visibles, l'option active en couleur */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex gap-2">
@@ -384,11 +430,11 @@ export default function Participant({ code }) {
                       options={[["plays", "🔥 Populaires"], ["alpha", "A → Z"]]} />
                   </div>
                 </div>
-                {!browse.artist && <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
+                <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
                   <input key={browse.view} name="cq" defaultValue={browse.q} placeholder={browse.view === "artists" ? "Filtrer : nom d'artiste…" : "Filtrer : artiste, titre…"} autoComplete="off" enterKeyHint="search"
                     className="flex-1 min-w-0 text-sm border-2 border-gray-200 rounded-xl px-3 py-1.5 focus:border-[var(--jb-accent)] outline-none" />
                   <button className="text-sm font-bold bg-gray-100 px-3 rounded-xl">OK</button>
-                </form>}
+                </form>
               </div>
             )}
             {browse?.view === "artists" && artists && (() => {
@@ -403,7 +449,7 @@ export default function Participant({ code }) {
                     <ul className="divide-y divide-gray-100">
                       {list.slice(0, artistsShown).map((a) => (
                         <li key={a.name}>
-                          <button onClick={() => loadCatalog({ ...browse, view: "songs", q: "", artist: a.name })}
+                          <button onClick={() => openArtist(a.name)}
                             className="w-full flex items-center gap-3 py-2.5 text-left">
                             <span className="flex-1 min-w-0 font-semibold text-gray-900 text-sm truncate">{a.name}</span>
                             <span className="shrink-0 text-xs text-gray-500">{a.count} titre{a.count > 1 ? "s" : ""} ›</span>
@@ -423,7 +469,7 @@ export default function Participant({ code }) {
               <ul className="mt-4 divide-y divide-gray-100">
                 {results.length === 0 && !error && (
                   browse ? (
-                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : browse.artist ? `Aucun titre vérifié de ${browse.artist}${browse.decades.length || browse.lang ? " avec ces filtres" : ""}${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant.` : (browse.decades.length || browse.lang || browse.q ? "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue, ou la recherche ci-dessus." : `Aucun titre vérifié${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant : utilisez la recherche ci-dessus.`)}</li>
+                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : browse.decades.length || browse.lang || browse.q ? "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue, ou la recherche ci-dessus." : `Aucun titre vérifié${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant : utilisez la recherche ci-dessus.`}</li>
                   ) : (
                   <li className="py-4 text-center text-gray-500 text-sm space-y-1">
                     <p className="font-semibold text-gray-700">Aucun résultat.</p>
@@ -440,47 +486,13 @@ export default function Participant({ code }) {
                   {!admin && k > 0 && v.known !== 2 && results[k - 1].known === 2 && (
                     <li className="pt-3 pb-1.5 text-xs font-semibold text-gray-400 border-t-2 border-gray-200">Autres versions</li>
                   )}
-                  <li className="flex items-center gap-3 py-2.5">
-                    {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {v.deezerId && artistTap && !browse?.artist ? <ArtistLink name={v.channel} onOpen={openArtist} /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
-                      </p>
-                      {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
-                      {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
-                        <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
-                          {admin && v.known ? <span className="text-gray-500" title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)">⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
-                            : v.known === 2 ? <span className="text-green-700" title="Version vérifiée : bonne vidéo, passe tout de suite">✓ vérifié</span> : null}
-                          {v.playedAt && !isQueued(v) ? <span className="text-amber-700">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
-                        </p>
-                      )}
-                    </div>
-                    {isQueued(v) ? (
-                      <span className="text-xs text-gray-400 shrink-0">Déjà dans la file</span>
-                    ) : (
-                      <button onClick={() => (session.dedications ? setPicked(v) : add(v))} disabled={!!adding || blocked || full}
-                        title={blocked ? "Ajouts bloqués pour le moment" : full ? "Attendez qu'un de vos titres passe" : undefined}
-                        className="shrink-0 bg-[var(--jb-accent2)] hover:brightness-110 disabled:opacity-40 text-white text-sm font-bold px-3.5 py-2 rounded-full">
-                        {adding === v.id ? "…" : "+ Ajouter"}
-                      </button>
-                    )}
-                  </li>
+                  {songRow(v, true)}
                   </Fragment>
                 ))}
               </ul>
             )}
             {/* fin du catalogue : le dire, surtout quand il est petit (soirée karaoké : seules les versions karaoké vérifiées) */}
-            {browse?.artist && !searching && results && (
-              /* titres d'un interprète : la recherche trouve les autres (versions pas encore vérifiées) */
-              <div className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2 space-y-2">
-                {results.length > 0 && <p>{results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""} de {browse.artist}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang ? " avec ces filtres" : ""}.</p>}
-                <button onClick={() => searchArtist(browse.artist)} className="w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl py-2">
-                  🔍 Chercher d'autres titres de {browse.artist}
-                </button>
-              </div>
-            )}
-            {browse && !browse.artist && !browseMore && !searching && results?.length > 0 && (
+            {browse && !browseMore && !searching && results?.length > 0 && (
               <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
                 {results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang || browse.q ? " avec ces filtres" : ""} pour l'instant.
                 {" "}Pas trouvé votre bonheur ? Utilisez la recherche ci-dessus{session.searchMode === "karaoke" ? " : elle trouve aussi les autres versions karaoké" : ""}.
@@ -565,6 +577,38 @@ export default function Participant({ code }) {
         )}
         </>)}
       </div>
+      {artistPop && (
+        /* « Autres titres de… » : par-dessus la page, qui reste telle quelle */
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !adding && closeArtist())}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md max-h-[85vh] flex flex-col bg-white rounded-3xl shadow-2xl">
+            <div className="flex items-center gap-2 px-5 pt-5 pb-2">
+              <p className="flex-1 min-w-0 font-bold text-gray-900 leading-snug">👤 Autres titres de <span className="text-[var(--jb-accent)]">{artistPop.name}</span></p>
+              <button onClick={closeArtist} className="shrink-0 text-gray-400 hover:text-gray-700 text-xl leading-none px-1" aria-label="Fermer">✕</button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-5">
+              {!artistPop.list ? (
+                <p className="py-6 text-center text-gray-500 text-sm">Chargement…</p>
+              ) : artistPop.list.length === 0 ? (
+                <p className="py-4 text-center text-gray-500 text-sm">{artistPop.error || `Aucun titre vérifié de ${artistPop.name}${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant.`}</p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500">{artistPop.list.length} titre{artistPop.list.length > 1 ? "s" : ""} vérifié{artistPop.list.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}</p>
+                  <ul className="divide-y divide-gray-100">
+                    {artistPop.list.map((v) => <Fragment key={v.id}>{songRow(v, false)}</Fragment>)}
+                  </ul>
+                </>
+              )}
+              {error && artistPop.list && <p className="pb-2 text-center text-red-600 text-sm">{error}</p>}
+            </div>
+            <div className="p-4 border-t border-gray-100">
+              <button onClick={() => searchArtist(artistPop.name)}
+                className="w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-2.5">
+                🔍 Chercher d'autres titres de {artistPop.name}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {picked && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !adding && setPicked(null))}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); add(picked); }}
