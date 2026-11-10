@@ -19,6 +19,7 @@ const KINDS = {
   replay: ["🔁", "Titre rejoué"],
   reset: ["🧹", "File vidée"],
   video_changed: ["🎬", "Vidéo changée"],
+  clip_proposed: ["🎬", "Clip proposé"],
   reported: ["🚩", "Problème signalé"],
   dedication_cleared: ["💬", "Dédicace effacée"],
   pause: ["⏸", "Pause"],

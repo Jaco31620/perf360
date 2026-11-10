@@ -613,3 +613,42 @@ update public.jukebox_versions v
     and f.created_at <= v.created_at + interval '10 minutes';
 select source, count(*) as versions, count(source_session) as avec_soiree
   from public.jukebox_versions group by source order by versions desc;
+
+-- v37 (11/11/2026) : mode clip v2.
+--  - jukebox_versions.no_clip : version clip décidée « pas de clip » après revue
+--    (validated = true, la vidéo refusée est gardée pour mémoire, jamais jouée ;
+--    seulement si la version paroles est validée au moment de la décision) ;
+--  - jukebox_tracks.no_clip : titre d'une soirée clip qui passe sa version
+--    paroles faute de clip validé (mention « pas de clip validé », bouton
+--    « 🎬 Proposer le clip »).
+alter table public.jukebox_versions add column if not exists no_clip boolean not null default false;
+alter table public.jukebox_tracks add column if not exists no_clip boolean not null default false;
+create or replace view public.jukebox_catalog with (security_invoker = true) as
+select
+  'w:' || w.id || ':' || v.kind as key,
+  w.id as work_id,
+  v.kind as mode,
+  (select min(a.deezer_id) from public.jukebox_work_aliases a where a.work_id = w.id) as deezer_id,
+  v.video_id, v.duration, v.video_title, v.video_channel, v.lyrics, v.validated, v.missing,
+  v.confidence, v.source, v.checked_at, v.created_at,
+  w.label, w.artist_fix, w.title_fix, w.isrc, w.song_duration, w.year, w.lang, w.country, w.fr,
+  w.enriched_at, w.rank, w.plays, w.blind,
+  null::text as merged_into,
+  w.difficulty, w.difficulty_checked,
+  w.blind_decided_at, w.blind_seen, w.blind_seen_found,
+  w.year_suggest, w.year_suggest_src, w.year_checked_at,
+  v.source_session, v.no_clip
+from public.jukebox_versions v
+join public.jukebox_works w on w.id = v.work_id;
+revoke all on public.jukebox_catalog from anon, authenticated;
+grant select on public.jukebox_catalog to service_role;
+-- comptage avant la remise en revue des clips (même vidéo que la version paroles ou non)
+select c.validated as clip_valide, (c.video_id = p.video_id) as meme_video_que_paroles, count(*) as versions
+  from public.jukebox_versions c
+  left join public.jukebox_versions p on p.work_id = c.work_id and p.kind = 'normal'
+  where c.kind = 'clip'
+  group by 1, 2 order by 1, 2;
+
+-- v37 bis : remise en revue de TOUTES les versions clip existantes (à lancer
+-- après lecture du comptage ci-dessus) : elles redeviennent « à vérifier ».
+update public.jukebox_versions set validated = false, no_clip = false where kind = 'clip';

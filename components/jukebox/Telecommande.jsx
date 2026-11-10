@@ -217,7 +217,7 @@ export default function Telecommande({ code }) {
             </div>
 
             <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
-            <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
+            <QueueList code={code} queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
           </section>
         )}
 

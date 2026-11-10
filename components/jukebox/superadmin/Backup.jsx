@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
  * restaurer (titres ajoutés ou mis à jour, jamais supprimés). */
 /* (mêmes colonnes que EXPORT_COLUMNS, lib/jukeboxLibrary.js : une ligne par version, deezer_ids = fiches de la chanson) */
 const CSV_COLS = ["key", "deezer_ids", "label", "artist_fix", "title_fix", "isrc", "video_id", "video_title", "video_channel", "duration", "song_duration",
-  "validated", "blind", "lyrics", "missing", "plays", "rank", "year", "lang", "country", "fr", "checked_at", "enriched_at", "created_at"];
+  "validated", "blind", "lyrics", "missing", "plays", "rank", "year", "lang", "country", "fr", "checked_at", "enriched_at", "created_at", "no_clip"];
 const csvCell = (v) => (v == null ? "" : /[",\n;]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
 function parseCsv(text) {
   const rows = [];

@@ -24,6 +24,7 @@
 import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { withTrims } from "@/lib/jukeboxTrim";
+import { proposeClip } from "@/lib/jukeboxClip";
 import { loadSession, publicSession, isAdminReq, fairPosition, hideAuthors, trackOut, ytVideo, deezerTrack, youtubeForSong, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { isValidVideoId, MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, closedReason } from "@/lib/jukebox";
 import { isJukeboxSuper } from "@/lib/jukeboxAdmin";
@@ -170,7 +171,7 @@ export async function POST(req, { params }) {
       if (waiting.some((r) => sameSong(r, song))) return Response.json({ error: "Ce titre est déjà dans la file." }, { status: 409 });
       const yt = await youtubeForSong(song, publicSession(s).searchMode, { beforeSearch, source: admin ? "regie" : "guest", session: s.name || s.code });
       if (!yt) return Response.json({ error: "Impossible de trouver ce titre sur YouTube." }, { status: 422 });
-      v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null };
+      v = { id: yt.id, title: yt.text?.title || song.title, channel: yt.text?.artist || song.channel, thumb: song.thumb || yt.thumb, duration: yt.duration, videoTitle: yt.title || null, noClip: !!yt.noClip };
     } else {
       // chansons uniquement pour les invités ; la régie peut ajouter n'importe quelle vidéo jouable
       const { video, reason } = await ytVideo(videoId, { musicOnly: !admin });
@@ -184,6 +185,7 @@ export async function POST(req, { params }) {
       session_id: s.id, video_id: v.id, title: v.title, channel: v.channel, thumb: v.thumb,
       duration: v.duration, video_title: v.videoTitle || v.title || null, participant_id: pid, author: author || "Régie",
       ...(dedication && publicSession(s).dedications ? { dedication } : {}),
+      ...(v.noClip ? { no_clip: true } : {}), // soirée clip : la version paroles passe faute de clip validé
       position: publicSession(s).fairQueue ? fairPosition(rows.filter((r) => r.status === "queued"), pid) : Date.now(),
     });
     if (error) throw error;
@@ -197,6 +199,37 @@ export async function POST(req, { params }) {
     if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
     console.error("jukebox POST:", e);
     return Response.json({ error: "Ajout impossible." }, { status: 502 });
+  }
+}
+
+/* PATCH { participantId, id, link } : « 🎬 Proposer le clip » d'un de ses titres
+ * (soirée clip, titre qui passe sa version paroles) : le lien passe pour ce
+ * titre ; la mémoire le reçoit à vérifier (lib/jukeboxClip.js). */
+export async function PATCH(req, { params }) {
+  const { code } = await params;
+  let body;
+  try { body = await req.json(); } catch (e) { return Response.json({ error: "Requête invalide." }, { status: 400 }); }
+  const pid = body?.participantId;
+  if (!validPid(pid)) return Response.json({ error: "Participant invalide." }, { status: 400 });
+  if (!/^[0-9a-f-]{36}$/i.test(String(body?.id || ""))) return Response.json({ error: "Titre introuvable." }, { status: 404 });
+  try {
+    const s = await loadSession(code);
+    if (!s) return Response.json({ error: "Soirée introuvable." }, { status: 404 });
+    if (await tooMany(`clip:${s.id}:${pid}`, 10, 600)) return Response.json({ error: "Beaucoup de liens proposés : réessayez dans quelques minutes." }, { status: 429 });
+    const { data: t, error } = await getSupabaseAdmin().from("jukebox_tracks").select("*")
+      .eq("session_id", s.id).eq("id", String(body.id)).eq("participant_id", pid).maybeSingle();
+    if (error) throw error;
+    const out = await proposeClip(s, t, body.link);
+    if (out.error) return Response.json({ error: out.error }, { status: 422 });
+    await Promise.all([
+      logEvent(s.id, "clip_proposed", `Invité · ${t.author}`, { title: `${t.channel} – ${t.title}`, video: out.video.id }),
+      notify(s.code, "queue"),
+    ]);
+    return Response.json({ ok: true });
+  } catch (e) {
+    if (e instanceof YoutubeError) return Response.json({ error: e.message }, { status: 503 });
+    console.error("jukebox PATCH:", e);
+    return Response.json({ error: "Proposition impossible." }, { status: 502 });
   }
 }
 

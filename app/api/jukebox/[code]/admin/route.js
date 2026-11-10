@@ -54,6 +54,7 @@ import { adminAccess, ensureRegieCode, listDevices, createJoinPass, revokeDevice
 import { loadSession, publicSession, regieOptions, songAlternatives, findSongKey, rememberSong, countPlay, ytVideo, REJECT_MESSAGES, YoutubeError } from "@/lib/jukeboxServer";
 import { MAX_NAME_LEN, MAX_LOGO_BYTES, normalizeMax, normalizeMode, normalizeTheme, HANDOFF_MS } from "@/lib/jukebox";
 import { normalizeBlind } from "@/lib/jukeboxBlind";
+import { proposeClip } from "@/lib/jukeboxClip";
 import { sessionBlind, topUpBlind, dropBlindPicks, acceptAnswer, playPos, AUTO_PID } from "@/lib/jukeboxBlindServer";
 
 export const runtime = "nodejs";
@@ -276,13 +277,23 @@ export async function POST(req, { params }) {
           ...(String(t.thumb || "").includes("ytimg") ? { thumb: video.thumb } : {}), // pochette Deezer conservée
         }).eq("id", t.id);
         if (res.error) break;
-        // mémoire (prochaines soirées) : titre validé → proposition au super-admin ; sinon vidéo retenue, à vérifier (trace dans les deux cas)
-        const memory = key ? await soireeVideoChange({
+        // mémoire (prochaines soirées) : titre validé → proposition au super-admin ; sinon vidéo retenue, à vérifier (trace dans les deux cas).
+        // Soirée clip : dépannage de cette soirée seulement (la mémoire passe par « 🎬 Proposer le clip » et 🚩)
+        const memory = key && mode !== "clip" ? await soireeVideoChange({
           key, video, session: s, bySuper: isJukeboxSuper(req), remember: () => rememberSong(key, video, null, false, { source: "regie", session: s.name || s.code }),
         }) : null;
         ev = { kind: "video_changed", data: { title: `${t.channel} – ${t.title}`, video: video.id } };
         await after();
         return Response.json({ ok: true, memory });
+      }
+      case "proposeClip": { // soirée clip : lien du clip pour un titre qui passe sa version paroles
+        const { data: t, error } = await tracks().select("*").eq("session_id", s.id).eq("id", String(body.id || "")).maybeSingle();
+        if (error) throw error;
+        const out = await proposeClip(s, t, body.link, { admin: true });
+        if (out.error) return Response.json({ error: out.error }, { status: 422 });
+        ev = { kind: "clip_proposed", data: { title: `${t.channel} – ${t.title}`, video: out.video.id } };
+        await after();
+        return Response.json({ ok: true, memory: out.memory });
       }
       case "reportInfo":
       case "report": {

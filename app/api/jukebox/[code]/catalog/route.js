@@ -7,6 +7,9 @@
  * soirée « catalogue » (oui par défaut).
  *  &artist=<nom> : les titres de cet interprète (tous, sans pages)
  *  &view=artists : les interprètes → { artists: [{ name, count }] }
+ * Soirée clip : tous les titres vérifiés (clip validé, ou version paroles
+ * validée : noClip, mention « pas de clip validé ») ; &clip=1 : seulement
+ * ceux qui ont un clip validé.
  */
 import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { loadSession, publicSession } from "@/lib/jukeboxServer";
@@ -14,6 +17,7 @@ import { catalog } from "@/lib/jukeboxCatalog";
 import { songText, PLAYED_RECENT_MS } from "@/lib/jukebox";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { sameArtist } from "@/lib/jukeboxBlind";
+import { clipRows } from "@/lib/jukeboxServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,8 +42,11 @@ export async function GET(req, { params }) {
     const decs = [...new Set(p("decade").split(",").map((d) => parseInt(d, 10)).filter((d) => d >= 1900 && d <= 2100))].slice(0, 10);
     const term = p("q").trim().slice(0, 80).replace(/[%_,()*.:"\\]/g, " ").replace(/\s+/g, " ");
     const artist = p("artist").trim().slice(0, 80);
+    const clipMode = pub.searchMode === "clip";
     const query = (cols) => {
-      let q = catalog(cols).eq("mode", pub.searchMode).eq("validated", true).eq("missing", false).not("deezer_id", "is", null);
+      // soirée clip : versions clip et paroles de chaque chanson (une ligne par chanson ensuite, clipRows)
+      let q = clipMode ? catalog(`${cols},mode,missing,no_clip`).in("mode", ["clip", "normal"]).not("deezer_id", "is", null)
+        : catalog(cols).eq("mode", pub.searchMode).eq("validated", true).eq("missing", false).not("deezer_id", "is", null);
       // une ou plusieurs décennies (« 1980,1990 ») : l'une OU l'autre
       if (decs.length) q = q.or(decs.map((d) => `and(year.gte.${d},year.lte.${d + 9})`).join(","));
       if (p("lang") === "fr") q = q.eq("fr", true);
@@ -57,13 +64,14 @@ export async function GET(req, { params }) {
         rows.push(...(data || []));
         if ((data || []).length < 1000) break;
       }
-      return rows;
+      if (!clipMode) return rows;
+      return clipRows(rows).filter((r) => r.validated && (p("clip") !== "1" || !r.noClip));
     };
 
     // liste des interprètes (nombre de titres), dans l'ordre demandé
     if (p("view") === "artists") {
       const by = new Map();
-      for (const r of await all("label,artist_fix,plays,rank")) {
+      for (const r of await all("work_id,label,artist_fix,plays,rank,validated")) {
         const name = songText(r).artist;
         const k = norm(name);
         if (!k) continue;
@@ -78,14 +86,17 @@ export async function GET(req, { params }) {
       return Response.json({ artists: artists.map(({ name, count }) => ({ name, count })) }, { headers: { "cache-control": "no-store" } });
     }
 
-    const cols = "key,work_id,deezer_id,video_id,label,artist_fix,title_fix,duration,year,fr,plays";
+    const cols = "key,work_id,deezer_id,video_id,label,artist_fix,title_fix,duration,year,fr,plays,validated";
     let data;
     if (artist) data = (await all(cols)).filter((r) => sameArtist(songText(r).artist, artist));
     else {
       const offset = Math.max(0, Math.min(5000, parseInt(p("offset"), 10) || 0));
-      const res = await query(cols).range(offset, offset + PAGE); // une ligne de plus : y en a-t-il encore ?
-      if (res.error) throw res.error;
-      data = res.data;
+      if (clipMode) data = (await all(cols)).slice(offset, offset + PAGE + 1); // une ligne de plus : y en a-t-il encore ?
+      else {
+        const res = await query(cols).range(offset, offset + PAGE);
+        if (res.error) throw res.error;
+        data = res.data;
+      }
     }
 
     // titres déjà passés ce soir
@@ -103,6 +114,7 @@ export async function GET(req, { params }) {
         return {
           id: `dz${r.deezer_id}`, deezerId: Number(r.deezer_id), title: t.title, channel: t.artist, year: r.year || null,
           thumb: `https://i.ytimg.com/vi/${r.video_id}/mqdefault.jpg`, duration: r.duration, known: 2,
+          ...(r.noClip ? { noClip: true } : {}),
           ...(at ? { playedAt: at } : {}),
         };
       }),

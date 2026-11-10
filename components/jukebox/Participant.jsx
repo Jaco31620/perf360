@@ -16,6 +16,7 @@ import { FrFlag } from "./FrFlag";
 import { Leaderboard } from "./Blind";
 import { useWakeLock } from "./useWakeLock";
 import { backdropClose } from "@/lib/backdrop";
+import { NoClipTag, ProposeClip } from "./ProposeClip";
 
 const ARTISTS_PAGE = 60; // vue « Artistes » du catalogue : affichés par blocs
 
@@ -41,6 +42,7 @@ export default function Participant({ code }) {
     try {
       const qs = new URLSearchParams({ decade: f.decades.join(","), lang: f.lang, sort: f.sort, q: f.view === "artists" ? "" : f.q, offset: append ? String(results?.length || 0) : "0" });
       if (f.view === "artists") qs.set("view", "artists");
+      if (f.clip) qs.set("clip", "1"); // soirée clip : seulement les titres avec un clip validé
       const res = await fetch(`/api/jukebox/${code}/catalog?${qs}`, { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
@@ -231,6 +233,21 @@ export default function Participant({ code }) {
   const nowId = data?.now?.id;
   useEffect(() => { setVerdict(null); setAnswer(""); }, [nowId]); // et la réponse en cours de frappe
 
+  // soirée clip : lien du clip proposé pour un de ses titres (version paroles faute de clip validé)
+  const [clipFor, setClipFor] = useState(null);
+  const [clipNote, setClipNote] = useState("");
+  const sendClip = async (link) => {
+    const res = await fetch(`/api/jukebox/${code}`, {
+      method: "PATCH", headers: headers(),
+      body: JSON.stringify({ participantId: pid.current, id: clipFor.id, link }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return d.error || "Proposition impossible.";
+    lastAct.current = Date.now();
+    refresh();
+    return null;
+  };
+
   const withdraw = async (t) => {
     if (!confirm(`Retirer « ${t.title} » de la file ?`)) return;
     lastAct.current = Date.now();
@@ -276,11 +293,12 @@ export default function Participant({ code }) {
           {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} icon /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
         </p>
         {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
-        {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
+        {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v)) || (v.noClip && session.searchMode === "clip")) && (
           <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
             {admin && v.known ? <span className="text-gray-500" title="Vidéo déjà en mémoire (aucune recherche YouTube à l'ajout)">⚡ {v.known === 2 ? "validé" : "en mémoire"}</span>
               : v.known === 2 ? <span className="text-green-700" title="Version vérifiée : bonne vidéo, passe tout de suite">✓ vérifié</span> : null}
-            {v.playedAt && !isQueued(v) ? <span className="text-amber-700">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
+            {v.noClip && session.searchMode === "clip" && <NoClipTag className="text-gray-500" />}
+          {v.playedAt && !isQueued(v) ? <span className="text-amber-700">🔁 déjà passé à {new Date(v.playedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span> : null}
           </p>
         )}
       </div>
@@ -429,6 +447,13 @@ export default function Participant({ code }) {
                     <Segmented value={browse.lang} onChange={(l) => loadCatalog({ ...browse, lang: l })}
                       options={[["", "Toutes"], ["fr", <><FrFlag /> Français</>], ["intl", "🌍 Intern."]]} />
                   </div>
+                  {session.searchMode === "clip" && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-14 shrink-0 font-semibold text-gray-400">Clip</span>
+                      <Segmented value={browse.clip || ""} onChange={(c) => loadCatalog({ ...browse, clip: c })}
+                        options={[["", "Tous"], ["1", "🎬 Avec clip"]]} />
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="w-14 shrink-0 font-semibold text-gray-400">Ordre</span>
                     <Segmented value={browse.sort} onChange={(o) => loadCatalog({ ...browse, sort: o })}
@@ -503,7 +528,7 @@ export default function Participant({ code }) {
             {/* fin du catalogue : le dire, surtout quand il est petit (soirée karaoké : seules les versions karaoké vérifiées) */}
             {browse && !browseMore && !searching && results?.length > 0 && (
               <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
-                {results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang || browse.q ? " avec ces filtres" : ""} pour l'instant.
+                {results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""}{session.searchMode === "karaoke" ? " en version karaoké" : browse.clip ? " avec un clip" : ""}{browse.decades.length || browse.lang || browse.q ? " avec ces filtres" : ""} pour l'instant.
                 {" "}Pas trouvé votre bonheur ? Utilisez la recherche ci-dessus{session.searchMode === "karaoke" ? " : elle trouve aussi les autres versions karaoké" : ""}.
               </p>
             )}
@@ -519,6 +544,7 @@ export default function Participant({ code }) {
       </div>
 
       <div className="mt-5 bg-white/95 rounded-3xl p-6 shadow-xl">
+        {clipNote && <p className="mb-3 text-sm text-center text-green-700 font-semibold bg-green-50 rounded-xl px-3 py-2">{clipNote}</p>}
         {now?.hidden ? (
           <p className="text-sm text-gray-500 mb-4">🤫 Titre mystère en cours…</p>
         ) : now ? (
@@ -552,6 +578,7 @@ export default function Participant({ code }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
                       {t.channel && <p className="text-xs text-gray-500 truncate">{artistTap ? <ArtistLink name={t.channel} onOpen={openArtist} /> : t.channel}</p>}
+                      {t.noClip && <ClipLine t={t} onPropose={setClipFor} />}
                       <p className="text-xs font-semibold text-[var(--jb-accent)]">
                         {t.ahead === 0 ? "🔜 C'est le prochain !" : `${t.ahead} titre${t.ahead > 1 ? "s" : ""} avant le vôtre`}
                       </p>
@@ -578,6 +605,7 @@ export default function Participant({ code }) {
                     {t.channel && (t.mine || t.author) ? " · " : ""}{(t.mine || t.author) && `par ${t.mine ? "vous" : t.author}`}
                   </p>
                   {t.dedication && <p className="text-xs text-[var(--jb-accent)] italic truncate">💌 « {t.dedication} »</p>}
+                  {t.noClip && <ClipLine t={t} onPropose={t.mine ? setClipFor : null} />}
                 </div>
                 {t.mine && <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>}
               </li>
@@ -586,6 +614,12 @@ export default function Participant({ code }) {
         )}
         </>)}
       </div>
+      {clipFor && (
+        <ProposeClip track={clipFor} send={sendClip} onClose={(done) => {
+          if (done) { setClipNote(`🎬 Merci ! Le clip de « ${clipFor.title} » passera à la place de la version paroles.`); setTimeout(() => setClipNote(""), 4000); }
+          setClipFor(null);
+        }} />
+      )}
       {artistPop && (
         /* « Autres titres de… » : par-dessus la page, qui reste telle quelle */
         <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-3" {...backdropClose(() => !adding && closeArtist())}>
@@ -601,7 +635,7 @@ export default function Participant({ code }) {
                 <p className="py-4 text-center text-gray-500 text-sm">{artistPop.error || `Aucun titre vérifié de ${artistPop.name}${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant.`}</p>
               ) : (
                 <>
-                  <p className="text-xs text-gray-500">{artistPop.list.length} titre{artistPop.list.length > 1 ? "s" : ""} vérifié{artistPop.list.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}</p>
+                  <p className="text-xs text-gray-500">{artistPop.list.length} titre{artistPop.list.length > 1 ? "s" : ""} vérifié{artistPop.list.length > 1 ? "s" : ""}{session.searchMode === "karaoke" ? " en version karaoké" : ""}</p>
                   <ul className="divide-y divide-gray-100">
                     {artistPop.list.map((v) => <Fragment key={v.id}>{songRow(v, false)}</Fragment>)}
                   </ul>
@@ -714,6 +748,17 @@ function Shell({ theme, children }) {
     <div className="min-h-screen px-4 py-8" style={{ ...themeVars(theme), background: "var(--jb-guest-bg)" }}>
       <div className="max-w-md mx-auto">{children}</div>
     </div>
+  );
+}
+
+/* Soirée clip : titre de la file qui passe sa version paroles (pas de clip
+ * validé) ; onPropose : « 🎬 Proposer le clip » (ses propres titres). */
+function ClipLine({ t, onPropose }) {
+  return (
+    <p className="text-[11px] font-semibold text-gray-500 flex flex-wrap items-center gap-x-2">
+      <NoClipTag />
+      {onPropose && <button onClick={() => onPropose(t)} className="text-[var(--jb-accent)] underline">🎬 Proposer le clip</button>}
+    </p>
   );
 }
 

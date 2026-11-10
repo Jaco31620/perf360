@@ -45,8 +45,15 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
   };
   const go = (d) => { commitDraft(); setReview((r) => ({ ...r, i: Math.max(0, Math.min(r.keys.length, r.i + d)) })); };
   const runR = (body, confirmText) => { if (body.action !== "songText") commitDraft(); return run(body, confirmText); }; // autre action : correction en cours enregistrée d'abord
+  // version clip : sa version paroles (décision « pas de clip » possible seulement si elle est validée)
+  const clipInfo = (() => {
+    if (song?.mode !== "clip") return {};
+    const paroles = (songs || []).find((s) => s.workId === song.workId && s.mode === "normal") || null;
+    return { paroles, same: !!paroles && paroles.videoId === song.videoId, canNoClip: !!paroles?.validated && !paroles.missing };
+  })();
   const act = {
     validate: () => { if (song && !song.missing) runR({ action: "validateSong", key: song.key, validated: true }); go(1); },
+    noClip: () => { if (song && clipInfo.canNoClip) runR({ action: "noClip", key: song.key }); go(1); },
     lyrics: () => song && runR({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
     fix: () => song && onFix(song),
     text: () => song && setEditing("title"),
@@ -134,7 +141,9 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                   <span className={`${tag} ${MODE_TAG[song.mode] || "bg-gray-100 text-gray-600"}`}>{MODE_ICON[song.mode]} Version {modeLabel(song.mode)}</span>
-                  {song.missing
+                  {song.noClip
+                    ? <span className={`${tag} bg-gray-200 text-gray-700`} title="Décidé en revue : c'est la version paroles qui passe en soirée clip">🚫 Pas de clip</span>
+                    : song.missing
                     ? <span className={`${tag} bg-red-100 text-red-700`}>⚠️ Vidéo disparue · à remplacer</span>
                     : song.validated
                     ? <span className={`${tag} bg-green-100 text-green-700`}>✓ Validé</span>
@@ -143,6 +152,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     className={`${tag} ${song.year ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-400"}`}>
                     {song.year || (song.enriched ? "année ?" : "…")}
                   </button>
+                  {clipInfo.same && <span className={`${tag} bg-amber-100 text-amber-800`} title="Cette vidéo est aussi celle de la version paroles">🔁 Même vidéo que la version paroles{clipInfo.paroles?.lyrics ? " (avec paroles)" : ""}</span>}
                   <YearSuggest song={song} run={runR} />
                   <button onClick={() => run({ action: "songMeta", key: song.key, fr: FR_NEXT[String(song.fr)] })} title="Langue (cliquer : français → international → inconnue)"
                     className={`${tag} ${song.fr === null ? "bg-gray-100 text-gray-400" : "bg-indigo-100 text-indigo-700"}`}>
@@ -153,7 +163,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   </span>
                 </div>
                 <ChangeInfo song={song} run={changeRun} compare={compare} onPreview={(v) => setCompare(compare === v ? null : v)} />
-                <OtherVersions song={song} songs={songs} peek={peek} setPeek={setPeek} changeRun={changeRun} />
+                <OtherVersions song={song} songs={songs} peek={peek} setPeek={setPeek} />
                 {artistOpen && song.artist && <div className="max-h-48 overflow-y-auto mt-2"><ArtistSongs artist={song.artist} current={song.key} workId={song.workId} /></div>}
               </div>
 
@@ -172,11 +182,21 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
               <div className="flex gap-2">
                 <button onClick={act.prev} disabled={i === 0} title="Précédent" className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl disabled:opacity-40">←</button>
                 <button onClick={act.next} className="text-sm font-bold bg-gray-100 px-3 py-3 rounded-2xl whitespace-nowrap">Passer</button>
+                {song.mode === "clip" && (
+                  <button onClick={act.noClip} disabled={!clipInfo.canNoClip || song.noClip}
+                    title={clipInfo.canNoClip ? "Aucune vidéo convenable : la version paroles passera en soirée clip" : "Validez d'abord la version paroles : c'est elle qui passera à la place du clip"}
+                    className="text-sm font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 px-3 py-3 rounded-2xl disabled:opacity-40 whitespace-nowrap">
+                    🚫 Pas de clip
+                  </button>
+                )}
                 <button onClick={act.validate} disabled={song.missing}
                   className="flex-1 text-sm font-bold text-white bg-green-600 hover:bg-green-700 px-3 py-3 rounded-2xl disabled:opacity-40 whitespace-nowrap">
                   ✓ Valider et suivant
                 </button>
               </div>
+              {song.mode === "clip" && !clipInfo.canNoClip && (
+                <p className="-mt-1 text-xs text-gray-500">🚫 Pas de clip : validez d'abord la version paroles de cette chanson.</p>
+              )}
               <div className="flex items-start gap-3">
                 <details className="flex-1 text-xs text-gray-400">
                   <summary className="cursor-pointer hover:text-gray-600">Aide</summary>
@@ -186,7 +206,7 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                     son nom aussi) ; <b>🔁 Autre titre</b> rattache au bon titre Deezer (reprise, compilation). On reste dans la revue.
                   </p>
                 </details>
-                <button onClick={act.forget} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg shrink-0">Oublier</button>
+                {song.mode !== "clip" && <button onClick={act.forget} className="text-xs font-bold text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg shrink-0">Oublier</button>}
               </div>
             </div>
           </div>
@@ -338,12 +358,12 @@ function ArtistSongs({ artist, current, workId }) {
   );
 }
 
-/* Revue : rappel des autres versions de la chanson (statut, aperçu au clic) ;
- * version clip sans clip officiel : reprendre la vidéo de la version paroles. */
-function OtherVersions({ song, songs, peek, setPeek, changeRun }) {
+/* Revue : rappel des autres versions de la chanson (statut, aperçu au clic).
+ * Pas de clip : décidé dans la revue de la version clip (🚫), jamais en
+ * recopiant la vidéo de la version paroles. */
+function OtherVersions({ song, songs, peek, setPeek }) {
   if (!song.workId) return null;
   const others = (songs || []).filter((s) => s.workId === song.workId && s.key !== song.key);
-  const normal = song.mode === "clip" ? others.find((s) => s.mode === "normal" && !s.missing) : null;
   const clipMissing = song.mode === "normal" && !others.some((s) => s.mode === "clip");
   if (!others.length && !clipMissing) return null;
   const pill = "text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap";
@@ -357,21 +377,15 @@ function OtherVersions({ song, songs, peek, setPeek, changeRun }) {
             <img src={`https://i.ytimg.com/vi/${o.videoId}/default.jpg`} alt="" className="w-12 h-9 object-cover" />
           </button>
           <span className="font-bold">{MODE_ICON[o.mode]} {modeLabel(o.mode)}</span>
-          {o.missing ? <span className={`${pill} bg-red-100 text-red-700`}>⚠️ disparue</span>
+          {o.noClip ? <span className={`${pill} bg-gray-200 text-gray-600`}>🚫 pas de clip</span>
+            : o.missing ? <span className={`${pill} bg-red-100 text-red-700`}>⚠️ disparue</span>
             : o.validated ? <span className={`${pill} bg-green-100 text-green-700`}>✓ validée</span>
             : <span className={`${pill} bg-gray-100 text-gray-500`}>à vérifier</span>}
           {o.videoId === song.videoId && <span className="text-gray-400">même vidéo</span>}
         </div>
       ))}
-      {normal && normal.videoId !== song.videoId && (
-        <button onClick={() => changeRun({ action: "copyVersion", key: normal.key, kind: "clip" }, "Pas de clip officiel : utiliser la vidéo de la version Paroles pour la version Clip ?\n\nElle sera validée pour la version Clip.")}
-          className="text-xs font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">= Prendre la vidéo de la version Paroles</button>
-      )}
       {clipMissing && (
-        <p className="text-xs text-gray-500">🎬 Version Clip pas encore trouvée{" "}
-          <button onClick={() => changeRun({ action: "copyVersion", key: song.key, kind: "clip" }, "Utiliser cette vidéo aussi pour la version Clip (pas de clip officiel) ?\n\nElle sera validée pour la version Clip.")}
-            className="font-bold underline">= même vidéo que celle-ci</button>
-        </p>
+        <p className="text-xs text-gray-500">🎬 Version Clip pas encore cherchée : la recherche de nuit s'en charge {song.validated ? "" : "une fois cette version validée"}.</p>
       )}
     </div>
   );

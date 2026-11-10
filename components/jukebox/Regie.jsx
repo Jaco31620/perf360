@@ -258,7 +258,7 @@ export default function Regie({ code }) {
           {shown === "queue" && (
             <>
               <AddTrack code={code} queue={queue} now={now} onAdded={refresh} />
-              <QueueList queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
+              <QueueList code={code} queue={queue} act={act} playNow={playNow} onFixVideo={setReporting} />
               {session.features.history && (
                 <button onClick={() => setHistoryOpen(true)} className="w-full font-bold bg-white/10 hover:bg-white/20 rounded-full py-2 text-sm">
                   🕘 Historique de la soirée

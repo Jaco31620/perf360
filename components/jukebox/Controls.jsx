@@ -10,6 +10,7 @@ import { Play, Pause, ChevronsRight, ChevronsUp, GripVertical, Search, X, Volume
 import { authHeaders, participantId } from "./storage";
 import { MAX_CHOICES, pickModes, FADE_CHOICES, AUTHOR_REVEAL_CHOICES, THEMES, MAX_THEME_TITLE_LEN, MAX_THEME_MESSAGE_LEN, MAX_LOGO_BYTES, maxLabel, formatDuration, playSpan, REPORT_REASONS } from "@/lib/jukebox";
 import { backdropClose } from "@/lib/backdrop";
+import { NoClipTag, ProposeClip } from "./ProposeClip";
 
 /* Réglages de la soirée, rangés par thème (invités, lecture, affichage). */
 export function Settings({ session, act }) {
@@ -256,8 +257,18 @@ export function AddTrack({ code, queue, now, onAdded }) {
 
 /* File d'attente : glisser-déposer (poignée ⠿, souris ou doigt), en tête,
  * jouer maintenant, retirer ; clic sur le titre : 🚩 signaler un problème. */
-export function QueueList({ queue, act, playNow, onFixVideo }) {
+export function QueueList({ code, queue, act, playNow, onFixVideo }) {
   const [drag, setDrag] = useState(null); // { id, from, over }
+  // soirée clip : lien du clip pour un titre qui passe sa version paroles (la file se met à jour en direct)
+  const [clipFor, setClipFor] = useState(null);
+  const sendClip = async (link) => {
+    const res = await fetch(`/api/jukebox/${code}/admin`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...authHeaders(code) },
+      body: JSON.stringify({ action: "proposeClip", id: clipFor.id, link }),
+    });
+    const d = await res.json().catch(() => ({}));
+    return res.ok ? null : d.error || "Proposition impossible.";
+  };
   const dragRef = useRef(null);
   dragRef.current = drag;
   const startDrag = (e, t, i) => {
@@ -309,6 +320,12 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
                   </button>
                 ) : <p className="text-sm font-semibold truncate">{t.title}</p>}
                 <p className="text-xs text-white/50 truncate">{[t.channel, t.author, formatDuration(Math.round(playSpan(t).length) || t.duration)].filter(Boolean).join(" · ")}</p>
+                {t.noClip && code && (
+                  <p className="text-[11px] font-semibold text-white/50 flex flex-wrap items-center gap-x-2">
+                    <NoClipTag />
+                    <button onClick={() => setClipFor(t)} className="text-fuchsia-300 hover:text-fuchsia-200 underline">🎬 Proposer le clip</button>
+                  </p>
+                )}
                 {t.dedication && (
                   <p className="text-xs text-fuchsia-300 italic flex items-start gap-1">
                     <span className="min-w-0 break-words">💌 « {t.dedication} »</span>
@@ -326,6 +343,7 @@ export function QueueList({ queue, act, playNow, onFixVideo }) {
           ))}
         </ol>
       )}
+      {clipFor && <ProposeClip track={clipFor} send={sendClip} onClose={() => setClipFor(null)} />}
     </div>
   );
 }

@@ -82,7 +82,7 @@ const QUEUES = [
   { id: "reports", label: "🚩 Signalements", help: "Problèmes signalés par la régie pendant une soirée (pas la bonne chanson, mauvaise version, temps mort…). Seulement les vidéos déjà validées : celles pas encore vérifiées restent dans « Versions à valider », avec le signalement affiché dans la revue. Corrigez (vidéo, rognage, texte…) puis ✓ Traité ou ✕ Pas d'accord." },
   { id: "missing", label: "⚠️ Vidéos disparues", help: "Vidéos qui n'existent plus ou ne sont plus lisibles : choisissez-en une autre (Remplacer la vidéo) avant la prochaine soirée." },
   { id: "changes", label: "🔄 Proposés en soirée", help: "« Mauvaise vidéo ? » utilisé en soirée sur des titres déjà vérifiés : la soirée a changé de vidéo, la mémoire non. Comparez puis adoptez la vidéo proposée (pour toutes les soirées) ou gardez l'actuelle." },
-  { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo." },
+  { id: "todo", label: "🎬 Versions à valider", help: "Vidéos trouvées automatiquement, pas encore vérifiées : les suspectes d'abord (durée, titre absent, live, reprise…), puis les trouvailles les plus sûres. Validez, rognez ou changez la vidéo. Version clip : si aucune vidéo ne convient (même après « Changer la vidéo »), 🚫 Pas de clip — la version paroles passera en soirée clip (elle doit être validée)." },
   { id: "links", label: "🔗 Ajoutés par lien", list: true, help: "Vidéos ajoutées par lien YouTube en soirée : hors mémoire (pas de fiche Deezer), elles ne profitent ni de la validation, ni du rognage, ni du blind test. Ajoutez-les à la mémoire en choisissant la chanson, ou ignorez-les (pas une chanson, sans intérêt)." },
   { id: "dups", label: "👯 Doublons", list: true, help: "Chansons qui se ressemblent (même vidéo, même ISRC, ou interprète et titre proches). « Garder celui-ci » fusionne le groupe : écoutes, étiquettes, versions et fiches Deezer sont regroupées sur la chanson gardée." },
   { id: "blindq", label: "🕵️ Blind test à décider", blind: true, help: "Chansons dont la place au blind test n'est pas encore décidée : pas au blind, oui, ou oui difficile. Les « oui » d'avant (déjà joués en soirée) d'abord, à confirmer. Une décision, et la chanson suivante." },
@@ -90,7 +90,7 @@ const QUEUES = [
   { id: "yearq", label: "📅 Années à vérifier", list: true, help: "L'année trouvée vient parfois d'une réédition (remaster, compilation) : la vérification a trouvé une sortie plus ancienne. Acceptez-la (✓), gardez l'année actuelle (✕, plus reproposée), ou cliquez l'année pour en taper une autre." },
   { id: "meta", label: "📅 Année ou langue manquante", help: "Chansons enrichies sans année ou sans langue trouvée (filtres du blind test et du catalogue invités) : cliquez l'année ou la langue pour la renseigner." },
 ];
-const VERSION_FILTERS = [["all", "Toutes les vidéos"], ["todo", "Vidéos à vérifier"], ["ok", "Vidéos validées"], ["lyrics", "📝 Avec paroles"], ["missing", "⚠️ Vidéos disparues"]];
+const VERSION_FILTERS = [["all", "Toutes les vidéos"], ["todo", "Vidéos à vérifier"], ["ok", "Vidéos validées"], ["noclip", "🚫 Pas de clip"], ["lyrics", "📝 Avec paroles"], ["missing", "⚠️ Vidéos disparues"]];
 const BLIND_FILTERS = [["", "Blind test : tous"], ["undecided", "🕵️ À décider"], ["yes", "🕵️ Oui"], ["hard", "🎓 Difficile"], ["no", "Pas au blind"]];
 /* Tri : critère + sens (bouton à côté) ; libellés du sens selon le critère : [normal, inversé]. */
 const SORTS = [["added", "Date d'ajout"], ["plays", "Écoutes"], ["rank", "Popularité"], ["year", "Année"], ["alpha", "Alphabétique"]];
@@ -102,7 +102,7 @@ const SORT_DIR = {
   alpha: ["A → Z", "Z → A"],
 };
 const LANG_FILTERS = [["", "Toutes langues"], ["fr", "Français"], ["intl", "🌍 International"], ["unknown", "❓ Langue inconnue"]];
-export function SongMemory({ call, total, proposals = 0, focus, enrich, night, catalog, years, onChanged }) {
+export function SongMemory({ call, total, proposals = 0, focus, enrich, night, catalog, clips, years, onChanged }) {
   const [open, setOpen] = useState(true);
   const [q, setQ] = useState("");
   const [view, setView] = useState("todo"); // todo : files à vider ; catalog : exploration
@@ -305,6 +305,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
             à la fois. <b>🔎 Catalogue</b> : tout le reste, pour chercher et corriger au cas par cas.
           </p>
           {catalog && !catalog.works && <CatalogMigration catalog={catalog} call={call} onDone={onChanged} />}{/* migration faite : encadré masqué */}
+          {clips && (clips.paroles > 0 || clips.clips > 0 || clips.last) && <VersionScan clips={clips} call={call} onDone={() => { onChanged?.(); load(); }} />}
           {(enrich > 0 || enriching) && (
             <div className="flex flex-wrap items-center gap-3 text-xs bg-sky-50 text-sky-800 rounded-xl px-3 py-2">
               <span>🔎 {enrich} ligne{enrich > 1 ? "s" : ""} à compléter (année, langue ou ISRC) : complétées automatiquement chaque nuit (Deezer + MusicBrainz, sans quota YouTube). Le bouton ne sert que si vous en avez besoin tout de suite.</span>
@@ -554,7 +555,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                           <VersionLabel mode={s.mode} />
                           <VideoTitle song={s} className="truncate" />
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            {s.missing
+                            {s.noClip
+                              ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-gray-200 text-gray-700" title="Décidé en revue : la version paroles passe en soirée clip (vidéo ci-contre refusée)">🚫 Pas de clip</span>
+                              : s.missing
                               ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-100 text-red-700" title="La vidéo n'existe plus ou n'est plus lisible : choisissez-en une autre">⚠️ Vidéo disparue · à remplacer</span>
                               : s.validated
                               ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-green-100 text-green-700">✓ Validé</span>
@@ -587,16 +590,27 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                           )}
                           {s.missing ? null : s.validated ? (
                             <button onClick={() => run({ action: "validateSong", key: s.key, validated: false })}
-                              className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Retirer la validation</button>
+                              className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">{s.noClip ? "Revenir sur « pas de clip »" : "Retirer la validation"}</button>
                           ) : (
                             <button onClick={() => run({ action: "validateSong", key: s.key, validated: true })}
                               className="text-xs font-bold text-green-700 bg-green-100 px-3 py-1.5 rounded-full">✓ Valider</button>
                           )}
+                          {s.mode === "clip" && !s.noClip && !s.missing && (() => {
+                            const paroles = g.rows.find((x) => x.mode === "normal");
+                            const can = !!paroles?.validated && !paroles.missing;
+                            return (
+                              <button onClick={() => can && run({ action: "noClip", key: s.key })} disabled={!can}
+                                title={can ? "Aucune vidéo convenable : la version paroles passera en soirée clip" : "Validez d'abord la version paroles"}
+                                className="text-xs font-bold text-gray-700 bg-gray-200 px-3 py-1.5 rounded-full disabled:opacity-40">🚫 Pas de clip</button>
+                            );
+                          })()}
                           <button onClick={() => { commitDraft(); setFixing(s); }} className={`text-xs font-bold px-3 py-1.5 rounded-full ${s.missing ? "bg-red-600 text-white" : "bg-gray-100"}`}>
                             {s.missing ? "Remplacer la vidéo" : "Changer la vidéo"}
                           </button>
-                          <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier la version ${modeLabel(s.mode)} de « ${s.label || s.key} » ?\nElle sera recherchée à nouveau au prochain ajout.`)}
-                            className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
+                          {s.mode !== "clip" && ( // clip : « 🚫 Pas de clip » plutôt qu'oublier (la décision ne se perd pas)
+                            <button onClick={() => run({ action: "forgetSong", key: s.key }, `Oublier la version ${modeLabel(s.mode)} de « ${s.label || s.key} » ?\nElle sera recherchée à nouveau au prochain ajout.`)}
+                              className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-full">Oublier</button>
+                          )}
                         </div>
                         {preview === s.key && (
                           <div className="w-full max-w-xl"><VideoPreview videoId={s.videoId} onClose={() => setPreview(null)} /></div>
@@ -612,7 +626,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                           <span className="text-gray-500">pas encore trouvée</span>
                           <button onClick={() => versionAct({ action: "searchVersion", key: head.key, kind }, `Chercher la version ${modeLabel(kind)} de « ${head.artist} – ${head.title} » maintenant ?\n\n1 recherche YouTube sur le quota du jour.`)}
                             className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">🔎 Chercher</button>
-                          {from && from.mode !== kind && !from.missing && (
+                          {from && kind !== "clip" && from.mode !== kind && !from.missing && (
                             <button onClick={() => versionAct({ action: "copyVersion", key: from.key, kind }, `Pas de ${kind === "clip" ? "clip officiel" : "version paroles"} : utiliser la même vidéo que la version ${modeLabel(from.mode)} ?\n\nElle sera validée pour la version ${modeLabel(kind)}.`)}
                               className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">= Même vidéo que {modeLabel(from.mode)}</button>
                           )}
@@ -669,3 +683,44 @@ function CatalogMigration({ catalog, call, onDone }) {
   );
 }
 
+/* Recherche de nuit des versions manquantes (lib/jukeboxClip.js) : versions
+ * paroles absentes d'abord, puis clips des chansons à paroles validée ; à la
+ * main, quelques-unes sur le quota du jour. */
+const SCAN_STOP = { done: "liste terminée", empty: "rien à chercher", time: "temps écoulé", quota: "quota YouTube atteint", error: "erreur", skipped: "quota déjà épuisé" };
+function VersionScan({ clips, call, onDone }) {
+  const [n, setN] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState(null);
+  const todo = (clips.paroles || 0) + (clips.clips || 0);
+  const run = async () => {
+    if (!confirm(`Chercher ${n} version${n > 1 ? "s" : ""} maintenant ?\n\nJusqu'à ${n} recherche${n > 1 ? "s" : ""} YouTube sur le quota du jour (≈ 100 par jour, partagé avec les soirées).`)) return;
+    setBusy(true);
+    try {
+      const d = await call("POST", { action: "scanVersions", max: n });
+      setReport(d.report);
+      onDone?.();
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+  const last = report || clips.last;
+  return (
+    <div className="text-xs bg-emerald-50 text-emerald-900 rounded-xl px-3 py-2 space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>
+          🎬 <b>{clips.clips || 0} clip{clips.clips > 1 ? "s" : ""}</b>
+          {clips.paroles > 0 && <> et <b>{clips.paroles} version{clips.paroles > 1 ? "s" : ""} paroles</b></>} à chercher : chaque nuit après le pré-remplissage, avec le reste du quota
+          (versions paroles d'abord ; clips des chansons à paroles validée, les plus jouées d'abord). Les trouvailles arrivent dans « Versions à valider ».
+        </span>
+        {todo > 0 && (
+          <span className="flex items-center gap-1.5">
+            Sans attendre :
+            <select value={n} onChange={(e) => setN(Number(e.target.value))} className="border border-emerald-300 rounded-full px-2 py-0.5 bg-white font-bold">
+              {[1, 3, 5, 10, 20].map((x) => <option key={x} value={x}>{x} version{x > 1 ? "s" : ""}</option>)}
+            </select>
+            <button onClick={run} disabled={busy} className="font-bold bg-emerald-600 text-white px-3 py-1 rounded-full disabled:opacity-50">{busy ? "Recherche…" : "Chercher"}</button>
+          </span>
+        )}
+      </div>
+      {last?.at && <p>Dernier passage {new Date(last.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} : {last.clips || 0} clip{last.clips > 1 ? "s" : ""}, {last.paroles || 0} version{last.paroles > 1 ? "s" : ""} paroles{last.failed ? `, ${last.failed} sans résultat` : ""} ({SCAN_STOP[last.stop] || last.stop}).</p>}
+    </div>
+  );
+}
