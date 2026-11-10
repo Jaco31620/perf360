@@ -7,7 +7,7 @@
  */
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Play } from "lucide-react";
+import { Play, User } from "lucide-react";
 import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken, artistHintVisible, artistHintSeen, artistHintDone } from "./storage";
 import { useLive } from "./useLive";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
@@ -273,7 +273,7 @@ export default function Participant({ code }) {
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
         <p className="text-xs text-gray-500 truncate">
-          {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} chevron /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
+          {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} icon /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
         </p>
         {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
         {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
@@ -718,11 +718,11 @@ function Shell({ theme, children }) {
 }
 
 /* Nom d'interprète à toucher : ses autres titres (catalogue ou recherche). */
-function ArtistLink({ name, onOpen, chevron }) {
+function ArtistLink({ name, onOpen, icon }) {
   return (
     <button type="button" onClick={() => onOpen(name)} title={`Autres titres de ${name}`}
       className="underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-[var(--jb-accent)]">
-      {name}{chevron && <span aria-hidden className="inline-block ml-1 font-bold text-[var(--jb-accent)]">›</span>}
+      {icon && <User aria-hidden size={12} strokeWidth={2.5} className="inline-block align-[-1px] mr-1 text-[var(--jb-accent)]" />}{name}
     </button>
   );
 }
