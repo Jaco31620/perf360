@@ -17,6 +17,8 @@ import { Leaderboard } from "./Blind";
 import { useWakeLock } from "./useWakeLock";
 import { backdropClose } from "@/lib/backdrop";
 
+const ARTISTS_PAGE = 60; // vue « Artistes » du catalogue : affichés par blocs
+
 export default function Participant({ code }) {
   const [data, setData] = useState(undefined); // undefined = chargement, null = introuvable
   const [closed, setClosed] = useState(false); // soirée fermée (durée d'utilisation passée)
@@ -26,17 +28,31 @@ export default function Participant({ code }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState(null);
   // catalogue des titres vérifiés (option de la soirée) : filtres en cours, page suivante disponible
-  const [browse, setBrowse] = useState(null); // null : recherche normale ; { decades: [], lang, sort, q }
+  // null : recherche normale ; { decades: [], lang, sort, q, view: "songs" | "artists", artist }
+  const [browse, setBrowse] = useState(null);
   const [browseMore, setBrowseMore] = useState(false);
+  const [artists, setArtists] = useState(null); // vue « Artistes » : [{ name, count }]
+  const [artistsShown, setArtistsShown] = useState(ARTISTS_PAGE);
+  const searchCard = useRef(null);
   const loadCatalog = async (f, append = false) => {
     setBrowse(f);
     setSearching(true);
     setError("");
     try {
-      const qs = new URLSearchParams({ decade: f.decades.join(","), lang: f.lang, sort: f.sort, q: f.q, offset: append ? String(results?.length || 0) : "0" });
+      const qs = new URLSearchParams({ decade: f.decades.join(","), lang: f.lang, sort: f.sort, q: f.view === "artists" ? "" : f.q, offset: append ? String(results?.length || 0) : "0" });
+      if (f.view === "artists") qs.set("view", "artists");
+      else if (f.artist) qs.set("artist", f.artist);
       const res = await fetch(`/api/jukebox/${code}/catalog?${qs}`, { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Catalogue indisponible.");
+      if (f.view === "artists") {
+        setArtists(d.artists || []);
+        setArtistsShown(ARTISTS_PAGE);
+        setResults(null);
+        setBrowseMore(false);
+        return;
+      }
+      setArtists(null);
       setResults((cur) => (append ? [...(cur || []), ...d.results] : d.results));
       setBrowseMore(!!d.more);
     } catch (err) {
@@ -101,14 +117,15 @@ export default function Participant({ code }) {
     setPrevName("");
   };
 
-  const search = async (e) => {
-    e.preventDefault();
+  const search = (e) => { e.preventDefault(); runSearch(q); };
+  const runSearch = async (term) => {
     setBrowse(null); // recherche libre : on quitte le catalogue
-    if (q.trim().length < 2 || searching) return;
+    setArtists(null);
+    if (term.trim().length < 2 || searching) return;
     setSearching(true);
     setError("");
     try {
-      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(q.trim())}`, { cache: "no-store", headers: access() });
+      const res = await fetch(`/api/jukebox/${code}/search?q=${encodeURIComponent(term.trim())}`, { cache: "no-store", headers: access() });
       const d = await res.json();
       setResults(d.results || []);
       if (d.error) setError(d.error);
@@ -118,6 +135,18 @@ export default function Participant({ code }) {
       setSearching(false);
     }
   };
+
+  /* Toucher un interprète (résultats, catalogue, en ce moment, file) : ses
+   * titres vérifiés du catalogue ; sans catalogue, une recherche à son nom. */
+  const openArtist = (artist) => {
+    if (!artist) return;
+    searchCard.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!data?.session?.catalog) { setQ(artist); runSearch(artist); return; }
+    setResults(null);
+    loadCatalog({ decades: [], lang: "", sort: "plays", q: "", view: "songs", artist });
+  };
+  const searchArtist = (artist) => { setQ(artist); runSearch(artist); };
+  const artistTap = !(blindOn && !data?.admin); // blind test : pas de recherche côté invité
 
   const add = async (v) => {
     setAdding(v.id);
@@ -133,6 +162,7 @@ export default function Participant({ code }) {
       setTimeout(() => setFlash(""), 2500);
       setResults(null);
       setBrowse(null);
+      setArtists(null);
       setDedication("");
       setPicked(null);
       setQ("");
@@ -211,7 +241,7 @@ export default function Participant({ code }) {
   const theme = session.theme;
   return (
     <Shell theme={theme}>
-      <div className="bg-white rounded-3xl p-6 shadow-xl">
+      <div ref={searchCard} className="bg-white rounded-3xl p-6 shadow-xl scroll-mt-4">
         {theme?.logo && <img src={`/api/jukebox/${code}/logo?v=${theme.logo}`} alt="" className="max-h-24 max-w-[70%] object-contain mx-auto mb-4" />}
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Jukebox · {formatCode(code)}</p>
@@ -301,7 +331,7 @@ export default function Participant({ code }) {
             )}
 
             {session.catalog && !browse && (
-              <button onClick={() => { setResults(null); loadCatalog({ decades: [], lang: "", sort: "plays", q: "" }); }}
+              <button onClick={() => { setResults(null); loadCatalog({ decades: [], lang: "", sort: "plays", q: "", view: "songs", artist: "" }); }}
                 className="mt-3 w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-2xl py-2.5">
                 📚 Pas d'idée ? Parcourir le catalogue des titres vérifiés
               </button>
@@ -310,8 +340,21 @@ export default function Participant({ code }) {
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-bold text-gray-800">📚 Catalogue · titres vérifiés</p>
-                  <button onClick={() => { setBrowse(null); setResults(null); }} className="text-sm text-gray-500 underline">Fermer</button>
+                  <button onClick={() => { setBrowse(null); setResults(null); setArtists(null); }} className="text-sm text-gray-500 underline">Fermer</button>
                 </div>
+                {browse.artist ? (
+                  /* titres d'un interprète : la croix ramène au catalogue complet */
+                  <div className="flex items-center gap-2 rounded-xl bg-[var(--jb-soft)] px-3 py-2">
+                    <p className="flex-1 min-w-0 text-sm font-bold text-[var(--jb-accent)] truncate">👤 {browse.artist}</p>
+                    <button onClick={() => loadCatalog({ ...browse, artist: "" })} className="shrink-0 text-sm font-bold text-gray-500 px-1" aria-label="Tout le catalogue">✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="w-14 shrink-0 font-semibold text-gray-400">Voir</span>
+                    <Segmented value={browse.view} onChange={(v) => loadCatalog({ ...browse, view: v, q: "" })}
+                      options={[["songs", "🎵 Titres"], ["artists", "👤 Artistes"]]} />
+                  </div>
+                )}
                 {/* filtres : toutes les options visibles, l'option active en couleur */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex gap-2">
@@ -341,18 +384,46 @@ export default function Participant({ code }) {
                       options={[["plays", "🔥 Populaires"], ["alpha", "A → Z"]]} />
                   </div>
                 </div>
-                <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
-                  <input name="cq" defaultValue={browse.q} placeholder="Filtrer : artiste, titre…" autoComplete="off" enterKeyHint="search"
+                {!browse.artist && <form onSubmit={(e) => { e.preventDefault(); loadCatalog({ ...browse, q: e.currentTarget.elements.cq.value }); }} className="flex gap-1.5">
+                  <input key={browse.view} name="cq" defaultValue={browse.q} placeholder={browse.view === "artists" ? "Filtrer : nom d'artiste…" : "Filtrer : artiste, titre…"} autoComplete="off" enterKeyHint="search"
                     className="flex-1 min-w-0 text-sm border-2 border-gray-200 rounded-xl px-3 py-1.5 focus:border-[var(--jb-accent)] outline-none" />
                   <button className="text-sm font-bold bg-gray-100 px-3 rounded-xl">OK</button>
-                </form>
+                </form>}
               </div>
             )}
+            {browse?.view === "artists" && artists && (() => {
+              // filtre du nom (côté téléphone : la liste est déjà là)
+              const f = browse.q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+              const list = f ? artists.filter((a) => a.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(f)) : artists;
+              return (
+                <div className="mt-4">
+                  {list.length === 0 ? (
+                    <p className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : "Aucun artiste avec ces filtres."}</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100">
+                      {list.slice(0, artistsShown).map((a) => (
+                        <li key={a.name}>
+                          <button onClick={() => loadCatalog({ ...browse, view: "songs", q: "", artist: a.name })}
+                            className="w-full flex items-center gap-3 py-2.5 text-left">
+                            <span className="flex-1 min-w-0 font-semibold text-gray-900 text-sm truncate">{a.name}</span>
+                            <span className="shrink-0 text-xs text-gray-500">{a.count} titre{a.count > 1 ? "s" : ""} ›</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {list.length > artistsShown && (
+                    <button onClick={() => setArtistsShown((n) => n + ARTISTS_PAGE)}
+                      className="mt-2 w-full text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl py-2.5">Voir plus ({list.length - artistsShown})</button>
+                  )}
+                </div>
+              );
+            })()}
             {results && (
               <ul className="mt-4 divide-y divide-gray-100">
                 {results.length === 0 && !error && (
                   browse ? (
-                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : (browse.decades.length || browse.lang || browse.q ? "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue, ou la recherche ci-dessus." : `Aucun titre vérifié${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant : utilisez la recherche ci-dessus.`)}</li>
+                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : browse.artist ? `Aucun titre vérifié de ${browse.artist}${browse.decades.length || browse.lang ? " avec ces filtres" : ""}${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant.` : (browse.decades.length || browse.lang || browse.q ? "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue, ou la recherche ci-dessus." : `Aucun titre vérifié${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant : utilisez la recherche ci-dessus.`)}</li>
                   ) : (
                   <li className="py-4 text-center text-gray-500 text-sm space-y-1">
                     <p className="font-semibold text-gray-700">Aucun résultat.</p>
@@ -373,7 +444,9 @@ export default function Participant({ code }) {
                     {v.thumb && <img src={v.thumb} alt="" className="w-20 h-[45px] object-cover rounded-lg shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
-                      <p className="text-xs text-gray-500 truncate">{v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {v.deezerId && artistTap && !browse?.artist ? <ArtistLink name={v.channel} onOpen={openArtist} /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
+                      </p>
                       {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
                       {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
                         <p className="text-[11px] font-semibold flex flex-wrap gap-x-2">
@@ -398,7 +471,16 @@ export default function Participant({ code }) {
               </ul>
             )}
             {/* fin du catalogue : le dire, surtout quand il est petit (soirée karaoké : seules les versions karaoké vérifiées) */}
-            {browse && !browseMore && !searching && results?.length > 0 && (
+            {browse?.artist && !searching && results && (
+              /* titres d'un interprète : la recherche trouve les autres (versions pas encore vérifiées) */
+              <div className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2 space-y-2">
+                {results.length > 0 && <p>{results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""} de {browse.artist}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang ? " avec ces filtres" : ""}.</p>}
+                <button onClick={() => searchArtist(browse.artist)} className="w-full text-sm font-bold text-[var(--jb-accent)] bg-[var(--jb-soft)] rounded-xl py-2">
+                  🔍 Chercher d'autres titres de {browse.artist}
+                </button>
+              </div>
+            )}
+            {browse && !browse.artist && !browseMore && !searching && results?.length > 0 && (
               <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
                 {results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang || browse.q ? " avec ces filtres" : ""} pour l'instant.
                 {" "}Pas trouvé votre bonheur ? Utilisez la recherche ci-dessus{session.searchMode === "karaoke" ? " : elle trouve aussi les autres versions karaoké" : ""}.
@@ -424,7 +506,7 @@ export default function Participant({ code }) {
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-xs font-bold text-[var(--jb-accent)] uppercase tracking-wider"><Play size={12} fill="currentColor" strokeWidth={0} />En ce moment</p>
               <p className="font-bold text-gray-900 leading-snug line-clamp-2">{now.title}</p>
-              {now.channel && <p className="text-sm text-gray-600 truncate">{now.channel}</p>}
+              {now.channel && <p className="text-sm text-gray-600 truncate">{artistTap ? <ArtistLink name={now.channel} onOpen={openArtist} /> : now.channel}</p>}
               {now.mine || now.author ? (
                 <p className="text-xs text-gray-500">proposé par {now.mine ? "vous" : now.author}</p>
               ) : now.revealIn ? (
@@ -448,7 +530,7 @@ export default function Participant({ code }) {
                   <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 bg-[var(--jb-soft)]">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
-                      {t.channel && <p className="text-xs text-gray-500 truncate">{t.channel}</p>}
+                      {t.channel && <p className="text-xs text-gray-500 truncate">{artistTap ? <ArtistLink name={t.channel} onOpen={openArtist} /> : t.channel}</p>}
                       <p className="text-xs font-semibold text-[var(--jb-accent)]">
                         {t.ahead === 0 ? "🔜 C'est le prochain !" : `${t.ahead} titre${t.ahead > 1 ? "s" : ""} avant le vôtre`}
                       </p>
@@ -470,7 +552,10 @@ export default function Participant({ code }) {
                 <span className="w-5 text-right text-sm font-bold text-gray-400 shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">{t.title}</p>
-                  <p className="text-xs text-gray-500 truncate">{[t.channel, (t.mine || t.author) && `par ${t.mine ? "vous" : t.author}`].filter(Boolean).join(" · ")}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {t.channel && (artistTap ? <ArtistLink name={t.channel} onOpen={openArtist} /> : t.channel)}
+                    {t.channel && (t.mine || t.author) ? " · " : ""}{(t.mine || t.author) && `par ${t.mine ? "vous" : t.author}`}
+                  </p>
                   {t.dedication && <p className="text-xs text-[var(--jb-accent)] italic truncate">💌 « {t.dedication} »</p>}
                 </div>
                 {t.mine && <button onClick={() => withdraw(t)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label="Retirer">✕</button>}
@@ -576,6 +661,14 @@ function Shell({ theme, children }) {
     <div className="min-h-screen px-4 py-8" style={{ ...themeVars(theme), background: "var(--jb-guest-bg)" }}>
       <div className="max-w-md mx-auto">{children}</div>
     </div>
+  );
+}
+
+/* Nom d'interprète à toucher : ses autres titres (catalogue ou recherche). */
+function ArtistLink({ name, onOpen }) {
+  return (
+    <button type="button" onClick={() => onOpen(name)} title={`Autres titres de ${name}`}
+      className="underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-[var(--jb-accent)]">{name}</button>
   );
 }
 
