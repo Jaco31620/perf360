@@ -352,7 +352,7 @@ export default function Participant({ code }) {
               <ul className="mt-4 divide-y divide-gray-100">
                 {results.length === 0 && !error && (
                   browse ? (
-                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue."}</li>
+                    <li className="py-4 text-center text-gray-500 text-sm">{searching ? "Chargement…" : (browse.decades.length || browse.lang || browse.q ? "Aucun titre vérifié avec ces filtres : essayez une autre année ou langue, ou la recherche ci-dessus." : `Aucun titre vérifié${session.searchMode === "karaoke" ? " en version karaoké" : ""} pour l'instant : utilisez la recherche ci-dessus.`)}</li>
                   ) : (
                   <li className="py-4 text-center text-gray-500 text-sm space-y-1">
                     <p className="font-semibold text-gray-700">Aucun résultat.</p>
@@ -396,6 +396,13 @@ export default function Participant({ code }) {
                   </Fragment>
                 ))}
               </ul>
+            )}
+            {/* fin du catalogue : le dire, surtout quand il est petit (soirée karaoké : seules les versions karaoké vérifiées) */}
+            {browse && !browseMore && !searching && results?.length > 0 && (
+              <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
+                {results.length} titre{results.length > 1 ? "s" : ""} vérifié{results.length > 1 ? "s" : ""}{session.searchMode !== "normal" ? ` en version ${session.searchMode === "karaoke" ? "karaoké" : "clip"}` : ""}{browse.decades.length || browse.lang || browse.q ? " avec ces filtres" : ""} pour l'instant.
+                {" "}Pas trouvé votre bonheur ? Utilisez la recherche ci-dessus{session.searchMode === "karaoke" ? " : elle trouve aussi les autres versions karaoké" : ""}.
+              </p>
             )}
             {browse && browseMore && results?.length > 0 && (
               <button onClick={() => loadCatalog(browse, true)} disabled={searching}
