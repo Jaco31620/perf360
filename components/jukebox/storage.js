@@ -72,3 +72,17 @@ export function forgetParty(code) {
 }
 
 export const formatCode = (code) => `${String(code).slice(0, 3)} ${String(code).slice(3)}`;
+
+/* Astuce « touchez un nom d'artiste » : montrée sur quelques visites,
+ * plus du tout une fois la fenêtre d'un artiste ouverte. */
+const ARTIST_HINT = "jukebox_artist_hint"; // nombre de visites où elle a été vue, ou "done"
+const ARTIST_HINT_VISITS = 5;
+export function artistHintVisible() {
+  const v = get(ARTIST_HINT);
+  return v !== "done" && (parseInt(v, 10) || 0) < ARTIST_HINT_VISITS;
+}
+export function artistHintSeen() {
+  const v = get(ARTIST_HINT);
+  if (v !== "done") set(ARTIST_HINT, String((parseInt(v, 10) || 0) + 1));
+}
+export function artistHintDone() { set(ARTIST_HINT, "done"); }

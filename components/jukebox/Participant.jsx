@@ -8,7 +8,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Play } from "lucide-react";
-import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken } from "./storage";
+import { participantId, getName, setName, authHeaders, formatCode, getGuestMode, setGuestMode, hasRegieAccess, forgetParty, getAdminToken, artistHintVisible, artistHintSeen, artistHintDone } from "./storage";
 import { useLive } from "./useLive";
 import { MAX_AUTHOR_LEN, MAX_DEDICATION_LEN, UNLIMITED_CAP, formatDuration, themeVars } from "@/lib/jukebox";
 import { MAX_ANSWER_LEN, MAX_ATTEMPTS, DECADES, decadeLabel } from "@/lib/jukeboxBlind";
@@ -139,8 +139,13 @@ export default function Participant({ code }) {
    * « Autres titres de… » (ses titres vérifiés, sans les filtres du
    * catalogue) ; sans catalogue, une recherche à son nom. */
   const [artistPop, setArtistPop] = useState(null); // { name, list: null (chargement) | [...], error }
+  // astuce « touchez un nom d'artiste » : décidée au chargement, comptée une fois par visite quand elle s'affiche
+  const [artistHint, setArtistHint] = useState(false);
+  const hintCounted = useRef(false);
+  useEffect(() => { setArtistHint(artistHintVisible()); }, []);
   const openArtist = async (name) => {
     if (!name) return;
+    if (artistHint) { artistHintDone(); setArtistHint(false); }
     if (!data?.session?.catalog) { searchArtist(name); return; }
     setArtistPop({ name, list: null });
     try {
@@ -268,7 +273,7 @@ export default function Participant({ code }) {
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{v.title}</p>
         <p className="text-xs text-gray-500 truncate">
-          {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
+          {linkArtist && v.deezerId && artistTap ? <ArtistLink name={v.channel} onOpen={openArtist} chevron /> : v.channel} · {v.year ? `${v.year} · ` : ""}{formatDuration(v.duration)}
         </p>
         {/* repères sur leur propre ligne : jamais coupés par un nom d'artiste trop long */}
         {(v.known === 2 || (admin && v.known) || (v.playedAt && !isQueued(v))) && (
@@ -465,6 +470,10 @@ export default function Participant({ code }) {
                 </div>
               );
             })()}
+            {artistHint && artistTap && results?.some((v) => v.deezerId) && (
+              <p ref={() => { if (!hintCounted.current) { hintCounted.current = true; artistHintSeen(); } }}
+                className="mt-3 text-xs text-gray-500 bg-[var(--jb-soft)] rounded-xl px-3 py-2">💡 Touchez un nom d'artiste pour voir ses autres titres.</p>
+            )}
             {results && (
               <ul className="mt-4 divide-y divide-gray-100">
                 {results.length === 0 && !error && (
@@ -709,10 +718,12 @@ function Shell({ theme, children }) {
 }
 
 /* Nom d'interprète à toucher : ses autres titres (catalogue ou recherche). */
-function ArtistLink({ name, onOpen }) {
+function ArtistLink({ name, onOpen, chevron }) {
   return (
     <button type="button" onClick={() => onOpen(name)} title={`Autres titres de ${name}`}
-      className="underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-[var(--jb-accent)]">{name}</button>
+      className="underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-[var(--jb-accent)]">
+      {name}{chevron && <span aria-hidden className="inline-block ml-1 font-bold text-[var(--jb-accent)]">›</span>}
+    </button>
   );
 }
 
