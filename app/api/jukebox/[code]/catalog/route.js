@@ -11,7 +11,7 @@
 import { tooMany, clientIp } from "@/lib/jukeboxRate";
 import { loadSession, publicSession } from "@/lib/jukeboxServer";
 import { catalog } from "@/lib/jukeboxCatalog";
-import { songText } from "@/lib/jukebox";
+import { songText, PLAYED_RECENT_MS } from "@/lib/jukebox";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { sameArtist } from "@/lib/jukeboxBlind";
 
@@ -90,7 +90,7 @@ export async function GET(req, { params }) {
 
     // titres déjà passés ce soir
     const { data: played } = await getSupabaseAdmin().from("jukebox_tracks").select("title,channel,video_id,played_at")
-      .eq("session_id", s.id).in("status", ["played", "skipped"]).order("played_at", { ascending: false }).limit(500);
+      .eq("session_id", s.id).in("status", ["played", "skipped"]).gte("played_at", new Date(Date.now() - PLAYED_RECENT_MS).toISOString()).order("played_at", { ascending: false }).limit(500);
     const last = new Map();
     for (const t of played || []) for (const k of [`${norm(t.title)}|${norm(t.channel)}`, t.video_id]) if (!last.has(k)) last.set(k, t.played_at);
 
