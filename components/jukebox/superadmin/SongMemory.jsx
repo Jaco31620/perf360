@@ -626,8 +626,10 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                           <span className="text-gray-500">pas encore trouvée</span>
                           <button onClick={() => versionAct({ action: "searchVersion", key: head.key, kind }, `Chercher la version ${modeLabel(kind)} de « ${head.artist} – ${head.title} » maintenant ?\n\n1 recherche YouTube sur le quota du jour.`)}
                             className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">🔎 Chercher</button>
-                          {from && kind !== "clip" && from.mode !== kind && !from.missing && (
-                            <button onClick={() => versionAct({ action: "copyVersion", key: from.key, kind }, `Pas de ${kind === "clip" ? "clip officiel" : "version paroles"} : utiliser la même vidéo que la version ${modeLabel(from.mode)} ?\n\nElle sera validée pour la version ${modeLabel(kind)}.`)}
+                          {from && from.mode !== kind && !from.missing && (kind !== "clip" || from.validated) && (
+                            <button onClick={() => versionAct({ action: "copyVersion", key: from.key, kind }, kind === "clip"
+                              ? `Utiliser la vidéo de la version Paroles comme clip de « ${head.artist} – ${head.title} » ?\n\nElle sera validée pour la version Clip, sans recherche. Le rognage peut ensuite être réglé différemment pour chaque version.`
+                              : `Pas de version paroles : utiliser la même vidéo que la version ${modeLabel(from.mode)} ?\n\nElle sera validée pour la version ${modeLabel(kind)}.`)}
                               className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">= Même vidéo que {modeLabel(from.mode)}</button>
                           )}
                         </div>
