@@ -562,6 +562,9 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                               : s.validated
                               ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-green-100 text-green-700">✓ Validé</span>
                               : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-gray-100 text-gray-500">À vérifier</span>}
+                            {s.mode === "clip" && !s.noClip && g.rows.some((x) => x.mode === "normal" && x.videoId === s.videoId) && (
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-sky-100 text-sky-700" title="Le clip est la même vidéo que la version paroles (rognage propre à chaque version)">= vidéo de la version paroles</span>
+                            )}
                             {!s.validated && !s.missing && s.confidence != null && (
                               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${CONFIDENCE[s.confidence]?.cls || "bg-gray-100 text-gray-500"}`} title="Indice de confiance de la recherche automatique">{CONFIDENCE[s.confidence]?.label || "?"}</span>
                             )}
@@ -626,7 +629,7 @@ export function SongMemory({ call, total, proposals = 0, focus, enrich, night, c
                           <span className="text-gray-500">pas encore trouvée</span>
                           <button onClick={() => versionAct({ action: "searchVersion", key: head.key, kind }, `Chercher la version ${modeLabel(kind)} de « ${head.artist} – ${head.title} » maintenant ?\n\n1 recherche YouTube sur le quota du jour.`)}
                             className="font-bold bg-white border border-gray-200 px-3 py-1 rounded-full">🔎 Chercher</button>
-                          {from && from.mode !== kind && !from.missing && (kind !== "clip" || from.validated) && (
+                          {from && from.mode !== kind && !from.missing && (kind !== "clip" || (from.validated && !from.lyrics)) && ( // clip : jamais une vidéo à paroles
                             <button onClick={() => versionAct({ action: "copyVersion", key: from.key, kind }, kind === "clip"
                               ? `Utiliser la vidéo de la version Paroles comme clip de « ${head.artist} – ${head.title} » ?\n\nElle sera validée pour la version Clip, sans recherche. Le rognage peut ensuite être réglé différemment pour chaque version.`
                               : `Pas de version paroles : utiliser la même vidéo que la version ${modeLabel(from.mode)} ?\n\nElle sera validée pour la version ${modeLabel(kind)}.`)}
