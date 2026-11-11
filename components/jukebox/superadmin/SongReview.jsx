@@ -51,7 +51,11 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
     const paroles = (songs || []).find((s) => s.workId === song.workId && s.mode === "normal") || null;
     return { paroles, same: !!paroles && paroles.videoId === song.videoId, canNoClip: !!paroles?.validated && !paroles.missing };
   })();
+  // version paroles sans clip, vidéo sans paroles affichées : elle peut servir de clip
+  const canClipCopy = song?.mode === "normal" && !song.missing && !song.lyrics && !!song.workId
+    && !(songs || []).some((s) => s.workId === song.workId && s.mode === "clip");
   const act = {
+    validateClip: () => { if (song && canClipCopy) runR({ action: "validateWithClip", key: song.key }); go(1); },
     validate: () => { if (song && !song.missing) runR({ action: "validateSong", key: song.key, validated: true }); go(1); },
     noClip: () => { if (song && clipInfo.canNoClip) runR({ action: "noClip", key: song.key }); go(1); },
     lyrics: () => song && runR({ action: "lyricsSong", key: song.key, lyrics: !song.lyrics }),
@@ -194,6 +198,12 @@ export function SongReview({ review, setReview, songs, run, changeRun, call, edi
                   ✓ Valider et suivant
                 </button>
               </div>
+              {canClipCopy && (
+                <button onClick={act.validateClip} title="Pas de clip à chercher : cette vidéo (sans paroles affichées) sert aussi de version Clip, validée. Rognage réglable séparément pour chaque version."
+                  className="-mt-1 w-full text-sm font-bold text-green-800 bg-green-100 hover:bg-green-200 px-3 py-2.5 rounded-2xl">
+                  ✓ Valider + même vidéo en clip
+                </button>
+              )}
               {song.mode === "clip" && !clipInfo.canNoClip && (
                 <p className="-mt-1 text-xs text-gray-500">🚫 Pas de clip : validez d'abord la version paroles de cette chanson.</p>
               )}

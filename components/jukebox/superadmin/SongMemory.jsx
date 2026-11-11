@@ -25,6 +25,7 @@ function applySong(list, body) {
       ...s, fixed: true, ...(body.artist.trim() ? { artist: body.artist.trim() } : {}), ...(body.title.trim() ? { title: body.title.trim() } : {}),
     }));
     case "validateSong": return list.map((s) => (s.key === body.key ? { ...s, validated: !!body.validated, ...(body.validated ? { reports: undefined } : {}) } : s)); // validée : signalements traités
+    case "validateWithClip": return list.map((s) => (s.key === body.key ? { ...s, validated: true, reports: undefined } : s)); // + version clip (relue en fermant la revue)
     case "blindSong": return list.map((s) => (s.key.split(":")[1] === id ? { ...s, blind: !!body.blind } : s)); // étiquette de la chanson
     case "answerYear": return list.map((s) => (s.key.split(":")[1] !== id ? s : { ...s, year: body.accept && s.yearSuggest ? s.yearSuggest : s.year, yearSuggest: null }));
     case "closeReports": return list.map((s) => (s.key === body.key ? { ...s, reports: undefined } : s));

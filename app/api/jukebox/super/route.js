@@ -57,7 +57,7 @@ import { logEvent, listEvents } from "@/lib/jukeboxEvents";
 import { notify } from "@/lib/jukeboxLive";
 import { migrateCatalog, catalogState } from "@/lib/jukeboxMigrate";
 import { getVersion } from "@/lib/jukeboxCatalog";
-import { withSiblings, searchVersion, copyVersion, songFacets, noClipSong } from "@/lib/jukeboxServer";
+import { withSiblings, searchVersion, copyVersion, songFacets, noClipSong, validateWithClip } from "@/lib/jukeboxServer";
 import { scanVersions, scanState } from "@/lib/jukeboxClip";
 
 export const runtime = "nodejs";
@@ -207,6 +207,12 @@ export async function POST(req) {
       case "copyVersion": { // même vidéo qu'une autre version (pas de clip officiel)
         const err = await copyVersion(body.key, body.kind);
         return err ? Response.json({ error: err }, { status: 422 }) : Response.json({ ok: true });
+      }
+      case "validateWithClip": { // revue : valider la version paroles + même vidéo en clip
+        const err = await validateWithClip(body.key);
+        if (err) return Response.json({ error: err }, { status: 422 });
+        await closeReports(body.key, "done").catch(() => {});
+        return Response.json({ ok: true });
       }
       case "noClip": { // « 🚫 Pas de clip » (revue d'une version clip)
         const err = await noClipSong(body.key);
